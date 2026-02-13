@@ -7,22 +7,36 @@ export const useFriends = () => {
     const [groups, setGroups] = useState<any[]>([]);
     const [combinedItems, setCombinedItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [currentUser, setCurrentUser] = useState<any>(null);
 
     useEffect(() => {
         const getUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            setCurrentUser(user);
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                console.log('useFriends: Auth user fetch:', user?.id || 'No user');
+                setCurrentUser(user);
+            } catch (e: any) {
+                console.error('useFriends: Auth fetch error:', e);
+                setError('Authentication failed');
+            }
         };
         getUser();
     }, []);
 
     const loadFriends = async () => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            console.log('useFriends: No currentUser found, skipping load');
+            return;
+        }
+
+        console.log('useFriends: Starting data load for user:', currentUser.id);
         setLoading(true);
+        setError(null);
 
         try {
             // 1. Fetch Friends
+            console.log('useFriends: Fetching friendships...');
             const { data: friendships, error: friendshipError } = await supabase
                 .from('friendships')
                 .select(`
@@ -35,9 +49,14 @@ export const useFriends = () => {
                 `)
                 .eq('user_id', currentUser.id);
 
-            if (friendshipError) throw friendshipError;
+            if (friendshipError) {
+                console.error('useFriends: Friendship error:', friendshipError);
+                throw new Error('Failed to load friends list');
+            }
+            console.log('useFriends: Found friendships:', friendships?.length || 0);
 
             // 2. Fetch Groups
+            console.log('useFriends: Fetching group memberships...');
             const { data: groupMemberships, error: groupError } = await supabase
                 .from('group_members')
                 .select(`
@@ -48,19 +67,40 @@ export const useFriends = () => {
                 `)
                 .eq('user_id', currentUser.id);
 
-            // Fetch unread counts
-            const { data: unreadData } = await supabase
-                .from('messages')
-                .select('sender_id, group_id')
-                .eq('is_read', false)
-                .neq('sender_id', currentUser.id)
-                .or(`receiver_id.eq.${currentUser.id},group_id.not.is.null`);
+            if (groupError) {
+                console.error('useFriends: Group error:', groupError);
+            }
+            console.log('useFriends: Found group memberships:', groupMemberships?.length || 0);
 
-            const unreadCountsMap = (unreadData || []).reduce((acc: any, msg: any) => {
-                const key = msg.group_id || msg.sender_id;
-                acc[key] = (acc[key] || 0) + 1;
-                return acc;
-            }, {});
+            // 3. Fetch unread counts (Segmented for better performance)
+            console.log('useFriends: Fetching unread counts...');
+            let unreadCountsMap: any = {};
+
+            // Personal messages unread
+            const { data: pUnread } = await supabase
+                .from('messages')
+                .select('sender_id')
+                .eq('receiver_id', currentUser.id)
+                .eq('is_read', false);
+
+            (pUnread || []).forEach(m => {
+                unreadCountsMap[m.sender_id] = (unreadCountsMap[m.sender_id] || 0) + 1;
+            });
+
+            // Group messages unread (if any group IDs exist)
+            const gIds = (groupMemberships || []).map(m => m.group_id);
+            if (gIds.length > 0) {
+                const { data: gUnread } = await supabase
+                    .from('messages')
+                    .select('group_id')
+                    .in('group_id', gIds)
+                    .eq('is_read', false)
+                    .neq('sender_id', currentUser.id);
+
+                (gUnread || []).forEach(m => {
+                    unreadCountsMap[m.group_id] = (unreadCountsMap[m.group_id] || 0) + 1;
+                });
+            }
 
             const formattedFriends = (friendships || [])
                 .filter((f: any) => f.friend)
@@ -92,7 +132,8 @@ export const useFriends = () => {
                     };
                 });
 
-            // 3. Fetch My Statuses
+            // 4. Fetch My Statuses
+            console.log('useFriends: Fetching my statuses...');
             const { data: myStatusData } = await supabase
                 .from('statuses')
                 .select('*')
@@ -103,15 +144,18 @@ export const useFriends = () => {
             const combined = [...formattedFriends, ...formattedGroups];
             const uniqueItems = Array.from(new Map(combined.map(item => [item.id, item])).values());
 
+            console.log('useFriends: Finished load. Total items:', uniqueItems.length);
             setMyStatuses(myStatusData || []);
             setFriends(formattedFriends);
             setGroups(formattedGroups);
             setCombinedItems(uniqueItems);
 
-        } catch (error) {
-            console.error('Error loading friends:', error);
+        } catch (error: any) {
+            console.error('useFriends: Critical error in loadFriends:', error);
+            setError(error.message || 'An unknown error occurred');
         } finally {
             setLoading(false);
+            console.log('useFriends: Loading done');
         }
     };
 
@@ -121,5 +165,5 @@ export const useFriends = () => {
         }
     }, [currentUser]);
 
-    return { friends, groups, combinedItems, myStatuses, loading, loadFriends };
+    return { friends, groups, combinedItems, myStatuses, loading, error, loadFriends };
 };

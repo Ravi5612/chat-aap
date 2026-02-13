@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, KeyboardAvoidingView, Platform, SafeAreaView, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard } from 'react-native';
+import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Image, Keyboard, StatusBar } from 'react-native';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MessageList from '@/components/chat/MessageList';
@@ -10,20 +12,40 @@ import ChatMenu from '@/components/chat/ChatMenu';
 import MessageContextMenu from '@/components/chat/MessageContextMenu';
 import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
 import MediaViewer from '@/components/chat/MediaViewer';
+import CallScreen from '@/components/chat/CallScreen';
+import { useCallManager } from '@/hooks/useCallManager';
 
 export default function ChatScreen() {
-    const { id: friendId, name: friendName, isGroup } = useLocalSearchParams<{ id: string, name: string, isGroup?: string }>();
+    const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
+    const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const router = useRouter();
     const [currentUser, setCurrentUser] = useState<any>(null);
 
     useEffect(() => {
+        const showSubscription = Keyboard.addListener('keyboardDidShow', (e: any) => {
+            console.log('Keyboard SHOWN. Height:', e.endCoordinates.height);
+        });
+        const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+            console.log('Keyboard HIDDEN');
+        });
+
         const getUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            setCurrentUser(user);
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                setCurrentUser(user);
+            } catch (err) {
+                console.error('ChatScreen: Auth error:', err);
+            }
         };
         getUser();
+
+        return () => {
+            showSubscription.remove();
+            hideSubscription.remove();
+        };
     }, []);
 
+    const chatRoom = useChatRoom(friendId as string, currentUser, isGroup === 'true');
     const {
         messages,
         loading,
@@ -34,7 +56,15 @@ export default function ChatScreen() {
         handleSaveEdit,
         handleDeleteMessage,
         handleForwardMessage
-    } = useChatRoom(friendId as string, currentUser, isGroup === 'true');
+    } = chatRoom;
+
+    // Call Management
+    const {
+        callSession,
+        handleStartCall,
+        setCallActive,
+        endCall
+    } = useCallManager(currentUser, [{ id: friendId, name: friendName, avatar_url: null }]);
 
     const [replyingTo, setReplyingTo] = useState<any>(null);
     const [editingMessage, setEditingMessage] = useState<any>(null);
@@ -130,68 +160,137 @@ export default function ChatScreen() {
         setViewerVisible(true);
     };
 
-    if (!currentUser) return <ActivityIndicator className="flex-1" color="#F68537" style={{ marginTop: 100 }} />;
+    const headerHeight = useHeaderHeight();
+    const keyboardOffset = Platform.OS === 'ios' ? headerHeight : headerHeight + (StatusBar.currentHeight || 0);
+
+    console.log('ChatScreen: Layout Metrics:', {
+        headerHeight,
+        statusBarHeight: StatusBar.currentHeight,
+        keyboardOffset
+    });
+
+    if (!currentUser || (loading && messages.length === 0)) {
+        return (
+            <View className="flex-1 items-center justify-center bg-[#F8FAFC]">
+                <ActivityIndicator size="large" color="#F68537" />
+            </View>
+        );
+    }
 
     return (
-        <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+        <View className="flex-1 bg-[#F8FAFC]">
             <Stack.Screen
                 options={{
+                    headerStyle: { backgroundColor: '#F8FAFC' },
+                    headerShadowVisible: false,
                     headerTitle: () => (
-                        <View>
-                            <Text className="font-bold text-gray-800 text-[16px]">{friendName}</Text>
-                            {isTyping && <Text className="text-[10px] text-[#F68537] font-medium italic">typing...</Text>}
+                        <View className="flex-row items-center gap-2">
+                            <Image
+                                source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
+                                className="w-10 h-10 rounded-full border border-gray-100"
+                            />
+                            <View>
+                                <Text className="font-bold text-gray-800 text-[16px]">{friendName}</Text>
+                                <Text className="text-[10px] text-green-500 font-medium">{isTyping ? 'typing...' : 'online'}</Text>
+                            </View>
                         </View>
                     ),
                     headerRight: () => (
-                        <View className="flex-row items-center gap-4 mr-1">
-                            <TouchableOpacity onPress={() => { }} className="p-1">
-                                <Ionicons name="call-outline" size={22} color="#F68537" />
+                        <View className="flex-row items-center gap-3 mr-2">
+                            <TouchableOpacity
+                                onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio')}
+                                className="p-2"
+                            >
+                                <Ionicons name="call-outline" size={20} color="#F68537" />
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => { }} className="p-1">
-                                <Ionicons name="videocam-outline" size={24} color="#F68537" />
+                            <TouchableOpacity
+                                onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video')}
+                                className="p-2"
+                            >
+                                <Ionicons name="videocam-outline" size={22} color="#F68537" />
                             </TouchableOpacity>
-                            <View>
-                                <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} className="p-1">
-                                    <Ionicons name="ellipsis-vertical" size={22} color="#94A3B8" />
-                                </TouchableOpacity>
-                                <ChatMenu
-                                    visible={menuVisible}
-                                    onClose={() => setMenuVisible(false)}
-                                    onViewProfile={() => { }}
-                                    onClearChat={handleClearChat}
-                                    onBlockUser={() => { }}
-                                    isBlocked={false}
-                                />
-                            </View>
+                            <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} className="p-2">
+                                <Ionicons name="ellipsis-vertical" size={20} color="#94A3B8" />
+                            </TouchableOpacity>
+                            <ChatMenu
+                                visible={menuVisible}
+                                onClose={() => setMenuVisible(false)}
+                                onViewProfile={() => { }}
+                                onClearChat={handleClearChat}
+                                onBlockUser={() => { }}
+                                isBlocked={false}
+                            />
                         </View>
                     ),
                 }}
             />
 
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                className="flex-1"
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-            >
-                <MessageList
-                    messages={messages}
-                    currentUser={currentUser}
-                    onReply={(msg) => setReplyingTo(msg)}
-                    friendName={friendName}
-                    onLongPress={handleLongPress}
-                    onImagePress={handleImagePress}
-                />
+            <CallScreen
+                visible={!!callSession}
+                callState={callSession?.status}
+                onEndCall={endCall}
+                onAcceptCall={setCallActive}
+                currentUser={currentUser}
+                callType={callSession?.type || 'video'}
+                friend={callSession?.friend || {}}
+                offer={callSession?.offer}
+            />
 
-                <ChatInput
-                    onSendMessage={onSendMessage}
-                    onTyping={handleTypingStatus}
-                    replyingTo={replyingTo}
-                    onCancelReply={() => setReplyingTo(null)}
-                    editingMessage={editingMessage}
-                    onCancelEdit={() => setEditingMessage(null)}
-                    onSaveEdit={onSaveEdit}
-                />
-            </KeyboardAvoidingView>
+            {Platform.OS === 'ios' ? (
+                <KeyboardAvoidingView
+                    behavior="padding"
+                    className="flex-1 bg-[#EBD8B7]"
+                    keyboardVerticalOffset={headerHeight}
+                >
+                    <View className="flex-1">
+                        <MessageList
+                            messages={messages}
+                            currentUser={currentUser}
+                            onReply={(msg) => setReplyingTo(msg)}
+                            friendName={friendName}
+                            onLongPress={handleLongPress}
+                            onImagePress={handleImagePress}
+                        />
+                    </View>
+
+                    <ChatInput
+                        onSendMessage={onSendMessage}
+                        onTyping={handleTypingStatus}
+                        replyingTo={replyingTo}
+                        onCancelReply={() => setReplyingTo(null)}
+                        editingMessage={editingMessage}
+                        onCancelEdit={() => setEditingMessage(null)}
+                        onSaveEdit={onSaveEdit}
+                    />
+                </KeyboardAvoidingView>
+            ) : (
+                <KeyboardAvoidingView
+                    behavior="padding"
+                    className="flex-1 bg-[#EBD8B7]"
+                    keyboardVerticalOffset={70}
+                >
+                    <View className="flex-1">
+                        <MessageList
+                            messages={messages}
+                            currentUser={currentUser}
+                            onReply={(msg) => setReplyingTo(msg)}
+                            friendName={friendName}
+                            onLongPress={handleLongPress}
+                            onImagePress={handleImagePress}
+                        />
+                    </View>
+
+                    <ChatInput
+                        onSendMessage={onSendMessage}
+                        onTyping={handleTypingStatus}
+                        replyingTo={replyingTo}
+                        onCancelReply={() => setReplyingTo(null)}
+                        editingMessage={editingMessage}
+                        onCancelEdit={() => setEditingMessage(null)}
+                        onSaveEdit={onSaveEdit}
+                    />
+                </KeyboardAvoidingView>
+            )}
 
             <MessageContextMenu
                 visible={contextMenuVisible}
@@ -215,6 +314,6 @@ export default function ChatScreen() {
                 onClose={() => setViewerVisible(false)}
                 imageUri={viewerImage}
             />
-        </SafeAreaView>
+        </View>
     );
 }

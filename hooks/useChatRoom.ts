@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Alert } from 'react-native';
-import { getChatKey, encryptText, decryptText } from '@/utils/chatCrypto';
+import { getChatKey, decryptText, encryptText } from '@/utils/chatCrypto';
+import { uploadChatMessageMedia } from '../utils/uploadHelper';
 
 export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean = false) => {
     const [messages, setMessages] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
     const [chatKey, setChatKey] = useState<Uint8Array | null>(null);
+    const [isKeyInitializing, setIsKeyInitializing] = useState(false);
     const channelRef = useRef<any>(null);
     const PAGE_SIZE = 50;
 
@@ -19,7 +21,7 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
                     const key = await getChatKey(currentUser.id, friendId, isGroup);
                     setChatKey(key);
                 } catch (err) {
-                    console.error("Key derivation error:", err);
+                    console.error("useChatRoom: Key error:", err);
                 }
             }
         };
@@ -71,15 +73,20 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
 
     // 3. Load Messages
     const loadMessages = useCallback(async () => {
-        if (!friendId || !currentUser || !chatKey) return;
+        if (!friendId || !currentUser || !chatKey) {
+            console.log('useChatRoom: Skipping loadMessages - missing deps:', { friendId: !!friendId, user: !!currentUser, key: !!chatKey });
+            return;
+        }
 
+        console.log('useChatRoom: Loading messages for:', friendId);
         setLoading(true);
         try {
             let query = supabase
                 .from('messages')
                 .select(`
                     *,
-                    sender:profiles!sender_id(id, username, avatar_url)
+                    sender:profiles!sender_id(id, username, avatar_url),
+                    reply:messages!reply_to_id(id, message, sender_id, created_at)
                 `);
 
             if (isGroup) {
@@ -92,12 +99,33 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
                 .order('created_at', { ascending: true })
                 .range(0, PAGE_SIZE);
 
-            if (error) throw error;
+            if (error) {
+                console.error('useChatRoom: Supabase query error:', error);
+                throw error;
+            }
+
+            console.log('useChatRoom: Fetched', data?.length || 0, 'messages. Decrypting...');
 
             // 🔓 Decrypt all messages
             const decryptedMessages = await Promise.all((data || []).map(async (msg) => {
-                const decryptedText = await decryptText(msg.message, chatKey);
-                return { ...msg, message: decryptedText };
+                try {
+                    const decryptedText = await decryptText(msg.message, chatKey);
+                    let decryptedReply = null;
+
+                    if (msg.reply) {
+                        try {
+                            const replyText = await decryptText(msg.reply.message, chatKey);
+                            decryptedReply = { ...msg.reply, message: replyText };
+                        } catch (e) {
+                            decryptedReply = { ...msg.reply, message: '[Encrypted Reply]' };
+                        }
+                    }
+
+                    return { ...msg, message: decryptedText, reply: decryptedReply };
+                } catch (e) {
+                    console.warn('useChatRoom: Message decryption failed for msg:', msg.id);
+                    return { ...msg, message: '[Encrypted Message]' };
+                }
             }));
 
             setMessages(decryptedMessages);
@@ -125,6 +153,9 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
         if (!text.trim() || !friendId || !currentUser || !chatKey) return;
 
         const tempId = `temp-${Date.now()}`;
+        let messageToDisplay = text;
+        let messageToEncrypt = text;
+
         const tempMsg = {
             id: tempId,
             message: text,
@@ -139,7 +170,25 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
         setMessages(prev => [...prev, tempMsg]);
 
         try {
-            const encryptedText = await encryptText(text, chatKey);
+            // 🎙️ Handle Voice Message / Image Upload
+            if (text.startsWith('[Voice Message]') || text.startsWith('[Image]')) {
+                const parts = text.split(' ');
+                // For [Voice Message] it's index 2, for [Image] it's index 1
+                const localUri = text.startsWith('[Voice Message]') ? parts[2] : parts[1];
+                const type = text.startsWith('[Voice Message]') ? 'voice' : 'image';
+
+                if (localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
+                    try {
+                        const publicUrl = await uploadChatMessageMedia(localUri, type);
+                        messageToEncrypt = text.replace(localUri, publicUrl);
+                    } catch (uploadError) {
+                        console.error('Media upload failed:', uploadError);
+                        throw new Error('Failed to upload media. Please try again.');
+                    }
+                }
+            }
+
+            const encryptedText = await encryptText(messageToEncrypt, chatKey);
 
             const insertData: any = {
                 sender_id: currentUser.id,

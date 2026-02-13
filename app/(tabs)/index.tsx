@@ -8,19 +8,33 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useStatusActions } from '@/hooks/useStatusActions';
 import { Ionicons } from '@expo/vector-icons';
-
 import { useNotifications } from '@/hooks/useNotifications';
 import FilterTabs from '@/components/chat/FilterTabs';
+import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { combinedItems, myStatuses, loading, loadFriends } = useFriends();
+  const swipeHandlers = useSwipeNavigation();
+  const { combinedItems, myStatuses, loading, error, loadFriends } = useFriends();
   const { getCounts } = useNotifications();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('all');
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUser(user);
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        setProfile(data);
+      }
+    };
+    fetchProfile();
   }, []);
 
   const {
@@ -31,17 +45,17 @@ export default function HomeScreen() {
   } = useStatusActions(currentUser, loadFriends);
 
   const handleSelectFriend = (friend: any) => {
-    router.push({
-      pathname: '/chat/[id]',
-      params: {
-        id: friend.id,
-        name: friend.name,
-        isGroup: friend.isGroup ? 'true' : 'false'
-      }
-    });
+    if (!friend?.id) {
+      console.warn('HomeScreen: Cannot chat, friend.id is missing!', friend);
+      return;
+    }
+    const nameParam = encodeURIComponent(friend.name || 'Chat');
+    const groupParam = friend.isGroup ? 'true' : 'false';
+    const imageParam = encodeURIComponent(friend.img || '');
+    const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
+    console.log('HomeScreen: Navigating to:', url);
+    router.push(url as any);
   };
-
-  const friendsWithStatus = combinedItems.filter(item => item.statusCount > 0);
 
   const filteredItems = combinedItems.filter(item => {
     if (activeTab === 'all') return !item.isArchived;
@@ -60,75 +74,80 @@ export default function HomeScreen() {
 
   if (loading && combinedItems.length === 0) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
+      <View className="flex-1 items-center justify-center bg-[#EBD8B7] px-6">
         <ActivityIndicator size="large" color="#F68537" />
+        <Text className="mt-4 text-[#F68537] font-bold text-lg">Connecting to ChatWarriors...</Text>
+        {error && <Text className="mt-2 text-red-500 text-center font-medium bg-red-50 p-2 rounded-lg">Error: {error}</Text>}
+        <TouchableOpacity onPress={loadFriends} className="mt-8 bg-[#F68537] px-6 py-3 rounded-xl shadow-sm">
+          <Text className="text-white font-bold">Try Refreshing</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
+  console.log('HomeScreen: Rendering with swipe handlers...');
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="px-4 py-4 border-b border-gray-100 flex-row justify-between items-center">
-        <View className="flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)}>
-            <Image
-              source={{ uri: currentUser?.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentUser?.user_metadata?.name || 'User')}&backgroundColor=F68537` }}
-              className="w-10 h-10 rounded-full bg-orange-100"
-            />
-          </TouchableOpacity>
-          <Text className="text-2xl font-bold text-[#F68537]">Chat Warriors</Text>
-        </View>
-        <View className="flex-row items-center gap-4">
-          <TouchableOpacity onPress={() => router.push('/search' as any)}>
-            <Ionicons name="search-outline" size={24} color="#94A3B8" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/notifications' as any)}>
-            <View className="relative">
-              <Ionicons name="notifications-outline" size={24} color="#94A3B8" />
-              {getCounts().unread > 0 && (
-                <View className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 items-center justify-center border border-white">
-                  <Text className="text-white text-[8px] font-bold">{getCounts().unread}</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
+    <View className="flex-1" {...swipeHandlers} collapsable={false}>
+      <SafeAreaView className="flex-1 bg-[#EBD8B7]">
+        <View className="bg-[#F68537] px-4 py-4 flex-row justify-between items-center">
+          <View className="flex-row items-center gap-2">
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)}>
+              <Image
+                source={{ uri: profile?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || 'User')}&backgroundColor=F68537` }}
+                className="w-12 h-12 rounded-full border-2 border-white/30"
+              />
+            </TouchableOpacity>
+            <Text className="text-white font-bold text-lg lowercase">{profile?.username || 'user'}</Text>
+          </View>
 
-      <FlatList
-        data={filteredItems}
-        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-        ListHeaderComponent={
-          <>
+          <View className="flex-row items-center gap-3">
+            <TouchableOpacity
+              onPress={() => router.push('/search' as any)}
+              className="bg-[#E67527] rounded-full pl-4 pr-1 py-1 flex-row items-center gap-2 border border-white/10"
+            >
+              <Text className="text-white font-black text-[10px] tracking-tight">SEARCH FRIEND</Text>
+              <View className="bg-white p-1.5 rounded-full shadow-sm">
+                <Ionicons name="search" size={16} color="#F68537" />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { }}>
+              <Ionicons name="menu-outline" size={32} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <FlatList
+          data={filteredItems}
+          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          contentContainerStyle={{ paddingBottom: 110 }}
+          ListHeaderComponent={
             <FilterTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}
               counts={tabCounts}
             />
-          </>
-        }
-        renderItem={({ item }) => (
-          <FriendListItem
-            friend={item}
-            onClick={handleSelectFriend}
-            isOnline={item.isOnline}
-          />
-        )}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />
-        }
-        ListEmptyComponent={
-          <View className="flex-1 items-center justify-center p-10 mt-20">
-            <Text className="text-gray-400 text-center">
-              {activeTab === 'all'
-                ? 'No chats found. Start a conversation with a friend!'
-                : `No ${activeTab} found.`}
-            </Text>
-          </View>
-        }
-      />
-    </SafeAreaView>
+          }
+          renderItem={({ item }) => (
+            <FriendListItem
+              friend={item}
+              onClick={handleSelectFriend}
+              isOnline={item.isOnline}
+            />
+          )}
+          ListEmptyComponent={
+            <View className="flex-1 items-center justify-center p-10 mt-20">
+              <Text className="text-gray-400 text-center">
+                {activeTab === 'all'
+                  ? 'No chats found. Start a conversation with a friend!'
+                  : `No ${activeTab} found.`}
+              </Text>
+            </View>
+          }
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />
+          }
+        />
+      </SafeAreaView>
+    </View>
   );
 }
-
-

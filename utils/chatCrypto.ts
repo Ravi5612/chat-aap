@@ -12,7 +12,8 @@ if (typeof global.Buffer === 'undefined') {
 if (typeof TextEncoder === 'undefined') {
     global.TextEncoder = class TextEncoder {
         encode(str: string) {
-            return Buffer.from(str, 'utf-8');
+            const buf = Buffer.from(str, 'utf-8');
+            return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         }
     } as any;
 }
@@ -39,11 +40,13 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
 
     // Noble hashes pbkdf2 is synchronous but fast
     const key = pbkdf2(sha256, baseKey, SALT, {
-        c: 150000,
+        c: 1000,
         dkLen: 32 // 256 bits
     });
 
-    return key;
+    console.log(`Crypto: Key generated for ${userId}-${friendId}. Length: ${key.length}`);
+
+    return new Uint8Array(key);
 }
 
 /**
@@ -54,16 +57,16 @@ export async function encryptText(plainText: string, cryptoKey: Uint8Array): Pro
 
     try {
         const iv = Crypto.getRandomValues(new Uint8Array(12));
-        const aes = gcm(cryptoKey, iv);
+        const aes = gcm(new Uint8Array(cryptoKey), new Uint8Array(iv));
 
         const plainTextBytes = new TextEncoder().encode(plainText);
-        const encrypted = aes.encrypt(plainTextBytes);
+        const encrypted = aes.encrypt(new Uint8Array(plainTextBytes));
 
         return JSON.stringify({
             iv: Array.from(iv),
             content: Array.from(encrypted),
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Encryption error:", error);
         return null;
     }
@@ -78,6 +81,7 @@ export async function decryptText(encryptedData: any, cryptoKey: Uint8Array): Pr
     try {
         let dataToDecrypt = encryptedData;
 
+        // Parse if it's a JSON string
         if (typeof encryptedData === 'string') {
             try {
                 dataToDecrypt = JSON.parse(encryptedData);
@@ -86,19 +90,33 @@ export async function decryptText(encryptedData: any, cryptoKey: Uint8Array): Pr
             }
         }
 
+        // Validate structure
         if (!dataToDecrypt || !dataToDecrypt.iv || !dataToDecrypt.content) {
             return typeof encryptedData === 'string' ? encryptedData : "";
         }
 
-        const iv = new Uint8Array(dataToDecrypt.iv);
-        const content = new Uint8Array(dataToDecrypt.content);
+        // Convert to Uint8Array safely
+        const iv = new Uint8Array(Object.values(dataToDecrypt.iv));
+        const content = new Uint8Array(Object.values(dataToDecrypt.content));
 
-        const aes = gcm(cryptoKey, iv);
+        // Attempt initialization
+        let aes;
+        try {
+            aes = gcm(new Uint8Array(cryptoKey), iv);
+        } catch (e: any) {
+            console.error("Crypto Init Failed (aes/gcm):", e.message);
+            return "🚫 [Key Error: " + e.message + "]";
+        }
+
         const decrypted = aes.decrypt(content);
-
         return new TextDecoder().decode(decrypted);
-    } catch (error) {
-        console.error("Decryption error:", error);
-        return "🚫 [Decryption Failed]";
+    } catch (error: any) {
+        console.error("Decryption error:", error.message);
+
+        if (error.message?.toLowerCase().includes('mac')) {
+            return "🚫 [Secure Message - Key Mismatch]";
+        }
+
+        return "🚫 [Decrypt Error: " + (error.message || "Unknown") + "]";
     }
 }

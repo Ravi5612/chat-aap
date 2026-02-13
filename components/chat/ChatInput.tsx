@@ -65,7 +65,10 @@ export default function ChatInput({
         if (editingMessage && onSaveEdit) {
             onSaveEdit(message.trim());
         } else {
-            const finalMessage = selectedImage ? `[Image] ${message.trim()}` : message.trim();
+            let finalMessage = message.trim();
+            if (selectedImage) {
+                finalMessage = `[Image] ${selectedImage} ${message.trim()}`;
+            }
             onSendMessage(finalMessage);
         }
 
@@ -132,7 +135,7 @@ export default function ChatInput({
     };
 
     return (
-        <View className="bg-white border-t border-gray-100 pb-8 relative">
+        <View className="bg-white border-t border-gray-100 pb-2 relative">
             {isRecording && (
                 <AudioRecorder
                     onRecordingComplete={handleRecordingComplete}
