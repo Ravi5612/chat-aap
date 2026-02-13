@@ -60,7 +60,8 @@ export default function RootLayout() {
 
       if (event === 'SIGNED_IN') {
         // Only redirect if we are on an auth page
-        const inAuthGroup = segments[0] === '(auth)' || segments.includes('login') || segments.includes('signup');
+        const currentSegments = segments as string[];
+        const inAuthGroup = currentSegments[0] === '(auth)' || currentSegments.includes('login') || currentSegments.includes('signup');
         if (inAuthGroup) {
           router.replace('/(tabs)');
         }
