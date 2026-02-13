@@ -9,27 +9,37 @@ import { useEffect } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
-export const unstable_settings = {
-  anchor: 'login',
-};
-
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const inAuthGroup = segments[0] === 'login';
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
 
-      if (!session && !inAuthGroup) {
-        // Redirect to login if not authenticated
+      const isAuthPage = segments.some(s => ['login', 'signup', 'forgot-password', 'reset-password'].includes(s));
+
+      if (!session && !isAuthPage) {
+        // Only redirect to login if we're not on an auth page and not signed in
         router.replace('/login');
-      } else if (session && inAuthGroup) {
-        // Redirect to home if already authenticated
+      } else if (session && isAuthPage) {
+        // Only redirect to tabs if we're on an auth page but ALREADY signed in
         router.replace('/(tabs)');
       }
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const isAuthPage = segments.some(s => ['login', 'signup', 'forgot-password', 'reset-password'].includes(s));
+
+      if (event === 'SIGNED_IN' && isAuthPage) {
+        router.replace('/(tabs)');
+      } else if (event === 'SIGNED_OUT') {
+        router.replace('/login');
+      }
     });
+
+    checkAuth();
 
     return () => subscription.unsubscribe();
   }, [segments]);

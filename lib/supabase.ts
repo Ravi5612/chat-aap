@@ -71,4 +71,20 @@ export const getCurrentUser = async () => {
     }
 };
 
+export const resendVerification = async (email: string) => {
+    try {
+        const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: email,
+            options: {
+                emailRedirectTo: `chatwarriors://login`,
+            }
+        });
+        if (error) throw error;
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export default supabase;
