@@ -101,7 +101,7 @@ export default function CallScreen({
             <View className="flex-1 bg-gray-900">
                 {/* Main Video (Remote) */}
                 <View className="absolute inset-0 bg-black flex items-center justify-center">
-                    {callType === 'video' && remoteStream && !isSwapped ? (
+                    {callType === 'video' && remoteStream && !isSwapped && RTCView !== View ? (
                         <RTCView
                             streamURL={(remoteStream as any).toURL()}
                             style={styles.fullVideo}
@@ -122,12 +122,15 @@ export default function CallScreen({
                                     callState === 'incoming' ? 'Incoming Call...' :
                                         callType === 'audio' ? 'On Call' : 'Connecting video...'}
                             </Text>
+                            {RTCView === View && callType === 'video' && (
+                                <Text className="text-white/50 text-xs mt-2">(Video preview not available in Expo Go)</Text>
+                            )}
                         </View>
                     )}
                 </View>
 
                 {/* Local Preview (PIP) */}
-                {callType === 'video' && localStream && (
+                {callType === 'video' && localStream && RTCView !== View && (
                     <TouchableOpacity
                         onPress={() => setIsSwapped(!isSwapped)}
                         style={styles.pipContainer}

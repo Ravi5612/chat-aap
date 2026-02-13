@@ -32,19 +32,19 @@ export default function RootLayout() {
         const { data: { session } } = await supabase.auth.getSession();
         console.log('RootLayout: Session found:', !!session);
 
-        const isAuthPage = segments.some(s => ['login', 'signup', 'forgot-password', 'reset-password'].includes(s));
-        console.log('RootLayout: Current segments:', segments, 'Is auth page:', isAuthPage);
-
         if (session) {
           setUserId(session.user.id);
-        }
-
-        if (!session && !isAuthPage) {
-          console.log('RootLayout: Redirecting to login');
-          router.replace('/login');
-        } else if (session && isAuthPage) {
-          console.log('RootLayout: Redirecting to tabs');
-          router.replace('/(tabs)');
+          if (segments[0] !== '(tabs)') {
+            router.replace('/(tabs)');
+          }
+        } else {
+          // Only redirect if NOT on an auth page
+          const currentSegments = segments as string[];
+          const inAuthGroup = currentSegments[0] === '(auth)' || currentSegments.includes('login') || currentSegments.includes('signup');
+          if (!inAuthGroup) {
+            console.log('RootLayout: No session, redirecting to login');
+            router.replace('/login');
+          }
         }
       } catch (err) {
         console.error('RootLayout: Init error:', err);
@@ -57,10 +57,13 @@ export default function RootLayout() {
     // 2. Auth State Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('RootLayout: Auth event:', event);
-      const isAuthPage = segments.some(s => ['login', 'signup', 'forgot-password', 'reset-password'].includes(s));
 
-      if (event === 'SIGNED_IN' && isAuthPage) {
-        router.replace('/(tabs)');
+      if (event === 'SIGNED_IN') {
+        // Only redirect if we are on an auth page
+        const inAuthGroup = segments[0] === '(auth)' || segments.includes('login') || segments.includes('signup');
+        if (inAuthGroup) {
+          router.replace('/(tabs)');
+        }
       } else if (event === 'SIGNED_OUT') {
         router.replace('/login');
       }
@@ -69,7 +72,7 @@ export default function RootLayout() {
     initialize();
 
     return () => subscription.unsubscribe();
-  }, [segments]);
+  }, [segments]); // Add segments back to dependency to check current route
 
   if (!isReady) {
     return (

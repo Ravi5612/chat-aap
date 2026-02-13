@@ -87,9 +87,10 @@ export const useWebRTC = ({
     // 2. Media Setup
     const setupMedia = useCallback(async (mode = facingMode) => {
         if (!isWebRTCSupported) {
-            console.error("WebRTC is not supported.");
+            console.warn("WebRTC setup skipped: Not supported in this environment");
             return null;
         }
+
         try {
             const constraints: any = {
                 video: callType === 'video' ? {
@@ -105,14 +106,20 @@ export const useWebRTC = ({
             return stream;
         } catch (err) {
             console.error("Media setup failed:", err);
+            // Fallback for video fail -> audio only
             if (callType === 'video') {
-                const audioStream = await mediaDevices.getUserMedia({ video: false, audio: true }) as MediaStream;
-                localStreamRef.current = audioStream;
-                setLocalStream(audioStream);
-                setIsVideoOff(true);
-                return audioStream;
+                try {
+                    const audioStream = await mediaDevices.getUserMedia({ video: false, audio: true }) as MediaStream;
+                    localStreamRef.current = audioStream;
+                    setLocalStream(audioStream);
+                    setIsVideoOff(true);
+                    return audioStream;
+                } catch (e) {
+                    console.error("Audio fallback failed:", e);
+                    return null;
+                }
             }
-            throw err;
+            return null;
         }
     }, [callType, facingMode]);
 

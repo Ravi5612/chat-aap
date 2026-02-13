@@ -1,19 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
+import Notifications from '@/utils/safeNotifications';
 
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
-});
+// Only set handler if we have the real module or safe mock
+try {
+    if (Notifications && Notifications.setNotificationHandler) {
+        Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: true,
+                shouldShowBanner: true,
+                shouldShowList: true,
+            }),
+        });
+    }
+} catch (e) {
+    console.warn("Failed to set notification handler");
+}
 
 export const usePushNotifications = (userId: string | null) => {
     const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
@@ -30,14 +37,17 @@ export const usePushNotifications = (userId: string | null) => {
             }
         });
 
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-            console.log('Notification received:', notification);
-        });
+        try {
+            notificationListener.current = Notifications.addNotificationReceivedListener((notification: any) => {
+                console.log('Notification received:', notification);
+            });
 
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-            console.log('Notification response:', response);
-            // Handle navigation here if needed
-        });
+            responseListener.current = Notifications.addNotificationResponseReceivedListener((response: any) => {
+                console.log('Notification response:', response);
+            });
+        } catch (e) {
+            console.warn("Notification listeners failed");
+        }
 
         return () => {
             notificationListener.current?.remove();
@@ -55,14 +65,18 @@ export const usePushNotifications = (userId: string | null) => {
     };
 
     const showLocalNotification = async (title: string, body: string, data: any = {}) => {
-        await Notifications.scheduleNotificationAsync({
-            content: {
-                title,
-                body,
-                data,
-            },
-            trigger: null, // show immediately
-        });
+        try {
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title,
+                    body,
+                    data,
+                },
+                trigger: null, // show immediately
+            });
+        } catch (e) {
+            console.warn("Failed to show local notification");
+        }
     };
 
     return { expoPushToken, showLocalNotification };
@@ -71,38 +85,43 @@ export const usePushNotifications = (userId: string | null) => {
 async function registerForPushNotificationsAsync() {
     let token;
     if (Device.isDevice) {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-        }
-        if (finalStatus !== 'granted') {
-            alert('Failed to get push token for push notification!');
-            return;
-        }
-
         try {
-            const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
-            if (!projectId) {
-                console.warn('Push Notifications: No projectId found. Token registration skipped. Please configure EAS Project ID in app.json for production.');
+            const { status: existingStatus } = await Notifications.getPermissionsAsync();
+            let finalStatus = existingStatus;
+            if (existingStatus !== 'granted') {
+                const { status } = await Notifications.requestPermissionsAsync();
+                finalStatus = status;
+            }
+            if (finalStatus !== 'granted') {
+                // alert('Failed to get push token for push notification!');
+                console.warn('Failed to get push token for push notification!');
                 return;
             }
-            token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+
+            const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+            if (!projectId) {
+                console.warn('Push Notifications: No projectId found. Token registration skipped.');
+            } else {
+                token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+            }
         } catch (e) {
-            console.warn('Push Notifications: Failed to get token. This is expected in some development environments.', e);
+            console.warn('Push Notifications: Failed to get token. This is expected in Expo Go.', e);
         }
     } else {
         console.log('Push Notifications: Must use physical device.');
     }
 
     if (Platform.OS === 'android') {
-        Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#FF231F7C',
-        });
+        try {
+            Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        } catch (e) {
+            console.warn("Failed to set notification channel");
+        }
     }
 
     return token;
