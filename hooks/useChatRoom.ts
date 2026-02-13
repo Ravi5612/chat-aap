@@ -8,6 +8,7 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
     const [messages, setMessages] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
+    const [flyingEmoji, setFlyingEmoji] = useState<any>(null);
     const [chatKey, setChatKey] = useState<Uint8Array | null>(null);
     const [isKeyInitializing, setIsKeyInitializing] = useState(false);
     const channelRef = useRef<any>(null);
@@ -153,7 +154,6 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
         if (!text.trim() || !friendId || !currentUser || !chatKey) return;
 
         const tempId = `temp-${Date.now()}`;
-        let messageToDisplay = text;
         let messageToEncrypt = text;
 
         const tempMsg = {
@@ -212,16 +212,19 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
 
             if (error) throw error;
 
+            console.log('useChatRoom: Message inserted, broadcasting...');
+
             setMessages(prev => prev.map(m => m.id === tempId ? { ...data, message: text } : m));
 
             if (channelRef.current) {
                 channelRef.current.send({
                     type: 'broadcast',
                     event: 'new_message',
-                    payload: { ...data, message: encryptedText }
+                    payload: { ...data, message: text } // Send plain text in broadcast for immediate display
                 });
             }
         } catch (error: any) {
+            console.error('useChatRoom: Send error:', error);
             setMessages(prev => prev.filter(m => m.id !== tempId));
             Alert.alert('Error', 'Failed to send message');
         }
@@ -254,6 +257,10 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
                     payload: { message_id: messageId, emoji, reactions }
                 });
             }
+
+            // Trigger flying emoji locally
+            setFlyingEmoji({ emoji, messageId, id: Date.now() });
+            setTimeout(() => setFlyingEmoji(null), 2000);
         } catch (err) {
             console.error("Reaction error:", err);
         }
@@ -337,11 +344,52 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
         }
     };
 
+    // Throttled typing
+    const lastTypingSentRef = useRef(0);
+    const typingTimeoutRef = useRef<any>(null);
+
+    const handleTypingStatus = (typing: boolean) => {
+        if (!channelRef.current) return;
+
+        if (typing) {
+            const now = Date.now();
+            if (now - lastTypingSentRef.current > 3000) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'typing',
+                    payload: { user_id: currentUser.id, is_typing: true }
+                });
+                lastTypingSentRef.current = now;
+            }
+
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = setTimeout(() => {
+                channelRef.current?.send({
+                    type: 'broadcast',
+                    event: 'typing',
+                    payload: { user_id: currentUser.id, is_typing: false }
+                });
+                lastTypingSentRef.current = 0;
+            }, 2000);
+        } else {
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'typing',
+                payload: { user_id: currentUser.id, is_typing: false }
+            });
+            lastTypingSentRef.current = 0;
+        }
+    };
+
     // 9. Subscription Setup
     useEffect(() => {
         if (!friendId || !currentUser || !chatKey) return;
 
+        const logPrefix = `[Chat:${friendId.substring(0, 4)}]`;
         const channelName = isGroup ? `group-${friendId}` : `chat-${[currentUser.id, friendId].sort().join('-')}`;
+
+        console.log(`${logPrefix} Subscribing to channel: ${channelName}`);
 
         const channel = supabase
             .channel(channelName)
@@ -357,12 +405,22 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
                     (newMsg.sender_id === currentUser.id && newMsg.receiver_id === friendId);
 
                 if (isRelevant) {
-                    const decryptedText = await decryptText(newMsg.message, chatKey);
-                    const msgWithDecryptedText = { ...newMsg, message: decryptedText };
-
+                    console.log(`${logPrefix} New message via DB:`, newMsg.id);
+                    // Only decrypt if it's not already in local state (from broadcast)
                     setMessages(prev => {
                         if (prev.some(m => m.id === newMsg.id)) return prev;
-                        return [...prev, msgWithDecryptedText];
+
+                        // Decrypt in background if it's a new database insert
+                        decryptText(newMsg.message, chatKey).then(decryptedText => {
+                            setMessages(innerPrev => {
+                                if (innerPrev.some(m => m.id === newMsg.id)) return innerPrev;
+                                return [...innerPrev, { ...newMsg, message: decryptedText }];
+                            });
+                        }).catch(err => {
+                            console.warn(`${logPrefix} Decryption error:`, err);
+                        });
+
+                        return prev;
                     });
 
                     if (newMsg.sender_id !== currentUser.id) {
@@ -370,12 +428,29 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
                     }
                 }
             })
+            .on('broadcast', { event: 'new_message' }, async (payload) => {
+                const msg = payload.payload;
+                if (msg.sender_id === currentUser.id) return; // Ignore our own broadcast
+
+                console.log(`${logPrefix} New message via Broadcast:`, msg.id);
+                setMessages(prev => {
+                    if (prev.some(m => m.id === msg.id)) return prev;
+                    return [...prev, msg];
+                });
+
+                if (msg.sender_id !== currentUser.id) {
+                    markAsRead(msg.id);
+                }
+            })
             .on('broadcast', { event: 'typing' }, (payload) => {
-                if (payload.payload.user_id !== currentUser.id) {
-                    setIsTyping(payload.payload.is_typing);
+                // Support both nested and flat payload
+                const data = payload.payload || payload;
+                if (data.user_id === friendId) {
+                    setIsTyping(data.is_typing);
                 }
             })
             .on('broadcast', { event: 'status_update' }, (payload) => {
+                console.log(`${logPrefix} Status update via broadcast:`, payload.payload);
                 const update = payload.payload;
                 setMessages(prev => prev.map(msg => {
                     if (msg.id === update.message_id || (msg.sender_id === currentUser.id && update.status === 'read')) {
@@ -385,8 +460,12 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
                 }));
             })
             .on('broadcast', { event: 'message_reaction' }, (payload) => {
-                const { message_id, reactions } = payload.payload;
+                const { message_id, emoji, reactions } = payload.payload;
                 setMessages(prev => prev.map(m => m.id === message_id ? { ...m, reactions } : m));
+
+                // Trigger flying emoji for incoming reactions
+                setFlyingEmoji({ emoji, messageId: message_id, id: Date.now() });
+                setTimeout(() => setFlyingEmoji(null), 2000);
             })
             .on('broadcast', { event: 'message_edit' }, async (payload) => {
                 const { message_id, message: encText } = payload.payload;
@@ -397,26 +476,19 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
                 const { message_id } = payload.payload;
                 setMessages(prev => prev.filter(m => m.id !== message_id));
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log(`${logPrefix} Subscription status:`, status);
+            });
 
         channelRef.current = channel;
         loadMessages();
         markAsDelivered();
 
         return () => {
+            console.log(`${logPrefix} Cleaning up channel:`, channelName);
             supabase.removeChannel(channel);
         };
     }, [friendId, currentUser, chatKey, isGroup, loadMessages, markAsDelivered, markAsRead]);
-
-    const handleTypingStatus = (typing: boolean) => {
-        if (channelRef.current) {
-            channelRef.current.send({
-                type: 'broadcast',
-                event: 'typing',
-                payload: { user_id: currentUser.id, is_typing: typing }
-            });
-        }
-    };
 
     return {
         messages,
@@ -424,6 +496,7 @@ export const useChatRoom = (friendId: string, currentUser: any, isGroup: boolean
         isTyping,
         handleSendMessage,
         handleReact,
+        flyingEmoji,
         handleSaveEdit,
         handleDeleteMessage,
         handleForwardMessage,

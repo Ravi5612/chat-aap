@@ -10,9 +10,10 @@ interface MessageListProps {
     onLongPress?: (message: any, y: number) => void;
     onImagePress?: (uri: string) => void;
     friendName?: string;
+    flyingEmoji?: any;
 }
 
-export default function MessageList({ messages, currentUser, onReply, onLongPress, onImagePress, friendName }: MessageListProps) {
+export default function MessageList({ messages, currentUser, onReply, onLongPress, onImagePress, friendName, flyingEmoji }: MessageListProps) {
     const flatListRef = useRef<FlatList>(null);
 
     const handleScrollToMessage = (replyMsg: any) => {
@@ -36,11 +37,12 @@ export default function MessageList({ messages, currentUser, onReply, onLongPres
             onReplyClick={handleScrollToMessage}
             onImagePress={onImagePress}
             friendName={friendName}
+            flyingEmoji={flyingEmoji}
         />
     );
 
     return (
-        <View className="flex-1">
+        <View style={{ flex: 1 }}>
             <FlatList
                 ref={flatListRef}
                 data={messages}

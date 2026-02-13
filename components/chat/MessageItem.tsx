@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Image, Animated, PanResponder } from 'rea
 import MessageStatus from './MessageStatus';
 import { Ionicons } from '@expo/vector-icons';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
+import FlyingReaction from './FlyingReaction';
 
 interface MessageItemProps {
     message: any;
@@ -12,9 +13,10 @@ interface MessageItemProps {
     onReplyClick?: (replyMessage: any) => void;
     onImagePress?: (uri: string) => void;
     friendName?: string;
+    flyingEmoji?: any;
 }
 
-const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName }: MessageItemProps) => {
+const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
     const swipeX = useRef(new Animated.Value(0)).current;
 
     const panResponder = useRef(
@@ -53,10 +55,11 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     const isSystemMsg = message.message?.startsWith('SYSTEM_MSG:');
     if (isSystemMsg) {
         return (
-            <View className="flex-row justify-center my-4">
-                <View className="bg-gray-100/80 px-4 py-1.5 rounded-full border border-gray-200">
-                    <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center">
-                        <Ionicons name="information-circle-outline" size={10} color="#94A3B8" /> {message.message.replace('SYSTEM_MSG:', '').trim()}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 16 }}>
+                <View style={{ backgroundColor: 'rgba(243, 244, 246, 0.8)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 9999, borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F68537' }} />
+                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 1.5, textAlign: 'center' }}>
+                        {message.message.replace('SYSTEM_MSG:', '').trim()}
                     </Text>
                 </View>
             </View>
@@ -88,7 +91,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     }
 
     return (
-        <View className="relative w-full overflow-visible">
+        <View style={{ position: 'relative', width: '100%', overflow: 'visible' }}>
             {/* Swipped Reply Icon Layer */}
             <Animated.View
                 style={{
@@ -104,34 +107,98 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
             <Animated.View
                 {...panResponder.panHandlers}
-                style={{ transform: [{ translateX: swipeX }] }}
-                className={`w-full mb-3 px-4 flex-col ${isCurrentUser ? 'items-end' : 'items-start'}`}
+                style={{
+                    transform: [{ translateX: swipeX }],
+                    width: '100%',
+                    marginBottom: 12,
+                    paddingHorizontal: 16,
+                    flexDirection: 'column',
+                    alignItems: isCurrentUser ? 'flex-end' : 'flex-start'
+                }}
             >
                 <TouchableOpacity
                     onLongPress={handleLongPress}
                     activeOpacity={0.9}
-                    className={`max-w-[85%] rounded-2xl shadow-sm overflow-hidden ${isCurrentUser
-                        ? 'bg-[#F68537] rounded-tr-none'
-                        : 'bg-white border border-gray-100 rounded-tl-none'
-                        }`}
+                    style={{
+                        maxWidth: '85%',
+                        borderRadius: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.05,
+                        shadowRadius: 2,
+                        elevation: 2,
+                        overflow: 'hidden',
+                        backgroundColor: isCurrentUser ? '#F68537' : 'white',
+                        borderTopRightRadius: isCurrentUser ? 0 : 16,
+                        borderTopLeftRadius: isCurrentUser ? 16 : 0,
+                        borderWidth: isCurrentUser ? 0 : 1,
+                        borderColor: isCurrentUser ? 'transparent' : '#F3F4F6'
+                    }}
                 >
                     {/* Group Sender Name */}
                     {!isCurrentUser && message.group_id && (
-                        <Text className="px-3 pt-2 text-[11px] font-bold text-[#F68537]">
+                        <Text style={{ paddingHorizontal: 12, paddingTop: 8, fontSize: 11, fontWeight: 'bold', color: '#F68537' }}>
                             {message.sender?.username || 'User'}
                         </Text>
                     )}
 
+                    {/* Status Context */}
+                    {message.status_context && (
+                        <TouchableOpacity
+                            onPress={() => { }} // Handle opening status viewer if needed
+                            style={{
+                                margin: 6,
+                                padding: 8,
+                                borderRadius: 8,
+                                borderLeftWidth: 4,
+                                backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                                borderLeftColor: '#10B981', // Green for status
+                                flexDirection: 'row',
+                                alignItems: 'center'
+                            }}
+                        >
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontWeight: 'bold', fontSize: 11, color: '#10B981', marginBottom: 2 }}>
+                                    Status
+                                </Text>
+                                <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={1}>
+                                    {message.status_context.media_type === 'text' ? message.status_context.content : 'Media Status'}
+                                </Text>
+                            </View>
+                            {message.status_context.media_type !== 'text' && (
+                                <Image
+                                    source={{ uri: message.status_context.media_url }}
+                                    style={{ width: 40, height: 40, borderRadius: 4, backgroundColor: '#E5E7EB' }}
+                                />
+                            )}
+                        </TouchableOpacity>
+                    )}
+
                     {/* Reply Context */}
-                    {message.reply && (
+                    {message.reply && !message.status_context && (
                         <TouchableOpacity
                             onPress={() => onReplyClick?.(message.reply)}
-                            className={`m-1.5 p-2 rounded-lg border-l-4 bg-black/5 ${isCurrentUser ? 'border-white/50' : 'border-[#F68537]'}`}
+                            style={{
+                                margin: 6,
+                                padding: 8,
+                                borderRadius: 8,
+                                borderLeftWidth: 4,
+                                backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                                borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537'
+                            }}
                         >
-                            <Text className={`font-bold text-[11px] ${isCurrentUser ? 'text-white' : 'text-[#F68537]'}`}>
+                            <Text style={{
+                                fontWeight: 'bold',
+                                fontSize: 11,
+                                color: isCurrentUser ? 'white' : '#F68537'
+                            }}>
                                 {message.reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}
                             </Text>
-                            <Text className={`text-xs opacity-80 ${isCurrentUser ? 'text-white' : 'text-gray-600'}`} numberOfLines={1}>
+                            <Text style={{
+                                fontSize: 12,
+                                opacity: 0.8,
+                                color: isCurrentUser ? 'white' : '#4B5563'
+                            }} numberOfLines={1}>
                                 {message.reply.message || 'Media'}
                             </Text>
                         </TouchableOpacity>
@@ -140,7 +207,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     {/* Image Content */}
                     {imageUrl && (
                         <TouchableOpacity onPress={() => onImagePress?.(imageUrl)}>
-                            <Image source={{ uri: imageUrl }} className="w-64 h-64 bg-gray-100" resizeMode="cover" />
+                            <Image source={{ uri: imageUrl }} style={{ width: 256, height: 256, backgroundColor: '#F3F4F6' }} resizeMode="cover" />
                         </TouchableOpacity>
                     )}
 
@@ -149,15 +216,22 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                         <VoiceMessagePlayer uri={voiceUri} isCurrentUser={isCurrentUser} />
                     )}
 
-                    <View className="px-3 py-2">
+                    <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
                         {textContent && textContent.trim() !== '' && (
-                            <Text className={`text-[15px] leading-relaxed ${isCurrentUser ? 'text-white' : 'text-gray-800'}`}>
+                            <Text style={{
+                                fontSize: 15,
+                                lineHeight: 22,
+                                color: isCurrentUser ? 'white' : '#1F2937'
+                            }}>
                                 {textContent}
                             </Text>
                         )}
 
-                        <View className="flex-row items-center justify-end mt-1">
-                            <Text className={`text-[10px] ${isCurrentUser ? 'text-white/70' : 'text-gray-400'}`}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
+                            <Text style={{
+                                fontSize: 10,
+                                color: isCurrentUser ? 'rgba(255, 255, 255, 0.7)' : '#9CA3AF'
+                            }}>
                                 {formatTime(message.created_at)}
                             </Text>
                             {isCurrentUser && (
@@ -170,16 +244,27 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                 {/* Reactions Overlay */}
                 {message.reactions && Object.keys(message.reactions).length > 0 && (
                     <View
-                        style={{ marginTop: -10, zIndex: 20 }}
-                        className={`flex-row gap-1 ${isCurrentUser ? 'mr-2' : 'ml-2'}`}
+                        style={{
+                            marginTop: -10,
+                            zIndex: 20,
+                            flexDirection: 'row',
+                            gap: 4,
+                            marginRight: isCurrentUser ? 8 : 0,
+                            marginLeft: isCurrentUser ? 0 : 8
+                        }}
                     >
                         {Object.entries(message.reactions).map(([emoji, count]: any) => (
-                            <View key={emoji} className="bg-white px-2 py-0.5 rounded-full border border-gray-100 shadow-sm flex-row items-center">
-                                <Text className="text-xs">{emoji}</Text>
-                                {count > 1 && <Text className="text-[9px] font-bold ml-1 text-gray-500">{count}</Text>}
+                            <View key={emoji} style={{ backgroundColor: 'white', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2, flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={{ fontSize: 12 }}>{emoji}</Text>
+                                {count > 1 && <Text style={{ fontSize: 9, fontWeight: 'bold', marginLeft: 4, color: '#6B7280' }}>{count}</Text>}
                             </View>
                         ))}
                     </View>
+                )}
+
+                {/* Flying Reaction Layer */}
+                {flyingEmoji && flyingEmoji.messageId === message.id && (
+                    <FlyingReaction key={flyingEmoji.id} emoji={flyingEmoji.emoji} />
                 )}
             </Animated.View>
         </View>

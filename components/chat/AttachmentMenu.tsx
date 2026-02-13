@@ -25,15 +25,15 @@ export default function AttachmentMenu({ onLocation, onContact, onImage, onDocum
         <View>
             <TouchableOpacity
                 onPress={() => setVisible(true)}
-                className="p-2"
+                style={{ paddingLeft: 12, paddingRight: 8, paddingVertical: 8 }}
             >
-                <Ionicons name="add-circle-outline" size={28} color="#F68537" />
+                <Ionicons name="add" size={28} color="#F68537" />
             </TouchableOpacity>
 
             <Modal transparent visible={visible} animationType="fade">
                 <TouchableWithoutFeedback onPress={() => setVisible(false)}>
-                    <View className="flex-1 bg-black/20 justify-end pb-24">
-                        <View className="bg-white mx-4 rounded-3xl p-4 flex-row flex-wrap justify-between">
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.2)', justifyContent: 'flex-end', paddingBottom: 96 }}>
+                        <View style={{ backgroundColor: 'white', marginHorizontal: 16, borderRadius: 24, padding: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                             {items.map((item, index) => (
                                 <TouchableOpacity
                                     key={index}
@@ -41,15 +41,26 @@ export default function AttachmentMenu({ onLocation, onContact, onImage, onDocum
                                         item.onPress();
                                         setVisible(false);
                                     }}
-                                    className="w-[30%] items-center mb-6"
+                                    style={{ width: '30%', alignItems: 'center', marginBottom: 24 }}
                                 >
                                     <View
-                                        style={{ backgroundColor: item.color }}
-                                        className="w-14 h-14 rounded-full items-center justify-center shadow-sm"
+                                        style={{
+                                            backgroundColor: item.color,
+                                            width: 56,
+                                            height: 56,
+                                            borderRadius: 28,
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 1 },
+                                            shadowOpacity: 0.05,
+                                            shadowRadius: 2,
+                                            elevation: 2
+                                        }}
                                     >
                                         <Ionicons name={item.icon as any} size={26} color="white" />
                                     </View>
-                                    <Text className="text-[11px] font-medium text-gray-500 mt-2">{item.label}</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '500', color: '#6B7280', marginTop: 8 }}>{item.label}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>

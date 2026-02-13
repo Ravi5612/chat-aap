@@ -11,9 +11,6 @@
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/023e1b9b-ed66-49d0-969c-06698a2ffb04"
-    },
     "ios": {
       "supportsTablet": true
     },
@@ -59,12 +56,6 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": false
-    },
-    "extra": {
-      "eas": {
-        "projectId": "023e1b9b-ed66-49d0-969c-06698a2ffb04"
-      }
-    },
-    "owner": "ravirai5612"
+    }
   }
 }

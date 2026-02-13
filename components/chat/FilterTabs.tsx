@@ -16,7 +16,7 @@ export default function FilterTabs({ activeTab, onTabChange, counts = {} }: Filt
     ];
 
     return (
-        <View className="bg-white border-b border-gray-100">
+        <View style={{ backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -26,29 +26,39 @@ export default function FilterTabs({ activeTab, onTabChange, counts = {} }: Filt
                     <TouchableOpacity
                         key={tab.id}
                         onPress={() => onTabChange(tab.id)}
-                        className={`
-                            flex-row items-center px-4 py-2 rounded-full mr-3 border
-                            ${activeTab === tab.id
-                                ? 'bg-[#F68537] border-[#F68537]'
-                                : 'bg-gray-50 border-gray-100'}
-                        `}
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingHorizontal: 16,
+                            paddingVertical: 8,
+                            borderRadius: 9999,
+                            marginRight: 12,
+                            borderWidth: 1,
+                            backgroundColor: activeTab === tab.id ? '#F68537' : '#F9FAFB',
+                            borderColor: activeTab === tab.id ? '#F68537' : '#F3F4F6',
+                        }}
                     >
-                        <Text className="mr-1.5 text-sm">{tab.icon}</Text>
-                        <Text className={`
-                            text-sm font-bold
-                            ${activeTab === tab.id ? 'text-white' : 'text-gray-600'}
-                        `}>
+                        <Text style={{ marginRight: 6, fontSize: 14 }}>{tab.icon}</Text>
+                        <Text style={{
+                            fontSize: 14,
+                            fontWeight: 'bold',
+                            color: activeTab === tab.id ? 'white' : '#4B5563',
+                        }}>
                             {tab.label}
                         </Text>
                         {counts[tab.id] > 0 && (
-                            <View className={`
-                                ml-1.5 px-1.5 py-0.5 rounded-full
-                                ${activeTab === tab.id ? 'bg-white' : 'bg-[#F68537]'}
-                            `}>
-                                <Text className={`
-                                    text-[10px] font-black
-                                    ${activeTab === tab.id ? 'text-[#F68537]' : 'text-white'}
-                                `}>
+                            <View style={{
+                                marginLeft: 6,
+                                paddingHorizontal: 6,
+                                paddingVertical: 2,
+                                borderRadius: 9999,
+                                backgroundColor: activeTab === tab.id ? 'white' : '#F68537',
+                            }}>
+                                <Text style={{
+                                    fontSize: 10,
+                                    fontWeight: '900',
+                                    color: activeTab === tab.id ? '#F68537' : 'white',
+                                }}>
                                     {counts[tab.id]}
                                 </Text>
                             </View>

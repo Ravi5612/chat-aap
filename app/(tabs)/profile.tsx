@@ -18,62 +18,62 @@ export default function ProfileScreen() {
     };
 
     return (
-        <View className="flex-1" {...swipeHandlers} collapsable={false}>
-            <SafeAreaView className="flex-1 bg-white">
-                <View className="px-4 py-4 border-b border-gray-100">
-                    <Text className="text-2xl font-bold text-[#F68537]">Profile</Text>
+        <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }}>
+                <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#F68537' }}>Profile</Text>
                 </View>
 
-                <ScrollView className="flex-1">
-                    <View className="items-center py-8">
-                        <View className="relative">
+                <ScrollView style={{ flex: 1 }}>
+                    <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+                        <View style={{ position: 'relative' }}>
                             <Image
                                 source={{ uri: user?.user_metadata?.avatar_url || 'https://via.placeholder.com/150' }}
-                                className="w-32 h-32 rounded-full border-4 border-orange-50 bg-gray-100"
+                                style={{ width: 128, height: 128, borderRadius: 64, borderWidth: 4, borderColor: '#FFF7ED', backgroundColor: '#F3F4F6' }}
                             />
-                            <TouchableOpacity className="absolute bottom-0 right-0 bg-[#F68537] p-2 rounded-full border-4 border-white">
+                            <TouchableOpacity style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#F68537', padding: 8, borderRadius: 9999, borderWidth: 4, borderColor: 'white' }}>
                                 <Ionicons name="camera" size={20} color="white" />
                             </TouchableOpacity>
                         </View>
-                        <Text className="text-2xl font-bold mt-4 text-gray-900">{user?.user_metadata?.full_name || 'Anonymous User'}</Text>
-                        <Text className="text-gray-500 mt-1">{user?.email}</Text>
+                        <Text style={{ fontSize: 24, fontWeight: 'bold', marginTop: 16, color: '#111827' }}>{user?.user_metadata?.full_name || 'Anonymous User'}</Text>
+                        <Text style={{ color: '#6B7280', marginTop: 4 }}>{user?.email}</Text>
                     </View>
 
-                    <View className="px-6 py-4">
-                        <Text className="text-gray-400 font-bold text-xs uppercase mb-4">Account</Text>
+                    <View style={{ paddingHorizontal: 24, paddingVertical: 16 }}>
+                        <Text style={{ color: '#9CA3AF', fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase', marginBottom: 16 }}>Account</Text>
 
-                        <TouchableOpacity className="flex-row items-center py-4 border-b border-gray-50">
-                            <View className="bg-blue-50 p-2 rounded-lg mr-4">
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' }}>
+                            <View style={{ backgroundColor: '#EFF6FF', padding: 8, borderRadius: 8, marginRight: 16 }}>
                                 <Ionicons name="person-outline" size={24} color="#3B82F6" />
                             </View>
-                            <Text className="flex-1 text-base font-medium text-gray-700">Account info</Text>
+                            <Text style={{ flex: 1, fontSize: 16, fontWeight: '500', color: '#374151' }}>Account info</Text>
                             <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
                         </TouchableOpacity>
 
-                        <TouchableOpacity className="flex-row items-center py-4 border-b border-gray-50">
-                            <View className="bg-green-50 p-2 rounded-lg mr-4">
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' }}>
+                            <View style={{ backgroundColor: '#ECFDF5', padding: 8, borderRadius: 8, marginRight: 16 }}>
                                 <Ionicons name="notifications-outline" size={24} color="#10B981" />
                             </View>
-                            <Text className="flex-1 text-base font-medium text-gray-700">Notifications</Text>
+                            <Text style={{ flex: 1, fontSize: 16, fontWeight: '500', color: '#374151' }}>Notifications</Text>
                             <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
                         </TouchableOpacity>
 
-                        <TouchableOpacity className="flex-row items-center py-4 border-b border-gray-50">
-                            <View className="bg-purple-50 p-2 rounded-lg mr-4">
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' }}>
+                            <View style={{ backgroundColor: '#F5F3FF', padding: 8, borderRadius: 8, marginRight: 16 }}>
                                 <Ionicons name="lock-closed-outline" size={24} color="#8B5CF6" />
                             </View>
-                            <Text className="flex-1 text-base font-medium text-gray-700">Privacy & Security</Text>
+                            <Text style={{ flex: 1, fontSize: 16, fontWeight: '500', color: '#374151' }}>Privacy & Security</Text>
                             <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             onPress={handleLogout}
-                            className="flex-row items-center py-4 mt-8"
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, marginTop: 32 }}
                         >
-                            <View className="bg-red-50 p-2 rounded-lg mr-4">
+                            <View style={{ backgroundColor: '#FEF2F2', padding: 8, borderRadius: 8, marginRight: 16 }}>
                                 <Ionicons name="log-out-outline" size={24} color="#EF4444" />
                             </View>
-                            <Text className="flex-1 text-base font-medium text-red-600">Logout</Text>
+                            <Text style={{ flex: 1, fontSize: 16, fontWeight: '500', color: '#DC2626' }}>Logout</Text>
                         </TouchableOpacity>
                     </View>
                 </ScrollView>

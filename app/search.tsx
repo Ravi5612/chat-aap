@@ -24,7 +24,6 @@ export default function SearchPeopleScreen() {
 
         setLoading(true);
         try {
-            // 1. Search profiles
             const { data: profiles, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -34,7 +33,6 @@ export default function SearchPeopleScreen() {
 
             if (error) throw error;
 
-            // 2. Check friendships and requests
             const profileIds = profiles.map(p => p.id);
 
             const { data: friendships } = await supabase
@@ -89,23 +87,23 @@ export default function SearchPeopleScreen() {
             }]);
 
             Alert.alert('Success', 'Friend request sent! ✅');
-            handleSearch(query); // Refresh results
+            handleSearch(query);
         } catch (error: any) {
             Alert.alert('Error', error.message);
         }
     };
 
     return (
-        <SafeAreaView className="flex-1 bg-white">
-            <View className="px-4 py-4 border-b border-gray-100 flex-row items-center">
-                <TouchableOpacity onPress={() => router.back()} className="mr-4">
+        <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }}>
+            <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
                     <Ionicons name="arrow-back" size={24} color="#F68537" />
                 </TouchableOpacity>
-                <View className="flex-1 bg-gray-100 rounded-full flex-row items-center px-4">
+                <View style={{ flex: 1, backgroundColor: '#F3F4F6', borderRadius: 9999, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }}>
                     <Ionicons name="search" size={20} color="#94A3B8" />
                     <TextInput
                         placeholder="Search for people..."
-                        className="flex-1 py-2 ml-2"
+                        style={{ flex: 1, paddingVertical: 8, marginLeft: 8 }}
                         value={query}
                         onChangeText={handleSearch}
                         autoFocus
@@ -114,7 +112,7 @@ export default function SearchPeopleScreen() {
             </View>
 
             {loading ? (
-                <View className="flex-1 items-center justify-center">
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                     <ActivityIndicator color="#F68537" />
                 </View>
             ) : (
@@ -122,37 +120,37 @@ export default function SearchPeopleScreen() {
                     data={results}
                     keyExtractor={(item) => item.id}
                     renderItem={({ item }) => (
-                        <View className="px-4 py-4 border-b border-gray-50 flex-row items-center">
+                        <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', flexDirection: 'row', alignItems: 'center' }}>
                             <Image
                                 source={{ uri: item.avatar_url || 'https://via.placeholder.com/150' }}
-                                className="w-12 h-12 rounded-full mr-4"
+                                style={{ width: 48, height: 48, borderRadius: 24, marginRight: 16 }}
                             />
-                            <View className="flex-1">
-                                <Text className="text-lg font-bold">{item.username || 'User'}</Text>
-                                <Text className="text-gray-500 text-sm">{item.email}</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 18, fontWeight: 'bold' }}>{item.username || 'User'}</Text>
+                                <Text style={{ color: '#6B7280', fontSize: 14 }}>{item.email}</Text>
                             </View>
                             {item.isFriend ? (
-                                <View className="bg-green-50 px-4 py-2 rounded-full">
-                                    <Text className="text-green-600 font-bold">Friends</Text>
+                                <View style={{ backgroundColor: '#F0FDF4', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999 }}>
+                                    <Text style={{ color: '#166534', fontWeight: 'bold' }}>Friends</Text>
                                 </View>
                             ) : item.requestStatus === 'pending' ? (
-                                <View className="bg-blue-50 px-4 py-2 rounded-full">
-                                    <Text className="text-blue-600 font-bold">Pending</Text>
+                                <View style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999 }}>
+                                    <Text style={{ color: '#1E40AF', fontWeight: 'bold' }}>Pending</Text>
                                 </View>
                             ) : (
                                 <TouchableOpacity
                                     onPress={() => sendFriendRequest(item.id)}
-                                    className="bg-[#F68537] px-6 py-2 rounded-full"
+                                    style={{ backgroundColor: '#F68537', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 9999 }}
                                 >
-                                    <Text className="text-white font-bold">Add</Text>
+                                    <Text style={{ color: 'white', fontWeight: 'bold' }}>Add</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
                     )}
                     ListEmptyComponent={
-                        <View className="flex-1 items-center justify-center p-10 mt-20">
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
                             <Ionicons name="people-outline" size={64} color="#CBD5E1" />
-                            <Text className="text-gray-400 mt-4 text-center">
+                            <Text style={{ color: '#9CA3AF', marginTop: 16, textAlign: 'center' }}>
                                 {query.length < 2 ? 'Search for friends by username or email' : 'No users found'}
                             </Text>
                         </View>

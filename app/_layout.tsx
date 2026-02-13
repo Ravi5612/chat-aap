@@ -53,17 +53,37 @@ export default function RootLayout() {
   useEffect(() => {
     if (initializing) return;
 
+    const syncStatus = async () => {
+      if (session?.user?.id) {
+        try {
+          await supabase.from('profiles').update({ is_online: true }).eq('id', session.user.id);
+          console.log('RootLayout: Synced is_online status to true');
+        } catch (e) {
+          console.warn('RootLayout: Status sync failed:', e);
+        }
+      }
+    };
+
     const inAuthGroup = segments[0] === '(auth)' || segments.includes('login') || segments.includes('signup');
 
-    if (session && inAuthGroup) {
-      // If logged in and in auth group, go to tabs
-      router.replace('/(tabs)');
-    } else if (!session && !inAuthGroup) {
-      // If not logged in and not in auth group, go to login
-      router.replace('/login'); // Ensure this matches your login route name
-    } else if (session && segments.length === 0) {
-      // If at root and logged in, go to tabs
-      router.replace('/(tabs)');
+    console.log('RootLayout Nav State:', {
+      hasSession: !!session,
+      inAuthGroup,
+      segments: segments
+    });
+
+    if (session) {
+      syncStatus();
+      if (inAuthGroup) {
+        console.log('Redirecting to (tabs)');
+        router.replace('/(tabs)');
+      } else if (segments.length === 0) {
+        console.log('Redirecting to (tabs) from root');
+        router.replace('/(tabs)');
+      }
+    } else if (!inAuthGroup) {
+      console.log('Redirecting to login');
+      router.replace('/login');
     }
   }, [session, initializing, segments]);
 

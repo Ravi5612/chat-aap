@@ -11,6 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNotifications } from '@/hooks/useNotifications';
 import FilterTabs from '@/components/chat/FilterTabs';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
+import FriendContextMenu from '@/components/chat/FriendContextMenu';
+import { Alert } from 'react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -20,6 +22,8 @@ export default function HomeScreen() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('all');
   const [profile, setProfile] = useState<any>(null);
+  const [selectedFriendForMenu, setSelectedFriendForMenu] = useState<any>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -36,6 +40,48 @@ export default function HomeScreen() {
     };
     fetchProfile();
   }, []);
+
+  const handleLongPress = (friend: any) => {
+    setSelectedFriendForMenu(friend);
+    setMenuVisible(true);
+  };
+
+  const handleMenuAction = async (action: string, friend: any) => {
+    switch (action) {
+      case 'profile':
+        router.push(`/profile/${friend.id}` as any);
+        break;
+      case 'group':
+        // Navigation for group features
+        break;
+      case 'delete':
+        Alert.alert(
+          "Delete Chat",
+          `Are you sure you want to delete your chat with ${friend.name}?`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: async () => {
+                const { error } = await supabase
+                  .from('friendships')
+                  .delete()
+                  .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+                  .or(`user_id.eq.${friend.id},friend_id.eq.${friend.id}`);
+
+                if (!error) {
+                  loadFriends();
+                }
+              }
+            }
+          ]
+        );
+        break;
+      default:
+        console.log('Action not implemented:', action);
+    }
+  };
 
   const {
     viewingStatus,
@@ -74,39 +120,38 @@ export default function HomeScreen() {
 
   if (loading && combinedItems.length === 0) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#EBD8B7] px-6">
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EBD8B7', paddingHorizontal: 24 }}>
         <ActivityIndicator size="large" color="#F68537" />
-        <Text className="mt-4 text-[#F68537] font-bold text-lg">Connecting to ChatWarriors...</Text>
-        {error && <Text className="mt-2 text-red-500 text-center font-medium bg-red-50 p-2 rounded-lg">Error: {error}</Text>}
-        <TouchableOpacity onPress={loadFriends} className="mt-8 bg-[#F68537] px-6 py-3 rounded-xl shadow-sm">
-          <Text className="text-white font-bold">Try Refreshing</Text>
+        <Text style={{ marginTop: 16, color: '#F68537', fontWeight: 'bold', fontSize: 18 }}>Connecting to ChatWarriors...</Text>
+        {error && <Text style={{ marginTop: 8, color: '#EF4444', textAlign: 'center', fontWeight: '500', backgroundColor: '#FEF2F2', padding: 8, borderRadius: 8 }}>Error: {error}</Text>}
+        <TouchableOpacity onPress={loadFriends} style={{ marginTop: 32, backgroundColor: '#F68537', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 }}>
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Refreshing</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  console.log('HomeScreen: Rendering with swipe handlers...');
   return (
-    <View className="flex-1" {...swipeHandlers} collapsable={false}>
-      <SafeAreaView className="flex-1 bg-[#EBD8B7]">
-        <View className="bg-[#F68537] px-4 py-4 flex-row justify-between items-center">
-          <View className="flex-row items-center gap-2">
+    <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
+        <View style={{ backgroundColor: '#F68537', paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)}>
               <Image
                 source={{ uri: profile?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || 'User')}&backgroundColor=F68537` }}
-                className="w-12 h-12 rounded-full border-2 border-white/30"
+                style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.3)' }}
               />
             </TouchableOpacity>
-            <Text className="text-white font-bold text-lg lowercase">{profile?.username || 'user'}</Text>
+            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18, textTransform: 'lowercase' }}>{profile?.username || 'user'}</Text>
           </View>
 
-          <View className="flex-row items-center gap-3">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <TouchableOpacity
               onPress={() => router.push('/search' as any)}
-              className="bg-[#E67527] rounded-full pl-4 pr-1 py-1 flex-row items-center gap-2 border border-white/10"
+              style={{ backgroundColor: '#E67527', borderRadius: 9999, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' }}
             >
-              <Text className="text-white font-black text-[10px] tracking-tight">SEARCH FRIEND</Text>
-              <View className="bg-white p-1.5 rounded-full shadow-sm">
+              <Text style={{ color: 'white', fontWeight: '900', fontSize: 10, letterSpacing: -0.5 }}>SEARCH FRIEND</Text>
+              <View style={{ backgroundColor: 'white', padding: 6, borderRadius: 9999, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 }}>
                 <Ionicons name="search" size={16} color="#F68537" />
               </View>
             </TouchableOpacity>
@@ -131,12 +176,14 @@ export default function HomeScreen() {
             <FriendListItem
               friend={item}
               onClick={handleSelectFriend}
+              onLongPress={handleLongPress}
               isOnline={item.isOnline}
+              onViewUserStatus={handleViewUserStatus}
             />
           )}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center p-10 mt-20">
-              <Text className="text-gray-400 text-center">
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
+              <Text style={{ color: '#9CA3AF', textAlign: 'center' }}>
                 {activeTab === 'all'
                   ? 'No chats found. Start a conversation with a friend!'
                   : `No ${activeTab} found.`}
@@ -146,6 +193,13 @@ export default function HomeScreen() {
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />
           }
+        />
+
+        <FriendContextMenu
+          visible={menuVisible}
+          friend={selectedFriendForMenu}
+          onClose={() => setMenuVisible(false)}
+          onAction={handleMenuAction}
         />
       </SafeAreaView>
     </View>

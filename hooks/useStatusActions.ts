@@ -70,11 +70,21 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
         }
     };
 
-    const handleViewUserStatus = useCallback(async (friend: any) => {
+    const handleViewUserStatus = useCallback(async (data: any) => {
         if (!currentUser) return;
+
+        // Handle history bundles or direct friends
+        const uid = data.id || data.userId || (data.statuses ? currentUser.id : null);
+        if (!uid) return;
+
         router.push({
             pathname: '/status/viewer' as any,
-            params: { userId: friend.id, initialIndex: 0 }
+            params: {
+                userId: uid,
+                initialIndex: 0,
+                isArchive: data.statuses ? 'true' : 'false',
+                date: data.dateKey || ''
+            }
         });
     }, [currentUser]);
 
@@ -87,7 +97,7 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
     // Track viewing and mark as seen
     useEffect(() => {
         if (!viewingStatus || !currentUser) return;
-        const currentId = viewingStatus.statuses[statusIndex]?.id;
+        const currentId = viewingStatus.statuses?.[statusIndex]?.id;
         if (!currentId) return;
 
         supabase.from('status_views').upsert([{
@@ -113,7 +123,7 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
         if (!currentUser) return;
         router.push({
             pathname: '/status/viewer' as any,
-            params: { userId: currentUser.id, initialIndex: 0 }
+            params: { userId: currentUser.id, initialIndex: 0, isArchive: 'false' }
         });
     };
 

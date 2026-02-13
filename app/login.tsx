@@ -58,60 +58,63 @@ export default function LoginPage() {
         }
     };
 
+    useEffect(() => {
+        console.log('LoginPage mounted');
+    }, []);
+
     return (
-        <SafeAreaView className="flex-1 bg-[#FFF5E6]">
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF5E6' }}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : -100}
             >
                 <ScrollView
-                    contentContainerStyle={{ flexGrow: 1 }}
-                    className="px-6"
+                    contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24 }}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     bounces={false}
                 >
-                    <View className="flex-1 justify-center py-10">
-                        <View className="bg-white p-8 rounded-3xl shadow-xl w-full">
-                            <View className="items-center mb-8">
+                    <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 40 }}>
+                        <View style={{ backgroundColor: 'white', padding: 32, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8, width: '100%' }}>
+                            <View style={{ alignItems: 'center', marginBottom: 32 }}>
                                 <Image
                                     source={require('@/assets/images/icon.png')}
-                                    className="w-32 h-32 mb-4"
+                                    style={{ width: 128, height: 128, marginBottom: 16 }}
                                     resizeMode="contain"
                                 />
-                                <Text className="text-3xl font-bold text-[#F68537]">Chat Warrior</Text>
-                                <Text className="text-gray-600 mt-2">Login to your account</Text>
+                                <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#F68537' }}>Chat Warrior</Text>
+                                <Text style={{ color: '#6B7280', marginTop: 8 }}>Login to your account</Text>
                             </View>
 
-                            <View className="space-y-4">
+                            <View style={{ gap: 16 }}>
                                 <View>
-                                    <Text className="text-gray-700 font-medium mb-2">Email</Text>
+                                    <Text style={{ color: '#374151', fontWeight: '500', marginBottom: 8 }}>Email</Text>
                                     <TextInput
                                         value={email}
                                         onChangeText={setEmail}
                                         placeholder="Enter your email"
                                         keyboardType="email-address"
                                         autoCapitalize="none"
-                                        className="w-full px-4 py-4 border border-gray-300 rounded-xl focus:border-[#F68537]"
+                                        style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 16, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 12, fontSize: 16 }}
                                         editable={!loading}
                                     />
                                 </View>
 
                                 <View>
-                                    <Text className="text-gray-700 font-medium mb-2">Password</Text>
-                                    <View className="relative justify-center">
+                                    <Text style={{ color: '#374151', fontWeight: '500', marginBottom: 8 }}>Password</Text>
+                                    <View style={{ position: 'relative', justifyContent: 'center' }}>
                                         <TextInput
                                             value={password}
                                             onChangeText={setPassword}
                                             placeholder="Enter your password"
                                             secureTextEntry={!showPassword}
-                                            className="w-full px-4 py-4 border border-gray-300 rounded-xl focus:border-[#F68537]"
+                                            style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 16, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 12, fontSize: 16 }}
                                             editable={!loading}
                                         />
                                         <TouchableOpacity
                                             onPress={() => setShowPassword(!showPassword)}
-                                            className="absolute right-4"
+                                            style={{ position: 'absolute', right: 16 }}
                                         >
                                             <IconSymbol
                                                 name={showPassword ? "eye.slash.fill" : "eye.fill"}
@@ -122,30 +125,30 @@ export default function LoginPage() {
                                     </View>
                                     <TouchableOpacity
                                         onPress={() => router.push('/forgot-password')}
-                                        className="mt-2 items-end"
+                                        style={{ marginTop: 8, alignItems: 'flex-end' }}
                                     >
-                                        <Text className="text-[#F68537] font-medium">Forgot Password?</Text>
+                                        <Text style={{ color: '#F68537', fontWeight: '500' }}>Forgot Password?</Text>
                                     </TouchableOpacity>
                                 </View>
 
                                 <TouchableOpacity
                                     onPress={handleLogin}
                                     disabled={loading}
-                                    className="w-full bg-[#F68537] py-4 rounded-xl items-center mt-6 shadow-md"
+                                    style={{ width: '100%', backgroundColor: '#F68537', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 4 }}
                                     activeOpacity={0.8}
                                 >
                                     {loading ? (
                                         <ActivityIndicator color="white" />
                                     ) : (
-                                        <Text className="text-white text-lg font-bold">Login</Text>
+                                        <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>Login</Text>
                                     )}
                                 </TouchableOpacity>
                             </View>
 
-                            <View className="flex-row justify-center mt-8">
-                                <Text className="text-gray-600">Don't have an account? </Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 32 }}>
+                                <Text style={{ color: '#6B7280' }}>Don't have an account? </Text>
                                 <TouchableOpacity onPress={() => router.push('/signup')}>
-                                    <Text className="text-[#F68537] font-bold">Sign Up</Text>
+                                    <Text style={{ color: '#F68537', fontWeight: 'bold' }}>Sign Up</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>

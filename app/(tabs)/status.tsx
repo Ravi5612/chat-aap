@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriends } from '@/hooks/useFriends';
@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
+import StatusBar from '@/components/chat/StatusBar';
 
 export default function StatusScreen() {
     const router = useRouter();
@@ -29,92 +30,151 @@ export default function StatusScreen() {
 
     if (loading && combinedItems.length === 0) {
         return (
-            <View className="flex-1 items-center justify-center bg-white">
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' }}>
                 <ActivityIndicator size="large" color="#F68537" />
             </View>
         );
     }
 
     return (
-        <View className="flex-1" {...swipeHandlers} collapsable={false}>
-            <SafeAreaView className="flex-1 bg-white">
-                <View className="px-4 py-4 border-b border-gray-100 flex-row justify-between items-center">
-                    <Text className="text-2xl font-bold text-[#F68537]">Status</Text>
-                    <TouchableOpacity
-                        onPress={() => setShowAddStatus(true)}
-                        className="bg-orange-50 p-2 rounded-full"
-                    >
-                        <Ionicons name="camera-outline" size={24} color="#F68537" />
+        <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
+                {/* 1. Header with Close Button */}
+                <View style={{ paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                        <Text style={{ fontSize: 22, fontWeight: '900', color: '#1E293B', letterSpacing: -0.5 }}>Status</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '900', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 }}>Recent Updates</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+                        <Ionicons name="close" size={24} color="#64748B" />
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView className="flex-1">
-                    {/* My Status */}
-                    <TouchableOpacity
-                        onPress={handleViewMyStatus}
-                        className="flex-row items-center px-4 py-4 border-b border-gray-50"
-                    >
-                        <View className="relative">
-                            <View className={`w-16 h-16 rounded-full p-1 border-2 ${myStatuses?.length > 0 ? 'border-[#F68537]' : 'border-gray-200 border-dashed'}`}>
-                                <View className="w-full h-full rounded-full overflow-hidden bg-gray-100 items-center justify-center">
-                                    {myStatuses?.length > 0 ? (
-                                        myStatuses[0].media_type === 'text' ? (
-                                            <View className="w-full h-full items-center justify-center" style={{ backgroundColor: myStatuses[0].background_color || '#F68537' }}>
-                                                <Text className="text-white font-bold">{myStatuses[0].content?.charAt(0)}</Text>
+                <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 40 }}
+                    refreshControl={<RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />}
+                >
+                    {/* 2. Unified Status Bar Card */}
+                    <StatusBar
+                        myStatuses={myStatuses}
+                        friendsWithStatus={combinedItems.filter(i => !i.isGroup && i.statusCount > 0)}
+                        onAddClick={() => setShowAddStatus(true)}
+                        onViewStatus={handleViewUserStatus}
+                        onViewMyStatus={handleViewMyStatus}
+                    />
+
+                    {/* 3. Recent Updates Vertical Section */}
+                    <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
+                        <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B', marginBottom: 16 }}>Recent Updates</Text>
+
+                        {friendsWithStatus.length > 0 ? (
+                            friendsWithStatus.map((item) => {
+                                // Find the latest status to show preview
+                                const latestStatus = item.statuses?.[0] || {};
+                                return (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        onPress={() => handleViewUserStatus(item)}
+                                        activeOpacity={0.9}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            backgroundColor: 'white',
+                                            padding: 14,
+                                            borderRadius: 24,
+                                            marginBottom: 12,
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 4 },
+                                            shadowOpacity: 0.04,
+                                            shadowRadius: 10,
+                                            elevation: 1
+                                        }}
+                                    >
+                                        {/* Profile with Ring */}
+                                        <View style={{ position: 'relative' }}>
+                                            <View style={{
+                                                width: 60,
+                                                height: 60,
+                                                borderRadius: 30,
+                                                padding: 2,
+                                                borderWidth: 2,
+                                                borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537'
+                                            }}>
+                                                <Image
+                                                    source={{ uri: item.img || 'https://via.placeholder.com/150' }}
+                                                    style={{ width: '100%', height: '100%', borderRadius: 30 }}
+                                                />
                                             </View>
-                                        ) : (
-                                            <Image
-                                                source={{ uri: myStatuses[0].media_url }}
-                                                className="w-full h-full"
-                                            />
-                                        )
-                                    ) : (
-                                        <Ionicons name="person" size={32} color="#CBD5E1" />
-                                    )}
-                                </View>
+                                            <View style={{
+                                                position: 'absolute',
+                                                bottom: 2,
+                                                right: 2,
+                                                width: 14,
+                                                height: 14,
+                                                backgroundColor: '#10B981',
+                                                borderRadius: 7,
+                                                borderWidth: 2,
+                                                borderColor: 'white'
+                                            }} />
+                                            {/* Count Badge on Avatar parity */}
+                                            <View style={{
+                                                position: 'absolute',
+                                                bottom: -4,
+                                                right: -4,
+                                                backgroundColor: '#F68537',
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: 10,
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                borderWidth: 2,
+                                                borderColor: 'white'
+                                            }}>
+                                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{item.statusCount}</Text>
+                                            </View>
+                                        </View>
+
+                                        {/* Info */}
+                                        <View style={{ marginLeft: 16, flex: 1 }}>
+                                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#1E293B' }} numberOfLines={1}>{item.name}</Text>
+                                            <Text style={{ fontSize: 12, color: '#F68537', marginTop: 2 }} numberOfLines={1}>{item.email || 'friend@chat.com'}</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                                                <Ionicons name="time-outline" size={12} color="#94A3B8" />
+                                                <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: '600' }}>4 minutes ago</Text>
+                                            </View>
+                                        </View>
+
+                                        {/* Status Preview Thumbnail */}
+                                        <View style={{
+                                            width: 50,
+                                            height: 50,
+                                            borderRadius: 12,
+                                            overflow: 'hidden',
+                                            backgroundColor: '#FDBA74', // Saffron light
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            backgroundColor: (latestStatus.background_color && latestStatus.media_type === 'text') ? latestStatus.background_color : '#FDBA74'
+                                        }}>
+                                            {latestStatus.media_type === 'text' ? (
+                                                <Text style={{ color: 'white', fontWeight: '900', fontSize: 10 }}>{latestStatus.content?.substring(0, 3).toUpperCase()}</Text>
+                                            ) : (
+                                                <Image
+                                                    source={{ uri: latestStatus.media_url || item.img }}
+                                                    style={{ width: '100%', height: '100%' }}
+                                                />
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })
+                        ) : (
+                            <View style={{ alignItems: 'center', justifyContent: 'center', padding: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 32 }}>
+                                <Ionicons name="images-outline" size={64} color="#64748B" />
+                                <Text style={{ color: '#64748B', marginTop: 16, textAlign: 'center', fontWeight: '900', fontSize: 12, textTransform: 'uppercase' }}>No status updates yet.</Text>
                             </View>
-                            {!myStatuses?.length && (
-                                <View className="absolute bottom-0 right-0 bg-[#F68537] rounded-full p-0.5 border-2 border-white">
-                                    <Ionicons name="add" size={14} color="white" />
-                                </View>
-                            )}
-                        </View>
-                        <View className="ml-4">
-                            <Text className="text-base font-semibold">My status</Text>
-                            <Text className="text-gray-500 text-sm">{myStatuses?.length > 0 ? 'Tap to view' : 'Tap to add status update'}</Text>
-                        </View>
-                    </TouchableOpacity>
-
-                    {/* Friend Statuses */}
-                    <View className="bg-gray-50 px-4 py-2">
-                        <Text className="text-gray-400 font-bold text-xs uppercase">Recent updates</Text>
+                        )}
                     </View>
-
-                    {friendsWithStatus.length > 0 ? (
-                        friendsWithStatus.map((item) => (
-                            <TouchableOpacity
-                                key={item.id}
-                                onPress={() => handleViewUserStatus(item)}
-                                className="flex-row items-center px-4 py-4 border-b border-gray-50"
-                            >
-                                <View className={`w-14 h-14 rounded-full p-0.5 border-2 ${item.allStatusesViewed ? 'border-gray-200' : 'border-green-500'}`}>
-                                    <Image
-                                        source={{ uri: item.img || 'https://via.placeholder.com/150' }}
-                                        className="w-full h-full rounded-full"
-                                    />
-                                </View>
-                                <View className="ml-4">
-                                    <Text className="text-base font-semibold">{item.name}</Text>
-                                    <Text className="text-gray-500 text-sm">Tap to view</Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))
-                    ) : (
-                        <View className="items-center justify-center p-10 mt-10">
-                            <Ionicons name="images-outline" size={64} color="#CBD5E1" />
-                            <Text className="text-gray-400 mt-4 text-center">No status updates yet.</Text>
-                        </View>
-                    )}
                 </ScrollView>
             </SafeAreaView>
         </View>

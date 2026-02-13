@@ -14,6 +14,7 @@ import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
 import MediaViewer from '@/components/chat/MediaViewer';
 import CallScreen from '@/components/chat/CallScreen';
 import { useCallManager } from '@/hooks/useCallManager';
+import { usePresence } from '@/hooks/usePresence';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
@@ -46,6 +47,8 @@ export default function ChatScreen() {
     }, []);
 
     const chatRoom = useChatRoom(friendId as string, currentUser, isGroup === 'true');
+    const { isUserOnline } = usePresence(currentUser?.id);
+
     const {
         messages,
         loading,
@@ -55,7 +58,8 @@ export default function ChatScreen() {
         handleReact,
         handleSaveEdit,
         handleDeleteMessage,
-        handleForwardMessage
+        handleForwardMessage,
+        flyingEmoji
     } = chatRoom;
 
     // Call Management
@@ -171,45 +175,51 @@ export default function ChatScreen() {
 
     if (!currentUser || (loading && messages.length === 0)) {
         return (
-            <View className="flex-1 items-center justify-center bg-[#F8FAFC]">
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
                 <ActivityIndicator size="large" color="#F68537" />
             </View>
         );
     }
 
     return (
-        <View className="flex-1 bg-[#F8FAFC]">
+        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
             <Stack.Screen
                 options={{
                     headerStyle: { backgroundColor: '#F8FAFC' },
                     headerShadowVisible: false,
                     headerTitle: () => (
-                        <View className="flex-row items-center gap-2">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <Image
                                 source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
-                                className="w-10 h-10 rounded-full border border-gray-100"
+                                style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: '#F3F4F6' }}
                             />
                             <View>
-                                <Text className="font-bold text-gray-800 text-[16px]">{friendName}</Text>
-                                <Text className="text-[10px] text-green-500 font-medium">{isTyping ? 'typing...' : 'online'}</Text>
+                                <Text style={{ fontWeight: 'bold', color: '#1F2937', fontSize: 16 }}>{friendName}</Text>
+                                <Text style={{
+                                    fontSize: 10,
+                                    color: isTyping ? '#F68537' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
+                                    fontWeight: '500'
+                                }}>
+                                    {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : 'offline')}
+                                </Text>
                             </View>
                         </View>
                     ),
                     headerRight: () => (
-                        <View className="flex-row items-center gap-3 mr-2">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 8 }}>
                             <TouchableOpacity
                                 onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio')}
-                                className="p-2"
+                                style={{ padding: 8 }}
                             >
                                 <Ionicons name="call-outline" size={20} color="#F68537" />
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video')}
-                                className="p-2"
+                                style={{ padding: 8 }}
                             >
                                 <Ionicons name="videocam-outline" size={22} color="#F68537" />
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} className="p-2">
+                            <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 8 }}>
                                 <Ionicons name="ellipsis-vertical" size={20} color="#94A3B8" />
                             </TouchableOpacity>
                             <ChatMenu
@@ -239,10 +249,10 @@ export default function ChatScreen() {
             {Platform.OS === 'ios' ? (
                 <KeyboardAvoidingView
                     behavior="padding"
-                    className="flex-1 bg-[#EBD8B7]"
+                    style={{ flex: 1, backgroundColor: '#EBD8B7' }}
                     keyboardVerticalOffset={headerHeight}
                 >
-                    <View className="flex-1">
+                    <View style={{ flex: 1 }}>
                         <MessageList
                             messages={messages}
                             currentUser={currentUser}
@@ -250,6 +260,7 @@ export default function ChatScreen() {
                             friendName={friendName}
                             onLongPress={handleLongPress}
                             onImagePress={handleImagePress}
+                            flyingEmoji={flyingEmoji}
                         />
                     </View>
 
@@ -266,10 +277,10 @@ export default function ChatScreen() {
             ) : (
                 <KeyboardAvoidingView
                     behavior="padding"
-                    className="flex-1 bg-[#EBD8B7]"
+                    style={{ flex: 1, backgroundColor: '#EBD8B7' }}
                     keyboardVerticalOffset={70}
                 >
-                    <View className="flex-1">
+                    <View style={{ flex: 1 }}>
                         <MessageList
                             messages={messages}
                             currentUser={currentUser}
@@ -277,6 +288,7 @@ export default function ChatScreen() {
                             friendName={friendName}
                             onLongPress={handleLongPress}
                             onImagePress={handleImagePress}
+                            flyingEmoji={flyingEmoji}
                         />
                     </View>
 

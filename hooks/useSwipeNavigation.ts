@@ -10,15 +10,18 @@ export const useSwipeNavigation = () => {
     const pathname = usePathname();
 
     const getNextTab = (currentPath: string, direction: 'left' | 'right') => {
-        // Normalize path (remove leading/trailing slashes and (tabs) group)
-        const normalized = currentPath === '/' ? '/' : currentPath.replace('/(tabs)', '').replace(/\/$/, '');
+        // Normalize path (ensure leading slash, remove trailing slash, handle (tabs) group)
+        let normalized = currentPath.split('?')[0]; // Remove query params
+        normalized = normalized.replace('/(tabs)', '');
+        if (normalized === '/index' || normalized === '') normalized = '/';
+        if (normalized.length > 1 && normalized.endsWith('/')) normalized = normalized.slice(0, -1);
+
         const currentIndex = tabs.findIndex(t => {
-            const match = t === normalized || (t === '/' && (normalized === '' || normalized === '/' || normalized === '/index'));
-            console.log(`Checking match: [${t}] against [${normalized}] => ${match}`);
-            return match;
+            const tabPath = t === '/' ? '/' : t;
+            return tabPath === normalized;
         });
 
-        console.log('useSwipeNavigation: Current Path:', currentPath, 'Normalized:', normalized, 'Index:', currentIndex);
+        console.log('useSwipeNavigation: Path:', currentPath, 'Normalized:', normalized, 'Index:', currentIndex);
 
         if (currentIndex === -1) return null;
 
