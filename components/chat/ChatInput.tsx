@@ -19,6 +19,7 @@ import * as Location from 'expo-location';
 import * as Contacts from 'expo-contacts';
 import AttachmentMenu from './AttachmentMenu';
 import AudioRecorder from './AudioRecorder';
+import EmojiPickerModal from './EmojiPickerModal';
 
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
@@ -44,6 +45,7 @@ export default function ChatInput({
     const [message, setMessage] = useState('');
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isRecording, setIsRecording] = useState(false);
+    const [emojiModalVisible, setEmojiModalVisible] = useState(false);
     const inputRef = useRef<TextInput>(null);
     const typingTimeoutRef = useRef<any>(null);
 
@@ -123,6 +125,10 @@ export default function ChatInput({
         }
     };
 
+    const handleSelectEmoji = (emoji: string) => {
+        setMessage(prev => prev + emoji);
+    };
+
     const lastTypingSentRef = useRef(0);
 
     const handleChangeText = (text: string) => {
@@ -200,8 +206,8 @@ export default function ChatInput({
                     />
 
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 }}>
-                        <TouchableOpacity>
-                            <Ionicons name="happy-outline" size={24} color="#94A3B8" />
+                        <TouchableOpacity onPress={() => setEmojiModalVisible(true)}>
+                            <Ionicons name="happy-outline" size={24} color={emojiModalVisible ? "#F68537" : "#94A3B8"} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={handlePickImage}>
                             <Ionicons name="camera-outline" size={24} color="#94A3B8" />
@@ -233,6 +239,12 @@ export default function ChatInput({
                     />
                 </TouchableOpacity>
             </View>
+
+            <EmojiPickerModal
+                visible={emojiModalVisible}
+                onClose={() => setEmojiModalVisible(false)}
+                onSelect={handleSelectEmoji}
+            />
         </View>
     );
 }

@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { View, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
@@ -96,14 +97,16 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="chat/[id]" options={{ headerShown: true }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/[id]" options={{ headerShown: true }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

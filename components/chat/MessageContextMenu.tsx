@@ -46,16 +46,16 @@ export default function MessageContextMenu({
         }
     }, [visible]);
 
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+        opacity: opacity.value
+    }));
+
     if (!visible) return null;
 
     // Adjust Y if too low
     const menuHeight = 280;
     const adjustedY = anchorY + menuHeight > height ? anchorY - menuHeight : anchorY;
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }],
-        opacity: opacity.value
-    }));
 
     const ActionItem = ({ icon, label, onPress, color = "#475569", isLast = false, isDestructive = false }: any) => (
         <TouchableOpacity
