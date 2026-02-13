@@ -13,69 +13,61 @@ import { View, ActivityIndicator } from 'react-native';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
 
+import { Session, AuthChangeEvent } from '@supabase/supabase-js';
+
+// ... imports
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
-  const [isReady, setIsReady] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [initializing, setInitializing] = useState(true);
 
   // Initialize notifications & global listeners
-  usePushNotifications(userId);
-  useGlobalRealtime(userId);
+  usePushNotifications(session?.user?.id || null);
+  useGlobalRealtime(session?.user?.id || null);
 
   useEffect(() => {
-    const initialize = async () => {
-      console.log('RootLayout: Starting initialize...');
+    // 1. Setup Auth Listener & Initial Session
+    const setupAuth = async () => {
       try {
-        // 1. Initial Check
         const { data: { session } } = await supabase.auth.getSession();
-        console.log('RootLayout: Session found:', !!session);
-
-        if (session) {
-          setUserId(session.user.id);
-          if (segments[0] !== '(tabs)') {
-            router.replace('/(tabs)');
-          }
-        } else {
-          // Only redirect if NOT on an auth page
-          const currentSegments = segments as string[];
-          const inAuthGroup = currentSegments[0] === '(auth)' || currentSegments.includes('login') || currentSegments.includes('signup');
-          if (!inAuthGroup) {
-            console.log('RootLayout: No session, redirecting to login');
-            router.replace('/login');
-          }
-        }
-      } catch (err) {
-        console.error('RootLayout: Init error:', err);
+        setSession(session);
+      } catch (error) {
+        console.error('Error getting session:', error);
       } finally {
-        setIsReady(true);
-        console.log('RootLayout: isReady set to true');
+        setInitializing(false);
       }
     };
 
-    // 2. Auth State Listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('RootLayout: Auth event:', event);
+    setupAuth();
 
-      if (event === 'SIGNED_IN') {
-        // Only redirect if we are on an auth page
-        const currentSegments = segments as string[];
-        const inAuthGroup = currentSegments[0] === '(auth)' || currentSegments.includes('login') || currentSegments.includes('signup');
-        if (inAuthGroup) {
-          router.replace('/(tabs)');
-        }
-      } else if (event === 'SIGNED_OUT') {
-        router.replace('/login');
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      setSession(session);
     });
 
-    initialize();
-
     return () => subscription.unsubscribe();
-  }, [segments]); // Add segments back to dependency to check current route
+  }, []);
 
-  if (!isReady) {
+  useEffect(() => {
+    if (initializing) return;
+
+    const inAuthGroup = segments[0] === '(auth)' || segments.includes('login') || segments.includes('signup');
+
+    if (session && inAuthGroup) {
+      // If logged in and in auth group, go to tabs
+      router.replace('/(tabs)');
+    } else if (!session && !inAuthGroup) {
+      // If not logged in and not in auth group, go to login
+      router.replace('/login'); // Ensure this matches your login route name
+    } else if (session && segments.length === 0) {
+      // If at root and logged in, go to tabs
+      router.replace('/(tabs)');
+    }
+  }, [session, initializing, segments]);
+
+  if (initializing) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF5E6' }}>
         <ActivityIndicator size="large" color="#F68537" />
@@ -85,7 +77,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+      <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[id]" options={{ headerShown: true }} />
