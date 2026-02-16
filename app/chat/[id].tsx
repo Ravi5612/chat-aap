@@ -15,36 +15,16 @@ import MediaViewer from '@/components/chat/MediaViewer';
 import CallScreen from '@/components/chat/CallScreen';
 import { useCallManager } from '@/hooks/useCallManager';
 import { usePresence } from '@/hooks/usePresence';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useFriendsStore } from '@/store/useFriendsStore';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
     const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const router = useRouter();
-    const [currentUser, setCurrentUser] = useState<any>(null);
-
-    useEffect(() => {
-        const showSubscription = Keyboard.addListener('keyboardDidShow', (e: any) => {
-            console.log('Keyboard SHOWN. Height:', e.endCoordinates.height);
-        });
-        const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-            console.log('Keyboard HIDDEN');
-        });
-
-        const getUser = async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                setCurrentUser(user);
-            } catch (err) {
-                console.error('ChatScreen: Auth error:', err);
-            }
-        };
-        getUser();
-
-        return () => {
-            showSubscription.remove();
-            hideSubscription.remove();
-        };
-    }, []);
+    const { user: currentUser } = useAuthStore();
+    const { blockedUserIds, blockUser, unblockUser } = useFriendsStore();
+    const isBlocked = blockedUserIds.includes(friendId as string);
 
     const chatRoom = useChatRoom(friendId as string, currentUser, isGroup === 'true');
     const { isUserOnline } = usePresence(currentUser?.id);
@@ -88,6 +68,10 @@ export default function ChatScreen() {
     const [viewerImage, setViewerImage] = useState<string | null>(null);
 
     const onSendMessage = (text: string) => {
+        if (isBlocked) {
+            Alert.alert("Blocked", "You have blocked this user. Unblock them to send messages.");
+            return;
+        }
         handleSendMessage(text, replyingTo?.id);
         setReplyingTo(null);
     };
@@ -114,6 +98,34 @@ export default function ChatScreen() {
                 }
             ]
         );
+    };
+
+    const handleBlockToggle = async () => {
+        if (!currentUser) return;
+        if (isBlocked) {
+            await unblockUser(currentUser.id, friendId as string);
+            Alert.alert("Unblocked", `${friendName} has been unblocked.`);
+        } else {
+            Alert.alert(
+                "Block User",
+                `Are you sure you want to block ${friendName}? You will not receive messages from them.`,
+                [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                        text: "Block",
+                        style: "destructive",
+                        onPress: async () => {
+                            await blockUser(currentUser.id, friendId as string);
+                            Alert.alert("Blocked", `${friendName} has been blocked.`);
+                        }
+                    }
+                ]
+            );
+        }
+    };
+
+    const handleViewProfile = () => {
+        router.push(`/profile/${friendId}` as any);
     };
 
     const handleLongPress = (message: any, y: number) => {
@@ -167,12 +179,6 @@ export default function ChatScreen() {
     const headerHeight = useHeaderHeight();
     const keyboardOffset = Platform.OS === 'ios' ? headerHeight : headerHeight + (StatusBar.currentHeight || 0);
 
-    console.log('ChatScreen: Layout Metrics:', {
-        headerHeight,
-        statusBarHeight: StatusBar.currentHeight,
-        keyboardOffset
-    });
-
     if (!currentUser || (loading && messages.length === 0)) {
         return (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
@@ -183,26 +189,32 @@ export default function ChatScreen() {
 
     return (
         <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+            <StatusBar barStyle="dark-content" />
             <Stack.Screen
                 options={{
                     headerStyle: { backgroundColor: '#F8FAFC' },
                     headerShadowVisible: false,
                     headerTitle: () => (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Image
-                                source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
-                                style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: '#F3F4F6' }}
-                            />
-                            <View>
-                                <Text style={{ fontWeight: 'bold', color: '#1F2937', fontSize: 16 }}>{friendName}</Text>
-                                <Text style={{
-                                    fontSize: 10,
-                                    color: isTyping ? '#F68537' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
-                                    fontWeight: '500'
-                                }}>
-                                    {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : 'offline')}
-                                </Text>
-                            </View>
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                            <TouchableOpacity
+                                onPress={handleViewProfile}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                            >
+                                <Image
+                                    source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
+                                    style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#F1F5F9' }}
+                                />
+                                <View>
+                                    <Text style={{ fontWeight: 'bold', color: '#1F2937', fontSize: 16 }}>{friendName}</Text>
+                                    <Text style={{
+                                        fontSize: 10,
+                                        color: isTyping ? '#F68537' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
+                                        fontWeight: '600'
+                                    }}>
+                                        {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : 'offline')}
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
                         </View>
                     ),
                     headerRight: () => (
@@ -225,10 +237,32 @@ export default function ChatScreen() {
                             <ChatMenu
                                 visible={menuVisible}
                                 onClose={() => setMenuVisible(false)}
-                                onViewProfile={() => { }}
+                                onViewProfile={handleViewProfile}
                                 onClearChat={handleClearChat}
-                                onBlockUser={() => { }}
-                                isBlocked={false}
+                                onBlockUser={handleBlockToggle}
+                                isBlocked={isBlocked}
+                                isGroup={isGroup === 'true'}
+                                onLeaveGroup={async () => {
+                                    if (!currentUser) return;
+                                    Alert.alert(
+                                        "Leave Group",
+                                        "Are you sure you want to leave this group?",
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Leave",
+                                                style: "destructive",
+                                                onPress: async () => {
+                                                    const success = await useFriendsStore.getState().leaveGroup(currentUser.id, friendId as string);
+                                                    if (success) {
+                                                        setMenuVisible(false);
+                                                        router.back();
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    );
+                                }}
                             />
                         </View>
                     ),

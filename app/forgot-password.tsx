@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ChatLoader from '@/components/ui/ChatLoader';
 
 export default function ForgotPasswordPage() {
     const router = useRouter();
@@ -60,16 +61,14 @@ export default function ForgotPasswordPage() {
                     keyboardShouldPersistTaps="handled"
                 >
                     <View className="bg-white p-8 rounded-3xl shadow-xl w-full">
-                        <View className="items-center mb-8">
+                        <View style={{ alignItems: 'center', marginBottom: 32 }}>
                             <Image
-                                source={require('@/assets/images/icon.png')}
-                                className="w-32 h-32 mb-4"
+                                source={require('@/assets/images/logo.png')}
+                                style={{ width: 128, height: 128, marginBottom: 16 }}
                                 resizeMode="contain"
                             />
-                            <Text className="text-2xl font-bold text-[#F68537]">Forgot Password</Text>
-                            <Text className="text-gray-600 mt-2 text-center">
-                                Enter your email to receive a reset link
-                            </Text>
+                            <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#F68537' }}>Chat Warrior</Text>
+                            <Text style={{ color: '#6B7280', marginTop: 8 }}>Reset your password</Text>
                         </View>
 
                         <View className="space-y-4">
@@ -109,6 +108,7 @@ export default function ForgotPasswordPage() {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+            {loading && <ChatLoader />}
         </SafeAreaView>
     );
 }

@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ChatLoader from '@/components/ui/ChatLoader';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -79,8 +80,8 @@ export default function LoginPage() {
                         <View style={{ backgroundColor: 'white', padding: 32, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8, width: '100%' }}>
                             <View style={{ alignItems: 'center', marginBottom: 32 }}>
                                 <Image
-                                    source={require('@/assets/images/icon.png')}
-                                    style={{ width: 128, height: 128, marginBottom: 16 }}
+                                    source={require('@/assets/images/logo.png')}
+                                    style={{ width: 160, height: 160, marginBottom: 8 }}
                                     resizeMode="contain"
                                 />
                                 <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#F68537' }}>Chat Warrior</Text>
@@ -155,6 +156,7 @@ export default function LoginPage() {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+            {loading && <ChatLoader />}
         </SafeAreaView>
     );
 }

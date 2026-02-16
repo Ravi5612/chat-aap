@@ -1,6 +1,7 @@
 import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
+import { useAuthStore } from '@/store/useAuthStore';
 import FriendListItem from '@/components/chat/FriendListItem';
 import StatusBar from '@/components/chat/StatusBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,29 +18,12 @@ import { Alert } from 'react-native';
 export default function HomeScreen() {
   const router = useRouter();
   const swipeHandlers = useSwipeNavigation();
+  const { user: currentUser, profile } = useAuthStore();
   const { combinedItems, myStatuses, loading, error, loadFriends } = useFriends();
   const { getCounts } = useNotifications();
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('all');
-  const [profile, setProfile] = useState<any>(null);
   const [selectedFriendForMenu, setSelectedFriendForMenu] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentUser(user);
-        const { data } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        setProfile(data);
-      }
-    };
-    fetchProfile();
-  }, []);
 
   const handleLongPress = (friend: any) => {
     setSelectedFriendForMenu(friend);

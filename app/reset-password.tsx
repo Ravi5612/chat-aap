@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ChatLoader from '@/components/ui/ChatLoader';
 
 export default function ResetPasswordPage() {
     const router = useRouter();
@@ -70,8 +71,8 @@ export default function ResetPasswordPage() {
                     <View className="bg-white p-8 rounded-3xl shadow-xl w-full">
                         <View className="items-center mb-8">
                             <Image
-                                source={require('@/assets/images/icon.png')}
-                                className="w-24 h-24 mb-4"
+                                source={require('@/assets/images/logo.png')}
+                                style={{ width: 120, height: 120, marginBottom: 8 }}
                                 resizeMode="contain"
                             />
                             <Text className="text-2xl font-bold text-[#F68537]">Reset Password</Text>
@@ -143,6 +144,7 @@ export default function ResetPasswordPage() {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+            {loading && <ChatLoader />}
         </SafeAreaView>
     );
 }

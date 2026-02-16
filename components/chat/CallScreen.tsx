@@ -97,10 +97,10 @@ export default function CallScreen({
     if (!visible) return null;
 
     return (
-        <Modal visible={visible} animationType="slide" transparent={false}>
-            <View className="flex-1 bg-gray-900">
+        <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onEndCall}>
+            <View style={styles.container}>
                 {/* Main Video (Remote) */}
-                <View className="absolute inset-0 bg-black flex items-center justify-center">
+                <View style={styles.mainVideoContainer}>
                     {callType === 'video' && remoteStream && !isSwapped && RTCView !== View ? (
                         <RTCView
                             streamURL={(remoteStream as any).toURL()}
@@ -108,22 +108,22 @@ export default function CallScreen({
                             objectFit="cover"
                         />
                     ) : (
-                        <View className="items-center">
-                            <View className="w-32 h-32 rounded-full border-4 border-[#F68537] overflow-hidden mb-4 bg-gray-800 flex items-center justify-center">
+                        <View style={styles.placeholderContainer}>
+                            <View style={styles.avatarContainer}>
                                 {friend.avatar_url ? (
-                                    <Image source={{ uri: friend.avatar_url }} className="w-full h-full" />
+                                    <Image source={{ uri: friend.avatar_url }} style={styles.fullImage} />
                                 ) : (
                                     <Ionicons name="person" size={64} color="#94A3B8" />
                                 )}
                             </View>
-                            <Text className="text-2xl font-bold text-white mb-2">{friend.name || friend.username || 'Friend'}</Text>
-                            <Text className="text-[#F68537] animate-pulse font-medium">
+                            <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
+                            <Text style={styles.callStatus}>
                                 {callState === 'outgoing' ? 'Calling...' :
                                     callState === 'incoming' ? 'Incoming Call...' :
                                         callType === 'audio' ? 'On Call' : 'Connecting video...'}
                             </Text>
                             {RTCView === View && callType === 'video' && (
-                                <Text className="text-white/50 text-xs mt-2">(Video preview not available in Expo Go)</Text>
+                                <Text style={styles.debugText}>(Video preview not available in Expo Go)</Text>
                             )}
                         </View>
                     )}
@@ -134,7 +134,6 @@ export default function CallScreen({
                     <TouchableOpacity
                         onPress={() => setIsSwapped(!isSwapped)}
                         style={styles.pipContainer}
-                        className="bg-gray-800 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl"
                     >
                         <RTCView
                             streamURL={(localStream as any).toURL()}
@@ -143,7 +142,7 @@ export default function CallScreen({
                             mirror={true}
                         />
                         {isVideoOff && (
-                            <View className="absolute inset-0 flex items-center justify-center bg-gray-800/80">
+                            <View style={styles.videoOffOverlay}>
                                 <Ionicons name="videocam-off" size={24} color="white" />
                             </View>
                         )}
@@ -152,22 +151,22 @@ export default function CallScreen({
 
                 {/* Top Overlay (Timer) */}
                 {callState === 'active' && (
-                    <View className="absolute top-12 left-6 bg-black/40 px-4 py-2 rounded-full flex-row items-center gap-2 border border-white/10">
-                        <View className="w-2 h-2 bg-red-500 rounded-full" />
-                        <Text className="text-white text-sm font-medium">{formatDuration(callDuration)}</Text>
+                    <View style={styles.timerContainer}>
+                        <View style={styles.recordingDot} />
+                        <Text style={styles.timerText}>{formatDuration(callDuration)}</Text>
                     </View>
                 )}
 
                 {/* Connection Status */}
-                <View className="absolute top-12 right-6">
-                    <Text className="text-white/50 text-[10px]">{connectionStatus}</Text>
+                <View style={styles.statusIndicator}>
+                    <Text style={styles.statusText}>{connectionStatus}</Text>
                 </View>
 
                 {/* Controls */}
-                <View className="absolute bottom-16 left-0 right-0 flex-row items-center justify-center gap-8">
+                <View style={styles.controlsContainer}>
                     <TouchableOpacity
                         onPress={toggleMute}
-                        className={`p-4 rounded-full ${isMuted ? 'bg-red-500' : 'bg-white/10'}`}
+                        style={[styles.controlButton, isMuted && styles.dangerButton]}
                     >
                         <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
                     </TouchableOpacity>
@@ -175,7 +174,7 @@ export default function CallScreen({
                     {callState === 'incoming' && (
                         <TouchableOpacity
                             onPress={acceptCall}
-                            className="p-6 rounded-full bg-green-500 shadow-lg shadow-green-500/30"
+                            style={[styles.controlButton, styles.successButton, styles.largeButton]}
                         >
                             <Ionicons name="call" size={32} color="white" />
                         </TouchableOpacity>
@@ -183,15 +182,18 @@ export default function CallScreen({
 
                     <TouchableOpacity
                         onPress={endCall}
-                        className="p-6 rounded-full bg-red-500 shadow-lg shadow-red-500/30"
+                        style={[styles.controlButton, styles.dangerButton, styles.largeButton]}
                     >
                         <Ionicons name="close" size={32} color="white" />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         onPress={toggleVideo}
-                        style={{ display: callType === 'video' ? 'flex' : 'none' }}
-                        className={`p-4 rounded-full ${isVideoOff ? 'bg-red-500' : 'bg-white/10'}`}
+                        style={[
+                            styles.controlButton,
+                            isVideoOff && styles.dangerButton,
+                            { display: callType === 'video' ? 'flex' : 'none' }
+                        ]}
                     >
                         <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
                     </TouchableOpacity>
@@ -199,7 +201,7 @@ export default function CallScreen({
                     {callType === 'video' && (
                         <TouchableOpacity
                             onPress={switchCamera}
-                            className="p-4 rounded-full bg-white/10"
+                            style={styles.controlButton}
                         >
                             <Ionicons name="refresh" size={24} color="white" />
                         </TouchableOpacity>
@@ -211,6 +213,55 @@ export default function CallScreen({
 }
 
 const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#111827',
+    },
+    mainVideoContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'black',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    placeholderContainer: {
+        alignItems: 'center',
+    },
+    avatarContainer: {
+        width: 128,
+        height: 128,
+        borderRadius: 64,
+        borderWidth: 4,
+        borderColor: '#F68537',
+        overflow: 'hidden',
+        marginBottom: 16,
+        backgroundColor: '#1F2937',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    fullImage: {
+        width: '100%',
+        height: '100%',
+    },
+    friendName: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: 'white',
+        marginBottom: 8,
+    },
+    callStatus: {
+        color: '#F68537',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    debugText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+        marginTop: 8,
+    },
     fullVideo: {
         width,
         height,
@@ -221,10 +272,89 @@ const styles = StyleSheet.create({
         right: 20,
         width: 100,
         height: 150,
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.2)',
         zIndex: 50,
+        elevation: 10,
+        backgroundColor: '#1F2937',
     },
     pipVideo: {
         width: '100%',
         height: '100%',
-    }
+    },
+    videoOffOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(31, 41, 55, 0.8)',
+    },
+    timerContainer: {
+        position: 'absolute',
+        top: 60,
+        left: 24,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    recordingDot: {
+        width: 8,
+        height: 8,
+        backgroundColor: '#EF4444',
+        borderRadius: 4,
+        marginRight: 8,
+    },
+    timerText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    statusIndicator: {
+        position: 'absolute',
+        top: 60,
+        right: 24,
+    },
+    statusText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 10,
+    },
+    controlsContainer: {
+        position: 'absolute',
+        bottom: 60,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 20,
+    },
+    controlButton: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    largeButton: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+    },
+    dangerButton: {
+        backgroundColor: '#EF4444',
+    },
+    successButton: {
+        backgroundColor: '#10B981',
+    },
 });

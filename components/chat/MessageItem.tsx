@@ -72,22 +72,25 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
         }
     };
 
-    // Media detection logic
-    const isVoiceMessage = message.message?.startsWith('[Voice Message]');
-    const voiceUri = isVoiceMessage ? message.message.split(' ')[2] : null;
+    // Media detection logic - Prioritize structured columns
+    const isVoiceMessage = message.file_type?.startsWith('audio/') || message.message?.startsWith('[Voice Message]');
+    const voiceUri = message.file_url || (message.message?.startsWith('[Voice Message]') ? message.message.split(' ')[2] : null);
 
-    const hasImage = message.message?.includes('[Image]') || message.file_url;
-    let imageUrl = message.file_url;
+    const hasImage = message.file_type?.startsWith('image/') || message.message?.includes('[Image]') || message.file_url;
+    let imageUrl = (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
     let textContent = message.message;
 
-    if (textContent?.startsWith('[Image]')) {
+    if (!imageUrl && textContent?.startsWith('[Image]')) {
         const parts = textContent.split(' ');
         imageUrl = parts[1];
         textContent = parts.slice(2).join(' ');
     }
 
     if (isVoiceMessage) {
-        textContent = ''; // Don't show the [Voice Message] tag as text
+        // If it's a voice message and using the fallback text tag, clear the text
+        if (textContent?.startsWith('[Voice Message]')) {
+            textContent = '';
+        }
     }
 
     return (
@@ -217,7 +220,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     )}
 
                     <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                        {textContent && textContent.trim() !== '' && (
+                        {textContent && textContent.trim() !== '' && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && (
                             <Text style={{
                                 fontSize: 15,
                                 lineHeight: 22,

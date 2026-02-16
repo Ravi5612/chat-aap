@@ -16,14 +16,16 @@ import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
 
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 
+import { useAuthStore } from '@/store/useAuthStore';
+import { useFriendsStore } from '@/store/useFriendsStore';
+
 // ... imports
 
 export default function RootLayout() {
+  const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
-  const [session, setSession] = useState<Session | null>(null);
-  const [initializing, setInitializing] = useState(true);
 
   // Initialize notifications & global listeners
   usePushNotifications(session?.user?.id || null);
@@ -35,6 +37,10 @@ export default function RootLayout() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         setSession(session);
+        if (session) {
+          useAuthStore.getState().syncProfile();
+          useFriendsStore.getState().fetchBlockedUsers(session.user.id);
+        }
       } catch (error) {
         console.error('Error getting session:', error);
       } finally {
@@ -54,36 +60,19 @@ export default function RootLayout() {
   useEffect(() => {
     if (initializing) return;
 
-    const syncStatus = async () => {
-      if (session?.user?.id) {
-        try {
-          await supabase.from('profiles').update({ is_online: true }).eq('id', session.user.id);
-          console.log('RootLayout: Synced is_online status to true');
-        } catch (e) {
-          console.warn('RootLayout: Status sync failed:', e);
-        }
-      }
-    };
+    if (session?.user?.id) {
+      syncOnlineStatus(true);
+    }
 
     const inAuthGroup = segments[0] === '(auth)' || segments.includes('login') || segments.includes('signup');
 
-    console.log('RootLayout Nav State:', {
-      hasSession: !!session,
-      inAuthGroup,
-      segments: segments
-    });
-
     if (session) {
-      syncStatus();
       if (inAuthGroup) {
-        console.log('Redirecting to (tabs)');
         router.replace('/(tabs)');
       } else if (segments.length === 0) {
-        console.log('Redirecting to (tabs) from root');
         router.replace('/(tabs)');
       }
     } else if (!inAuthGroup) {
-      console.log('Redirecting to login');
       router.replace('/login');
     }
   }, [session, initializing, segments]);
