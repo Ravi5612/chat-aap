@@ -11,6 +11,8 @@ interface ChatState {
     flyingEmoji: any;
     chatKey: Uint8Array | null;
     activeChannel: any | null;
+    activeChatId: string | null;
+    cache: Record<string, { messages: any[], key: Uint8Array }>;
 
     // Actions
     initChat: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
@@ -36,31 +38,52 @@ export const useChatStore = create<ChatState>((set, get) => {
         flyingEmoji: null,
         chatKey: null,
         activeChannel: null,
+        activeChatId: null,
+        cache: {},
 
         setFlyingEmoji: (flyingEmoji) => set({ flyingEmoji }),
 
         initChat: async (friendId, currentUser, isGroup) => {
             if (!currentUser || !friendId) return;
+            const { cache } = get();
+
+            // Restore from cache instantly if exists
+            if (cache[friendId]) {
+                console.log(`ChatStore: Restoring ${friendId} from cache`);
+                set({
+                    messages: cache[friendId].messages,
+                    chatKey: cache[friendId].key,
+                    activeChatId: friendId
+                });
+            } else {
+                set({ messages: [], chatKey: null, activeChatId: friendId });
+            }
+
             try {
-                const key = await getChatKey(currentUser.id, friendId, isGroup);
-                set({ chatKey: key });
+                const key = cache[friendId]?.key || await getChatKey(currentUser.id, friendId, isGroup);
+                set((state) => ({
+                    chatKey: key,
+                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: state.cache[friendId]?.messages || [], key } }
+                }));
             } catch (err) {
                 console.error("ChatStore: Key error:", err);
             }
         },
 
         loadMessages: async (friendId, currentUser, isGroup) => {
-            const { chatKey } = get();
+            const { chatKey, cache } = get();
             if (!friendId || !currentUser || !chatKey) return;
 
-            set({ loading: true });
+            const isFirstLoad = !cache[friendId] || cache[friendId].messages.length === 0;
+            if (isFirstLoad) set({ loading: true });
+
             try {
                 let query = supabase
                     .from('messages')
                     .select(`
             *,
             sender:profiles!sender_id(id, username, avatar_url),
-            reply:messages!reply_to_id(id, message, sender_id, created_at),
+            reply:reply_to_id(id, message, sender_id, created_at),
             status_context:status_id(id, user_id, media_type, media_url, content)
           `);
 
@@ -88,7 +111,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                         }
 
                         let decryptedReply = null;
-                        if (msg.reply) {
+                        if (msg.reply && msg.reply.id) {
                             try {
                                 const replyText = await decryptText(msg.reply.message, chatKey);
                                 decryptedReply = { ...msg.reply, message: replyText };
@@ -102,7 +125,15 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
                 }));
 
-                set({ messages: decryptedMessages, loading: false });
+                const activeChatId = get().activeChatId;
+                if (activeChatId === friendId) {
+                    set({ messages: decryptedMessages, loading: false });
+                }
+
+                // Update cache
+                set((state) => ({
+                    cache: { ...state.cache, [friendId]: { messages: decryptedMessages, key: chatKey } }
+                }));
 
                 // Mark as read
                 const unreadIds = (data || [])
@@ -119,38 +150,38 @@ export const useChatStore = create<ChatState>((set, get) => {
         },
 
         sendMessage: async (text, friendId, currentUser, isGroup, replyToId) => {
-            const { chatKey, activeChannel, messages } = get();
+            const { chatKey, activeChannel, messages, cache } = get();
             if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !friendId || !currentUser || !chatKey) return;
 
             const tempId = `temp-${Date.now()}`;
             let messageToEncrypt = text;
             let fileData: any = null;
 
-            // Handle metadata for optimistic UI
-            const isVoice = text.startsWith('[Voice Message]');
-            const isImage = text.startsWith('[Image]');
-            const localUri = isVoice ? text.split(' ')[2] : (isImage ? text.split(' ')[1] : null);
-
             const tempMsg: any = {
                 id: tempId,
-                message: isVoice || isImage ? '' : text,
+                message: text.startsWith('[Voice Message]') || text.startsWith('[Image]') ? '' : text,
                 sender_id: currentUser.id,
                 receiver_id: isGroup ? null : friendId,
                 group_id: isGroup ? friendId : null,
                 status: 'sending',
                 reply_to_id: replyToId,
                 created_at: new Date().toISOString(),
-                file_url: localUri,
-                file_type: isVoice ? 'audio/m4a' : (isImage ? 'image/jpeg' : null)
+                file_url: text.startsWith('[Voice Message]') ? text.split(' ')[2] : (text.startsWith('[Image]') ? text.split(' ')[1] : null),
+                file_type: text.startsWith('[Voice Message]') ? 'audio/m4a' : (text.startsWith('[Image]') ? 'image/jpeg' : null)
             };
 
-            set({ messages: [...messages, tempMsg] });
+            const updatedMessages = [...messages, tempMsg];
+            set({ messages: updatedMessages });
+            set((state) => ({
+                cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
+            }));
 
             try {
-                if (isVoice || isImage) {
-                    const type = isVoice ? 'voice' : 'image';
+                if (text.startsWith('[Voice Message]') || text.startsWith('[Image]')) {
+                    const isVoice = text.startsWith('[Voice Message]');
+                    const localUri = isVoice ? text.split(' ')[2] : text.split(' ')[1];
                     if (localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
-                        fileData = await uploadChatMessageMedia(localUri, type, currentUser.id);
+                        fileData = await uploadChatMessageMedia(localUri, isVoice ? 'voice' : 'image', currentUser.id);
                         messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : 'an image')}`;
                     }
                 }
@@ -173,38 +204,47 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const { data, error } = await supabase.from('messages').insert([insertData]).select().single();
                 if (error) throw error;
 
-                set((state) => ({
-                    messages: state.messages.map(m => m.id === tempId ? { ...data, message: messageToEncrypt } : m)
-                }));
+                const finalMsg = { ...data, message: messageToEncrypt };
+                set((state) => {
+                    const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
+                    return {
+                        messages: newMessages,
+                        cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
+                    };
+                });
 
                 if (activeChannel) {
                     activeChannel.send({
                         type: 'broadcast',
                         event: 'new_message',
-                        payload: { ...data, message: messageToEncrypt }
+                        payload: finalMsg
                     });
                 }
             } catch (error: any) {
                 console.error("SendMessage Error:", error);
-                set((state) => ({ messages: state.messages.filter(m => m.id !== tempId) }));
+                set((state) => ({
+                    messages: state.messages.filter(m => m.id !== tempId),
+                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: state.messages.filter(m => m.id !== tempId), key: chatKey } }
+                }));
                 Alert.alert('Error', 'Failed to send message');
             }
         },
 
         reactToMessage: async (messageId, emoji, currentUser) => {
-            const { messages, activeChannel } = get();
-            if (!currentUser) return;
+            const { messages, activeChannel, activeChatId, cache, chatKey } = get();
+            if (!currentUser || !activeChatId) return;
             try {
-                const msg = messages.find(m => m.id === messageId);
-                if (!msg) return;
-
-                const reactions = { ...(msg.reactions || {}) };
+                const reactions = { ...(messages.find(m => m.id === messageId)?.reactions || {}) };
                 reactions[emoji] = (reactions[emoji] || 0) + 1;
 
                 const { error } = await supabase.from('messages').update({ reactions }).eq('id', messageId);
                 if (error) throw error;
 
-                set({ messages: messages.map(m => m.id === messageId ? { ...m, reactions } : m) });
+                const newMessages = messages.map(m => m.id === messageId ? { ...m, reactions } : m);
+                set({ messages: newMessages });
+                set((state) => ({
+                    cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
+                }));
 
                 if (activeChannel) {
                     activeChannel.send({
@@ -219,8 +259,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         },
 
         saveEdit: async (messageId, newText, currentUser) => {
-            const { chatKey, activeChannel, messages } = get();
-            if (!chatKey || !currentUser) return;
+            const { chatKey, activeChannel, messages, activeChatId } = get();
+            if (!chatKey || !currentUser || !activeChatId) return;
             try {
                 const encryptedText = await encryptText(newText, chatKey);
                 const { error } = await supabase.from('messages').update({
@@ -231,7 +271,11 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 if (error) throw error;
 
-                set({ messages: messages.map(m => m.id === messageId ? { ...m, message: newText, is_edited: true } : m) });
+                const newMessages = messages.map(m => m.id === messageId ? { ...m, message: newText, is_edited: true } : m);
+                set({ messages: newMessages });
+                set((state) => ({
+                    cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
+                }));
 
                 if (activeChannel) {
                     activeChannel.send({
@@ -246,12 +290,17 @@ export const useChatStore = create<ChatState>((set, get) => {
         },
 
         deleteMessage: async (messageId) => {
-            const { messages, activeChannel } = get();
+            const { messages, activeChannel, activeChatId, chatKey } = get();
+            if (!activeChatId) return;
             try {
                 const { error } = await supabase.from('messages').delete().eq('id', messageId);
                 if (error) throw error;
 
-                set({ messages: messages.filter(m => m.id !== messageId) });
+                const newMessages = messages.filter(m => m.id !== messageId);
+                set({ messages: newMessages });
+                set((state) => ({
+                    cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
+                }));
 
                 if (activeChannel) {
                     activeChannel.send({
@@ -321,7 +370,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         },
 
         cleanupChat: () => {
-            set({ messages: [], activeChannel: null, chatKey: null, isTyping: false });
+            // Only clear active state, keep messages/key in cache
+            set({ activeChannel: null, activeChatId: null, isTyping: false });
             if (typingTimeout) clearTimeout(typingTimeout);
         }
     };

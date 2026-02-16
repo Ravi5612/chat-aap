@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useChatStore } from '@/store/useChatStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -23,9 +23,32 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
         setFlyingEmoji
     } = useChatStore();
 
-    // Sync active channel setting
+    const [isMember, setIsMember] = useState(true);
+
+    // 1. Derive Chat Key First
     useEffect(() => {
         if (!friendId || !currentUser) return;
+        initChat(friendId, currentUser, isGroup);
+
+        // Membership check
+        const checkMembership = async () => {
+            if (!isGroup) {
+                setIsMember(true);
+                return;
+            }
+            const { data } = await supabase
+                .from('group_members')
+                .select('*')
+                .eq('group_id', friendId)
+                .eq('user_id', currentUser.id);
+            setIsMember(!!(data && data.length > 0));
+        };
+        checkMembership();
+    }, [friendId, currentUser?.id, isGroup]);
+
+    // 2. Setup Channel and Load Messages Once Key is Ready
+    useEffect(() => {
+        if (!friendId || !currentUser || !chatKey) return;
 
         const logPrefix = `[Chat:${friendId.substring(0, 4)}]`;
         const channelName = isGroup ? `group-${friendId}` : `chat-${[currentUser.id, friendId].sort().join('-')}`;
@@ -34,8 +57,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
 
         // Configure internal channel state in store
         useChatStore.setState({ activeChannel: channel });
-
-        initChat(friendId, currentUser, isGroup);
 
         channel
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
@@ -46,8 +67,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     (newMsg.sender_id === currentUser.id && newMsg.receiver_id === friendId);
 
                 if (isRelevant) {
-                    // Only need to reload if not already there or decrypt new one
-                    // For simplicity, calling loadMessages again or handling insert
                     loadMessages(friendId, currentUser, isGroup);
                 }
             })
@@ -107,7 +126,7 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             supabase.removeChannel(channel);
             cleanupChat();
         };
-    }, [friendId, currentUser?.id, isGroup]);
+    }, [friendId, currentUser?.id, isGroup, chatKey]);
 
     const handleSendMessage = useCallback((text: string, replyToId?: string) => {
         if (currentUser) sendMessage(text, friendId, currentUser, isGroup, replyToId);
@@ -137,6 +156,7 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
         messages,
         loading,
         isTyping,
+        isMember,
         handleSendMessage,
         handleReact,
         flyingEmoji,

@@ -26,6 +26,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
+  const [isMounted, setIsMounted] = useState(false);
 
   // Initialize notifications & global listeners
   usePushNotifications(session?.user?.id || null);
@@ -58,24 +59,23 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (initializing) return;
+    if (initializing || !isMounted) return;
 
     if (session?.user?.id) {
       syncOnlineStatus(true);
     }
 
-    const inAuthGroup = segments[0] === '(auth)' || segments.includes('login') || segments.includes('signup');
+    const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup');
+    const isRoot = (segments as string[]).length === 0;
 
     if (session) {
-      if (inAuthGroup) {
-        router.replace('/(tabs)');
-      } else if (segments.length === 0) {
+      if (inAuthGroup || isRoot) {
         router.replace('/(tabs)');
       }
     } else if (!inAuthGroup) {
       router.replace('/login');
     }
-  }, [session, initializing, segments]);
+  }, [session, initializing, segments, isMounted]);
 
   if (initializing) {
     return (
@@ -86,7 +86,7 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }} onLayout={() => setIsMounted(true)}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" options={{ headerShown: false }} />

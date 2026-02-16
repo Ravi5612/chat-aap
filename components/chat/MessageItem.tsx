@@ -1,9 +1,12 @@
 import React, { memo, useRef } from 'react';
-import { View, Text, TouchableOpacity, Image, Animated, PanResponder } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, PanResponder, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import MessageStatus from './MessageStatus';
 import { Ionicons } from '@expo/vector-icons';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
 import FlyingReaction from './FlyingReaction';
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface MessageItemProps {
     message: any;
@@ -22,21 +25,21 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     const panResponder = useRef(
         PanResponder.create({
             onMoveShouldSetPanResponder: (_, gestureState) => {
-                // Only handle horizontal swipes
                 return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && gestureState.dx > 10;
             },
+            onPanResponderGrant: () => {
+                // Potential haptic on start of swipe
+            },
             onPanResponderMove: (_, gestureState) => {
-                // Only allow swiping right
                 if (gestureState.dx > 0) {
-                    swipeX.setValue(Math.min(gestureState.dx, 100)); // Cap at 100
+                    swipeX.setValue(Math.min(gestureState.dx, 100));
                 }
             },
             onPanResponderRelease: (_, gestureState) => {
                 if (gestureState.dx > 60) {
-                    // Trigger reply
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     if (onReply) onReply(message);
                 }
-                // Animate back
                 Animated.spring(swipeX, {
                     toValue: 0,
                     useNativeDriver: true,
@@ -56,9 +59,9 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     if (isSystemMsg) {
         return (
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 16 }}>
-                <View style={{ backgroundColor: 'rgba(243, 244, 246, 0.8)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 9999, borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.6)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 9999, borderWidth: 1, borderColor: '#FDE1D3', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F68537' }} />
-                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 1.5, textAlign: 'center' }}>
+                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#B45309', textTransform: 'uppercase', letterSpacing: 1.5, textAlign: 'center' }}>
                         {message.message.replace('SYSTEM_MSG:', '').trim()}
                     </Text>
                 </View>
@@ -67,6 +70,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     }
 
     const handleLongPress = (event: any) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         if (onLongPress) {
             onLongPress(message, event.nativeEvent.pageY);
         }
@@ -87,7 +91,6 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     }
 
     if (isVoiceMessage) {
-        // If it's a voice message and using the fallback text tag, clear the text
         if (textContent?.startsWith('[Voice Message]')) {
             textContent = '';
         }
@@ -95,7 +98,6 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
     return (
         <View style={{ position: 'relative', width: '100%', overflow: 'visible' }}>
-            {/* Swipped Reply Icon Layer */}
             <Animated.View
                 style={{
                     position: 'absolute',
@@ -124,20 +126,28 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     activeOpacity={0.9}
                     style={{
                         maxWidth: '85%',
-                        borderRadius: 16,
+                        borderRadius: 20,
                         shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.05,
-                        shadowRadius: 2,
-                        elevation: 2,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 8,
+                        elevation: 5,
                         overflow: 'hidden',
-                        backgroundColor: isCurrentUser ? '#F68537' : 'white',
-                        borderTopRightRadius: isCurrentUser ? 0 : 16,
-                        borderTopLeftRadius: isCurrentUser ? 16 : 0,
-                        borderWidth: isCurrentUser ? 0 : 1,
-                        borderColor: isCurrentUser ? 'transparent' : '#F3F4F6'
+                        backgroundColor: isCurrentUser ? 'transparent' : 'white',
+                        borderTopRightRadius: isCurrentUser ? 4 : 20,
+                        borderTopLeftRadius: isCurrentUser ? 20 : 4,
+                        borderWidth: isCurrentUser ? 0 : 1.5,
+                        borderColor: isCurrentUser ? 'transparent' : '#F9F1E7'
                     }}
                 >
+                    {isCurrentUser ? (
+                        <LinearGradient
+                            colors={['#F68537', '#E67527']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                        />
+                    ) : null}
                     {/* Group Sender Name */}
                     {!isCurrentUser && message.group_id && (
                         <Text style={{ paddingHorizontal: 12, paddingTop: 8, fontSize: 11, fontWeight: 'bold', color: '#F68537' }}>
@@ -172,15 +182,20 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                                 <Image
                                     source={{ uri: message.status_context.media_url }}
                                     style={{ width: 40, height: 40, borderRadius: 4, backgroundColor: '#E5E7EB' }}
+                                    contentFit="cover"
+                                    transition={200}
                                 />
                             )}
                         </TouchableOpacity>
                     )}
 
                     {/* Reply Context */}
-                    {message.reply && !message.status_context && (
+                    {message.reply && message.reply.id && !message.status_context && (
                         <TouchableOpacity
-                            onPress={() => onReplyClick?.(message.reply)}
+                            onPress={() => {
+                                Haptics.selectionAsync();
+                                onReplyClick?.(message.reply);
+                            }}
                             style={{
                                 margin: 6,
                                 padding: 8,
@@ -209,8 +224,16 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
                     {/* Image Content */}
                     {imageUrl && (
-                        <TouchableOpacity onPress={() => onImagePress?.(imageUrl)}>
-                            <Image source={{ uri: imageUrl }} style={{ width: 256, height: 256, backgroundColor: '#F3F4F6' }} resizeMode="cover" />
+                        <TouchableOpacity onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            onImagePress?.(imageUrl);
+                        }}>
+                            <Image
+                                source={{ uri: imageUrl }}
+                                style={{ width: 256, height: 256, backgroundColor: '#F3F4F6' }}
+                                contentFit="cover"
+                                transition={400}
+                            />
                         </TouchableOpacity>
                     )}
 

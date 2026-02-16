@@ -27,6 +27,7 @@ if (typeof TextDecoder === 'undefined') {
 }
 
 const SALT = "supabase-secure-chat-v1";
+const encoder = new TextEncoder();
 
 /**
  * 🔑 Generate deterministic crypto key for a chat
@@ -38,13 +39,13 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
 
     const baseKey = isGroup ? `group_v6:${friendId}` : [userId, friendId].sort().join(":");
 
-    // Noble hashes pbkdf2 is synchronous but fast
-    const key = pbkdf2(sha256, baseKey, SALT, {
+    // Noble hashes pbkdf2 - ensure we use bytes for password and salt for parity with Web Crypto
+    const key = pbkdf2(sha256, encoder.encode(baseKey), encoder.encode(SALT), {
         c: 1000,
         dkLen: 32 // 256 bits
     });
 
-    console.log(`Crypto: Key generated for ${userId}-${friendId}. Length: ${key.length}`);
+    console.log(`Crypto: Key generated. BaseKey: ${baseKey.substring(0, 10)}... Size: ${key.length}`);
 
     return new Uint8Array(key);
 }
@@ -59,7 +60,7 @@ export async function encryptText(plainText: string, cryptoKey: Uint8Array): Pro
         const iv = Crypto.getRandomValues(new Uint8Array(12));
         const aes = gcm(new Uint8Array(cryptoKey), new Uint8Array(iv));
 
-        const plainTextBytes = new TextEncoder().encode(plainText);
+        const plainTextBytes = encoder.encode(plainText);
         const encrypted = aes.encrypt(new Uint8Array(plainTextBytes));
 
         return JSON.stringify({
@@ -83,6 +84,7 @@ export async function decryptText(encryptedData: any, cryptoKey: Uint8Array): Pr
 
         // Parse if it's a JSON string
         if (typeof encryptedData === 'string') {
+            if (!encryptedData.startsWith('{')) return encryptedData;
             try {
                 dataToDecrypt = JSON.parse(encryptedData);
             } catch {
@@ -95,25 +97,25 @@ export async function decryptText(encryptedData: any, cryptoKey: Uint8Array): Pr
             return typeof encryptedData === 'string' ? encryptedData : "";
         }
 
-        // Convert to Uint8Array safely
-        const iv = new Uint8Array(Object.values(dataToDecrypt.iv));
-        const content = new Uint8Array(Object.values(dataToDecrypt.content));
+        // Convert to Uint8Array safely - handles both array and object representations
+        const iv = new Uint8Array(Array.from(Object.values(dataToDecrypt.iv) as number[]));
+        const content = new Uint8Array(Array.from(Object.values(dataToDecrypt.content) as number[]));
 
-        // Attempt initialization
-        let aes;
-        try {
-            aes = gcm(new Uint8Array(cryptoKey), iv);
-        } catch (e: any) {
-            console.error("Crypto Init Failed (aes/gcm):", e.message);
-            return "🚫 [Key Error: " + e.message + "]";
+        if (iv.length !== 12) {
+            console.warn("Crypto: Invalid IV length:", iv.length);
+            return typeof encryptedData === 'string' ? encryptedData : "";
         }
 
+        // Attempt initialization
+        const aes = gcm(new Uint8Array(cryptoKey), iv);
         const decrypted = aes.decrypt(content);
+
         return new TextDecoder().decode(decrypted);
     } catch (error: any) {
-        console.error("Decryption error:", error.message);
+        // Log the error but don't crash
+        console.warn("Decryption failed:", error.message);
 
-        if (error.message?.toLowerCase().includes('mac')) {
+        if (error.message?.toLowerCase().includes('tag') || error.message?.toLowerCase().includes('mac')) {
             return "🚫 [Secure Message - Key Mismatch]";
         }
 

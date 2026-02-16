@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Image, Animated, StyleSheet, Dimensions } from 'react-native';
 
 interface ChatLoaderProps {
@@ -10,7 +10,7 @@ const { width } = Dimensions.get('window');
 
 export default function ChatLoader({ variant = 'overlay', size = 'large' }: ChatLoaderProps) {
     const isOverlay = variant === 'overlay';
-    const pulseAnim = new Animated.Value(0.7);
+    const pulseAnim = useRef(new Animated.Value(0.7)).current;
 
     useEffect(() => {
         Animated.loop(

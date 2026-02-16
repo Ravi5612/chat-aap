@@ -9,6 +9,7 @@ interface ChatMenuProps {
     onClearChat: () => void;
     onBlockUser: () => void;
     isBlocked: boolean;
+    isMember: boolean;
     isGroup: boolean;
     onLeaveGroup: () => void;
 }

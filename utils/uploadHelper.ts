@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Buffer } from 'buffer';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export const uploadChatMessageMedia = async (uri: string, type: 'image' | 'voice', userId: string) => {
     try {

@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { FlatList, View, Platform } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { FlatList, View, Platform, LayoutAnimation, UIManager } from 'react-native';
 import MessageItem from './MessageItem';
 import ReactionPicker from './ReactionPicker';
 
@@ -13,8 +13,16 @@ interface MessageListProps {
     flyingEmoji?: any;
 }
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 export default function MessageList({ messages, currentUser, onReply, onLongPress, onImagePress, friendName, flyingEmoji }: MessageListProps) {
     const flatListRef = useRef<FlatList>(null);
+
+    useEffect(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }, [messages.length]);
 
     const handleScrollToMessage = (replyMsg: any) => {
         if (!replyMsg?.id) return;

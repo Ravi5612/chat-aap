@@ -1,9 +1,8 @@
-import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image } from 'react-native';
+import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
 import FriendListItem from '@/components/chat/FriendListItem';
-import StatusBar from '@/components/chat/StatusBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -14,6 +13,9 @@ import FilterTabs from '@/components/chat/FilterTabs';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import FriendContextMenu from '@/components/chat/FriendContextMenu';
 import { Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { GlassHeader } from '@/components/ui/GlassHeader';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -22,15 +24,23 @@ export default function HomeScreen() {
   const { combinedItems, myStatuses, loading, error, loadFriends } = useFriends();
   const { getCounts } = useNotifications();
   const [activeTab, setActiveTab] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedFriendForMenu, setSelectedFriendForMenu] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
 
+  const onTabChange = (tab: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveTab(tab);
+  };
+
   const handleLongPress = (friend: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedFriendForMenu(friend);
     setMenuVisible(true);
   };
 
   const handleMenuAction = async (action: string, friend: any) => {
+    Haptics.selectionAsync();
     switch (action) {
       case 'profile':
         router.push(`/profile/${friend.id}` as any);
@@ -79,20 +89,27 @@ export default function HomeScreen() {
       console.warn('HomeScreen: Cannot chat, friend.id is missing!', friend);
       return;
     }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const nameParam = encodeURIComponent(friend.name || 'Chat');
     const groupParam = friend.isGroup ? 'true' : 'false';
     const imageParam = encodeURIComponent(friend.img || '');
     const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
-    console.log('HomeScreen: Navigating to:', url);
     router.push(url as any);
   };
 
   const filteredItems = combinedItems.filter(item => {
-    if (activeTab === 'all') return !item.isArchived;
-    if (activeTab === 'groups') return item.isGroup && !item.isArchived;
-    if (activeTab === 'favourites') return item.isFavorite && !item.isArchived;
-    if (activeTab === 'archive') return item.isArchived;
-    return true;
+    // Tab filtering
+    let tabMatch = true;
+    if (activeTab === 'all') tabMatch = !item.isArchived;
+    else if (activeTab === 'groups') tabMatch = item.isGroup && !item.isArchived;
+    else if (activeTab === 'favourites') tabMatch = item.isFavorite && !item.isArchived;
+    else if (activeTab === 'archive') tabMatch = item.isArchived;
+
+    // Search query filtering
+    const searchMatch = !searchQuery ||
+      (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    return tabMatch && searchMatch;
   });
 
   const tabCounts = {
@@ -104,46 +121,65 @@ export default function HomeScreen() {
 
   if (loading && combinedItems.length === 0) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EBD8B7', paddingHorizontal: 24 }}>
-        <ActivityIndicator size="large" color="#F68537" />
-        <Text style={{ marginTop: 16, color: '#F68537', fontWeight: 'bold', fontSize: 18 }}>Connecting to ChatWarriors...</Text>
-        {error && <Text style={{ marginTop: 8, color: '#EF4444', textAlign: 'center', fontWeight: '500', backgroundColor: '#FEF2F2', padding: 8, borderRadius: 8 }}>Error: {error}</Text>}
-        <TouchableOpacity onPress={loadFriends} style={{ marginTop: 32, backgroundColor: '#F68537', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 }}>
-          <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Refreshing</Text>
-        </TouchableOpacity>
+      <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
+        <GlassHeader>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Skeleton width={48} height={48} borderRadius={24} />
+            <Skeleton width={100} height={20} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Skeleton width={120} height={36} borderRadius={18} />
+            <Skeleton width={32} height={32} borderRadius={16} />
+          </View>
+        </GlassHeader>
+        <View style={{ padding: 16 }}>
+          {[1, 2, 3, 4, 5, 6, 7].map(i => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <Skeleton width={56} height={56} borderRadius={28} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width="60%" height={18} />
+                <Skeleton width="40%" height={14} />
+              </View>
+              <Skeleton width={40} height={12} />
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
 
   return (
     <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
-        <View style={{ backgroundColor: '#F68537', paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
+        <GlassHeader>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)}>
               <Image
                 source={{ uri: profile?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || 'User')}&backgroundColor=F68537` }}
-                style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.3)' }}
+                style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: '#F68537' }}
               />
             </TouchableOpacity>
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18, textTransform: 'lowercase' }}>{profile?.username || 'user'}</Text>
+            <Text style={{ color: '#F68537', fontWeight: 'bold', fontSize: 18, textTransform: 'lowercase' }}>{profile?.username || 'user'}</Text>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <TouchableOpacity
-              onPress={() => router.push('/search' as any)}
-              style={{ backgroundColor: '#E67527', borderRadius: 9999, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/search' as any);
+              }}
+              style={{ backgroundColor: '#F68537', borderRadius: 9999, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }}
             >
               <Text style={{ color: 'white', fontWeight: '900', fontSize: 10, letterSpacing: -0.5 }}>SEARCH FRIEND</Text>
-              <View style={{ backgroundColor: 'white', padding: 6, borderRadius: 9999, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 }}>
+              <View style={{ backgroundColor: 'white', padding: 6, borderRadius: 9999 }}>
                 <Ionicons name="search" size={16} color="#F68537" />
               </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { }}>
-              <Ionicons name="menu-outline" size={32} color="white" />
+            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); }}>
+              <Ionicons name="menu-outline" size={32} color="#F68537" />
             </TouchableOpacity>
           </View>
-        </View>
+        </GlassHeader>
 
         <FlatList
           data={filteredItems}
@@ -152,8 +188,9 @@ export default function HomeScreen() {
           ListHeaderComponent={
             <FilterTabs
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={onTabChange}
               counts={tabCounts}
+              onSearchChange={setSearchQuery}
             />
           }
           renderItem={({ item }) => (
@@ -185,7 +222,7 @@ export default function HomeScreen() {
           onClose={() => setMenuVisible(false)}
           onAction={handleMenuAction}
         />
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

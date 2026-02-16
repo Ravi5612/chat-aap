@@ -21,6 +21,8 @@ import AttachmentMenu from './AttachmentMenu';
 import AudioRecorder from './AudioRecorder';
 import EmojiPickerModal from './EmojiPickerModal';
 
+import * as Haptics from 'expo-haptics';
+
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
     onTyping?: (isTyping: boolean) => void;
@@ -30,6 +32,7 @@ interface ChatInputProps {
     editingMessage?: any;
     onCancelEdit?: () => void;
     onSaveEdit?: (text: string) => void;
+    isMember?: boolean;
 }
 
 export default function ChatInput({
@@ -40,7 +43,8 @@ export default function ChatInput({
     onCancelReply,
     editingMessage,
     onCancelEdit,
-    onSaveEdit
+    onSaveEdit,
+    isMember = true
 }: ChatInputProps) {
     const [message, setMessage] = useState('');
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -60,9 +64,12 @@ export default function ChatInput({
 
     const handleSubmit = () => {
         if (!message.trim() && !selectedImage) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setIsRecording(true);
             return;
         }
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         if (editingMessage && onSaveEdit) {
             onSaveEdit(message.trim());
@@ -150,101 +157,136 @@ export default function ChatInput({
 
     return (
         <View style={{ backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingBottom: 8, position: 'relative' }}>
-            {isRecording && (
-                <AudioRecorder
-                    onRecordingComplete={handleRecordingComplete}
-                    onCancel={() => setIsRecording(false)}
-                />
+            {!isMember && (
+                <View style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: 'rgba(249, 250, 251, 0.8)',
+                    zIndex: 100,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 20
+                }}>
+                    <View style={{
+                        backgroundColor: 'white',
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        borderRadius: 20,
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                        elevation: 2,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4
+                    }}>
+                        <Text style={{ fontSize: 18 }}>🚫</Text>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#6B7280' }}>
+                            You are no longer a member of this group
+                        </Text>
+                    </View>
+                </View>
             )}
+            <View style={{ opacity: isMember ? 1 : 0.5, pointerEvents: isMember ? 'auto' : 'none' }}>
+                {isRecording && (
+                    <AudioRecorder
+                        onRecordingComplete={handleRecordingComplete}
+                        onCancel={() => setIsRecording(false)}
+                    />
+                )}
 
-            <ReplyPreview replyingTo={replyingTo} onCancel={onCancelReply || (() => { })} />
+                <ReplyPreview replyingTo={replyingTo} onCancel={onCancelReply || (() => { })} />
 
-            {editingMessage && (
-                <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFF7ED', borderBottomWidth: 1, borderBottomColor: 'rgba(246, 133, 55, 0.3)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                        <View style={{ width: 4, height: 40, backgroundColor: '#F68537', borderRadius: 9999, marginRight: 12 }} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, color: '#F68537', fontWeight: 'bold', marginBottom: 2 }}>Editing message...</Text>
-                            <Text style={{ fontSize: 12, color: '#4B5563' }} numberOfLines={1}>{editingMessage.message}</Text>
+                {editingMessage && (
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFF7ED', borderBottomWidth: 1, borderBottomColor: 'rgba(246, 133, 55, 0.3)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                            <View style={{ width: 4, height: 40, backgroundColor: '#F68537', borderRadius: 9999, marginRight: 12 }} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 12, color: '#F68537', fontWeight: 'bold', marginBottom: 2 }}>Editing message...</Text>
+                                <Text style={{ fontSize: 12, color: '#4B5563' }} numberOfLines={1}>{editingMessage.message}</Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity onPress={onCancelEdit} style={{ padding: 4 }}>
+                            <Ionicons name="close-circle" size={20} color="#94A3B8" />
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {selectedImage && !isRecording && (
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center' }}>
+                        <Image source={{ uri: selectedImage }} style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16 }} />
+                        <TouchableOpacity onPress={() => setSelectedImage(null)} style={{ position: 'absolute', top: 4, left: 64, backgroundColor: '#EF4444', borderRadius: 9999 }}>
+                            <Ionicons name="close" size={16} color="white" />
+                        </TouchableOpacity>
+                        <Text style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>Image selected</Text>
+                    </View>
+                )}
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 16, paddingVertical: 8, opacity: isRecording ? 0 : 1 }}>
+                    <View style={{ flex: 1, backgroundColor: 'white', borderWidth: 1, borderColor: '#F6853740', borderRadius: 30, paddingHorizontal: 4, paddingVertical: 4, minHeight: 48, flexDirection: 'row', alignItems: 'center' }}>
+                        <AttachmentMenu
+                            onImage={handlePickImage}
+                            onLocation={handleLocation}
+                            onContact={handleContact}
+                            onDocument={() => Alert.alert("Coming soon")}
+                        />
+
+                        <TextInput
+                            ref={inputRef}
+                            style={{ flex: 1, fontSize: 16, paddingVertical: 8, paddingHorizontal: 8, color: '#1F2937' }}
+                            placeholder={editingMessage ? "Edit message..." : "Message"}
+                            placeholderTextColor="#94A3B8"
+                            value={message}
+                            onChangeText={handleChangeText}
+                            multiline
+                            maxLength={1000}
+                            editable={!disabled}
+                        />
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 }}>
+                            <TouchableOpacity onPress={() => setEmojiModalVisible(true)}>
+                                <Ionicons name="happy-outline" size={24} color={emojiModalVisible ? "#F68537" : "#94A3B8"} />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handlePickImage}>
+                                <Ionicons name="camera-outline" size={24} color="#94A3B8" />
+                            </TouchableOpacity>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={onCancelEdit} style={{ padding: 4 }}>
-                        <Ionicons name="close-circle" size={20} color="#94A3B8" />
+
+                    <TouchableOpacity
+                        onPress={handleSubmit}
+                        disabled={disabled}
+                        style={{
+                            height: 48,
+                            width: 48,
+                            borderRadius: 24,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: '#F68537',
+                            shadowColor: '#F68537',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 4,
+                            elevation: 4
+                        }}
+                    >
+                        <Ionicons
+                            name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic-outline")}
+                            size={24}
+                            color="white"
+                        />
                     </TouchableOpacity>
                 </View>
-            )}
 
-            {selectedImage && !isRecording && (
-                <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center' }}>
-                    <Image source={{ uri: selectedImage }} style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16 }} />
-                    <TouchableOpacity onPress={() => setSelectedImage(null)} style={{ position: 'absolute', top: 4, left: 64, backgroundColor: '#EF4444', borderRadius: 9999 }}>
-                        <Ionicons name="close" size={16} color="white" />
-                    </TouchableOpacity>
-                    <Text style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>Image selected</Text>
-                </View>
-            )}
-
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 16, paddingVertical: 8, opacity: isRecording ? 0 : 1 }}>
-                <View style={{ flex: 1, backgroundColor: 'white', borderWidth: 1, borderColor: '#F6853740', borderRadius: 30, paddingHorizontal: 4, paddingVertical: 4, minHeight: 48, flexDirection: 'row', alignItems: 'center' }}>
-                    <AttachmentMenu
-                        onImage={handlePickImage}
-                        onLocation={handleLocation}
-                        onContact={handleContact}
-                        onDocument={() => Alert.alert("Coming soon")}
-                    />
-
-                    <TextInput
-                        ref={inputRef}
-                        style={{ flex: 1, fontSize: 16, paddingVertical: 8, paddingHorizontal: 8, color: '#1F2937' }}
-                        placeholder={editingMessage ? "Edit message..." : "Message"}
-                        placeholderTextColor="#94A3B8"
-                        value={message}
-                        onChangeText={handleChangeText}
-                        multiline
-                        maxLength={1000}
-                        editable={!disabled}
-                    />
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 }}>
-                        <TouchableOpacity onPress={() => setEmojiModalVisible(true)}>
-                            <Ionicons name="happy-outline" size={24} color={emojiModalVisible ? "#F68537" : "#94A3B8"} />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={handlePickImage}>
-                            <Ionicons name="camera-outline" size={24} color="#94A3B8" />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                <TouchableOpacity
-                    onPress={handleSubmit}
-                    disabled={disabled}
-                    style={{
-                        height: 48,
-                        width: 48,
-                        borderRadius: 24,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: '#F68537',
-                        shadowColor: '#F68537',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 4,
-                        elevation: 4
-                    }}
-                >
-                    <Ionicons
-                        name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic-outline")}
-                        size={24}
-                        color="white"
-                    />
-                </TouchableOpacity>
+                <EmojiPickerModal
+                    visible={emojiModalVisible}
+                    onClose={() => setEmojiModalVisible(false)}
+                    onSelect={handleSelectEmoji}
+                />
             </View>
-
-            <EmojiPickerModal
-                visible={emojiModalVisible}
-                onClose={() => setEmojiModalVisible(false)}
-                onSelect={handleSelectEmoji}
-            />
         </View>
     );
 }

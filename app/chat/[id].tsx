@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Image, Keyboard, StatusBar } from 'react-native';
+import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import MessageList from '@/components/chat/MessageList';
 import ChatInput from '@/components/chat/ChatInput';
 import { supabase } from '@/lib/supabase';
@@ -17,6 +19,7 @@ import { useCallManager } from '@/hooks/useCallManager';
 import { usePresence } from '@/hooks/usePresence';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import * as Haptics from 'expo-haptics';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
@@ -39,7 +42,8 @@ export default function ChatScreen() {
         handleSaveEdit,
         handleDeleteMessage,
         handleForwardMessage,
-        flyingEmoji
+        flyingEmoji,
+        isMember
     } = chatRoom;
 
     // Call Management
@@ -188,28 +192,38 @@ export default function ChatScreen() {
     }
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+        <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
             <StatusBar barStyle="dark-content" />
             <Stack.Screen
                 options={{
-                    headerStyle: { backgroundColor: '#F8FAFC' },
-                    headerShadowVisible: false,
-                    headerTitle: () => (
-                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    headerTitle: '',
+                    headerStyle: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    },
+                    headerShadowVisible: true,
+                    headerLeft: () => (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginLeft: 8 }}>
+                            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); router.back(); }}>
+                                <Ionicons name="chevron-back" size={28} color="#F68537" />
+                            </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={handleViewProfile}
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
                             >
                                 <Image
                                     source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
-                                    style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: '#F1F5F9' }}
+                                    style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }}
+                                    contentFit="cover"
+                                    transition={200}
                                 />
                                 <View>
-                                    <Text style={{ fontWeight: 'bold', color: '#1F2937', fontSize: 16 }}>{friendName}</Text>
+                                    <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
                                     <Text style={{
                                         fontSize: 10,
                                         color: isTyping ? '#F68537' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
-                                        fontWeight: '600'
+                                        fontWeight: 'bold',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: 0.5
                                     }}>
                                         {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : 'offline')}
                                     </Text>
@@ -220,19 +234,31 @@ export default function ChatScreen() {
                     headerRight: () => (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 8 }}>
                             <TouchableOpacity
-                                onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio')}
-                                style={{ padding: 8 }}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    handleStartCall({ id: friendId, name: friendName }, 'audio');
+                                }}
+                                style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
                             >
-                                <Ionicons name="call-outline" size={20} color="#F68537" />
+                                <Ionicons name="call" size={18} color="white" />
                             </TouchableOpacity>
                             <TouchableOpacity
-                                onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video')}
-                                style={{ padding: 8 }}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    handleStartCall({ id: friendId, name: friendName }, 'video');
+                                }}
+                                style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
                             >
-                                <Ionicons name="videocam-outline" size={22} color="#F68537" />
+                                <Ionicons name="videocam" size={18} color="white" />
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 8 }}>
-                                <Ionicons name="ellipsis-vertical" size={20} color="#94A3B8" />
+                            <TouchableOpacity
+                                onPress={() => {
+                                    Haptics.selectionAsync();
+                                    setMenuVisible(!menuVisible);
+                                }}
+                                style={{ padding: 4 }}
+                            >
+                                <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
                             </TouchableOpacity>
                             <ChatMenu
                                 visible={menuVisible}
@@ -241,9 +267,11 @@ export default function ChatScreen() {
                                 onClearChat={handleClearChat}
                                 onBlockUser={handleBlockToggle}
                                 isBlocked={isBlocked}
+                                isMember={isMember}
                                 isGroup={isGroup === 'true'}
                                 onLeaveGroup={async () => {
                                     if (!currentUser) return;
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                     Alert.alert(
                                         "Leave Group",
                                         "Are you sure you want to leave this group?",
@@ -306,6 +334,7 @@ export default function ChatScreen() {
                         editingMessage={editingMessage}
                         onCancelEdit={() => setEditingMessage(null)}
                         onSaveEdit={onSaveEdit}
+                        isMember={isMember}
                     />
                 </KeyboardAvoidingView>
             ) : (
@@ -334,6 +363,7 @@ export default function ChatScreen() {
                         editingMessage={editingMessage}
                         onCancelEdit={() => setEditingMessage(null)}
                         onSaveEdit={onSaveEdit}
+                        isMember={isMember}
                     />
                 </KeyboardAvoidingView>
             )}

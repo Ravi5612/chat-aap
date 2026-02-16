@@ -254,15 +254,42 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
     leaveGroup: async (userId, groupId) => {
         try {
+            let activeUserId = userId;
+            if (!activeUserId) {
+                const { data: { user } } = await supabase.auth.getUser();
+                activeUserId = user?.id;
+            }
+
+            if (!activeUserId) throw new Error('User not authenticated');
+
+            // Fetch username for the message
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('username')
+                .eq('id', activeUserId)
+                .single();
+
+            const username = profile?.username || 'A user';
+
+            // 1. Send System Message
+            await supabase.from('messages').insert([{
+                group_id: groupId,
+                sender_id: activeUserId,
+                message: `SYSTEM_MSG: ${username} has left the group`,
+                status: 'sent',
+                is_read: false
+            }]);
+
+            // 2. Delete Membership
             const { error } = await supabase
                 .from('group_members')
                 .delete()
                 .eq('group_id', groupId)
-                .eq('user_id', userId);
+                .eq('user_id', activeUserId);
 
             if (error) throw error;
 
-            await get().loadFriends(userId);
+            await get().loadFriends(activeUserId);
             return true;
         } catch (e) {
             console.error("FriendsStore: Error leaving group", e);
