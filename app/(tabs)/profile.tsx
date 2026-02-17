@@ -1,42 +1,50 @@
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
-import { useState, useEffect } from 'react';
+import { Image } from 'expo-image';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useEffect } from 'react';
 
 export default function ProfileScreen() {
     const swipeHandlers = useSwipeNavigation();
-    const [user, setUser] = useState<any>(null);
+    const { user, profile, signOut, syncProfile } = useAuthStore();
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => setUser(data.user));
+        syncProfile();
     }, []);
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
+        await signOut();
     };
+
+    const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url;
+    const fullName = profile?.full_name || user?.user_metadata?.full_name || 'Chat Warrior';
+    const email = user?.email || '';
 
     return (
         <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
             <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }}>
-                <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+                <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#F68537' }}>Profile</Text>
+                    {/* Add Edit Button or other actions here if needed */}
                 </View>
 
                 <ScrollView style={{ flex: 1 }}>
                     <View style={{ alignItems: 'center', paddingVertical: 32 }}>
                         <View style={{ position: 'relative' }}>
                             <Image
-                                source={{ uri: user?.user_metadata?.avatar_url || 'https://via.placeholder.com/150' }}
+                                source={avatarUrl ? { uri: avatarUrl } : require('@/assets/images/logo.png')}
                                 style={{ width: 128, height: 128, borderRadius: 64, borderWidth: 4, borderColor: '#FFF7ED', backgroundColor: '#F3F4F6' }}
+                                contentFit="cover"
+                                transition={500}
                             />
                             <TouchableOpacity style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#F68537', padding: 8, borderRadius: 9999, borderWidth: 4, borderColor: 'white' }}>
                                 <Ionicons name="camera" size={20} color="white" />
                             </TouchableOpacity>
                         </View>
-                        <Text style={{ fontSize: 24, fontWeight: 'bold', marginTop: 16, color: '#111827' }}>{user?.user_metadata?.full_name || 'Anonymous User'}</Text>
-                        <Text style={{ color: '#6B7280', marginTop: 4 }}>{user?.email}</Text>
+                        <Text style={{ fontSize: 24, fontWeight: 'bold', marginTop: 16, color: '#111827' }}>{fullName}</Text>
+                        <Text style={{ color: '#6B7280', marginTop: 4 }}>{email}</Text>
                     </View>
 
                     <View style={{ paddingHorizontal: 24, paddingVertical: 16 }}>

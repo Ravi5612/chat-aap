@@ -57,7 +57,7 @@ export async function encryptText(plainText: string, cryptoKey: Uint8Array): Pro
     if (!plainText || !cryptoKey) return null;
 
     try {
-        const iv = Crypto.getRandomValues(new Uint8Array(12));
+        const iv = Crypto.getRandomBytes(12);
         const aes = gcm(new Uint8Array(cryptoKey), new Uint8Array(iv));
 
         const plainTextBytes = encoder.encode(plainText);

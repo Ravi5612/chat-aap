@@ -18,8 +18,7 @@ import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
-
-// ... imports
+import { SplashScreen } from '@/components/SplashScreen';
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
@@ -27,6 +26,7 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [isMounted, setIsMounted] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   // Initialize notifications & global listeners
   usePushNotifications(session?.user?.id || null);
@@ -59,7 +59,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (initializing || !isMounted) return;
+    if (initializing || !isMounted || showSplash) return;
 
     if (session?.user?.id) {
       syncOnlineStatus(true);
@@ -75,7 +75,11 @@ export default function RootLayout() {
     } else if (!inAuthGroup) {
       router.replace('/login');
     }
-  }, [session, initializing, segments, isMounted]);
+  }, [session, initializing, segments, isMounted, showSplash]);
+
+  if (showSplash) {
+    return <SplashScreen onAnimationFinish={() => setShowSplash(false)} />;
+  }
 
   if (initializing) {
     return (

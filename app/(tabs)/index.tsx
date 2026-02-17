@@ -46,7 +46,12 @@ export default function HomeScreen() {
         router.push(`/profile/${friend.id}` as any);
         break;
       case 'group':
-        // Navigation for group features
+        if (friend.isGroup) {
+          // TODO: Navigate to group details/edit screen
+          Alert.alert("Coming Soon", "Group management is under construction.");
+        } else {
+          router.push(`/new-group?initialMemberId=${friend.id}` as any);
+        }
         break;
       case 'delete':
         Alert.alert(
