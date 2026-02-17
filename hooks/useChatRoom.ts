@@ -26,11 +26,11 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
     const [isMember, setIsMember] = useState(true);
 
     // 1. Derive Chat Key First
+    // 1. Derive Chat Key & Check Membership
     useEffect(() => {
         if (!friendId || !currentUser) return;
         initChat(friendId, currentUser, isGroup);
 
-        // Membership check
         const checkMembership = async () => {
             if (!isGroup) {
                 setIsMember(true);
@@ -38,12 +38,36 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             }
             const { data } = await supabase
                 .from('group_members')
-                .select('*')
+                .select('id')
                 .eq('group_id', friendId)
-                .eq('user_id', currentUser.id);
-            setIsMember(!!(data && data.length > 0));
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
+
+            setIsMember(!!data);
         };
+
         checkMembership();
+
+        // Realtime listener for membership changes
+        const membershipChannel = supabase.channel(`members-${friendId}-${currentUser.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'group_members',
+                    filter: `group_id=eq.${friendId}`
+                },
+                () => {
+                    // Refresh membership status on ANY change to group members
+                    checkMembership();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(membershipChannel);
+        };
     }, [friendId, currentUser?.id, isGroup]);
 
     // 2. Setup Channel and Load Messages Once Key is Ready

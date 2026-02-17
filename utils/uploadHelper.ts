@@ -47,3 +47,38 @@ export const uploadChatMessageMedia = async (uri: string, type: 'image' | 'voice
         throw error;
     }
 };
+
+export const uploadGroupAvatar = async (uri: string) => {
+    try {
+        const fileName = `group-avatars/${Date.now()}.jpg`;
+
+        // Read file as base64
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+            encoding: 'base64',
+        });
+
+        const binaryData = Buffer.from(base64, 'base64');
+
+        const { data, error } = await supabase.storage
+            .from('chat-files')
+            .upload(fileName, binaryData, {
+                contentType: 'image/jpeg',
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (error) {
+            console.error('Group Avatar Upload error details:', error);
+            throw error;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('chat-files')
+            .getPublicUrl(fileName);
+
+        return { url: publicUrl };
+    } catch (error) {
+        console.error('Error in uploadGroupAvatar:', error);
+        throw error;
+    }
+};

@@ -153,6 +153,30 @@ export const useChatStore = create<ChatState>((set, get) => {
             const { chatKey, activeChannel, messages, cache } = get();
             if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !friendId || !currentUser || !chatKey) return;
 
+            // 🛡️ Security Check: Verify Group Membership
+            // 🛡️ Security Check: Verify Group Membership
+            if (isGroup) {
+                console.log(`Checking membership for Group: ${friendId}, User: ${currentUser.id}`);
+                const { data: memberCheck, error: memberError } = await supabase
+                    .from('group_members')
+                    .select('id')
+                    .eq('group_id', friendId)
+                    .eq('user_id', currentUser.id);
+
+                if (memberError) {
+                    console.error("Membership Check Error:", memberError);
+                    Alert.alert('Error', 'Failed to verify group membership.');
+                    return;
+                }
+
+                if (!memberCheck || memberCheck.length === 0) {
+                    console.warn(`Access Denied: User ${currentUser.id} is NOT a member of group ${friendId}`);
+                    Alert.alert('Access Denied', 'You are no longer a participant of this group.');
+                    return;
+                }
+                console.log("Membership verified ✅. Data:", memberCheck);
+            }
+
             const tempId = `temp-${Date.now()}`;
             let messageToEncrypt = text;
             let fileData: any = null;

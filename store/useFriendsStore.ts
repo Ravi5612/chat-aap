@@ -257,7 +257,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             let activeUserId = userId;
             if (!activeUserId) {
                 const { data: { user } } = await supabase.auth.getUser();
-                activeUserId = user?.id;
+                activeUserId = user?.id || '';
             }
 
             if (!activeUserId) throw new Error('User not authenticated');
@@ -281,13 +281,18 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             }]);
 
             // 2. Delete Membership
-            const { error } = await supabase
+            console.log(`Attempting to remove user ${activeUserId} from group ${groupId}`);
+            const { error, count } = await supabase
                 .from('group_members')
-                .delete()
+                .delete({ count: 'exact' })
                 .eq('group_id', groupId)
                 .eq('user_id', activeUserId);
 
-            if (error) throw error;
+            if (error) {
+                console.error("Leave Group Error:", error);
+                throw error;
+            }
+            console.log(`Leave Group Success. Removed ${count} rows.`);
 
             await get().loadFriends(activeUserId);
             return true;

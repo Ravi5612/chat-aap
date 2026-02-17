@@ -44,7 +44,7 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
                                     onPress={() => { onAction('group', friend); onClose(); }}
                                 >
                                     <Ionicons name="people-outline" size={20} color="#4B5563" />
-                                    <Text style={styles.actionText}>{friend.isGroup ? 'Manage Members' : 'Add to Group'}</Text>
+                                    <Text style={styles.actionText}>{friend.isGroup ? 'Manage Members' : 'Create Group with User'}</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity

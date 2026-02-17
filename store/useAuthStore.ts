@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { router } from 'expo-router';
 
 interface AuthState {
     session: Session | null;
@@ -25,11 +26,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setInitializing: (initializing) => set({ initializing }),
     signOut: async () => {
         const { user } = get();
-        if (user?.id) {
-            await supabase.from('profiles').update({ is_online: false }).eq('id', user.id);
+        try {
+            if (user?.id) {
+                // Try to mark offline, but don't block logout if it fails
+                await supabase.from('profiles').update({ is_online: false }).eq('id', user.id);
+            }
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error("Error signing out:", error);
+        } finally {
+            // ALWAYS clear local state to force UI update
+            set({ session: null, user: null, profile: null });
+            // Force immediate navigation to login
+            router.replace('/login');
         }
-        await supabase.auth.signOut();
-        set({ session: null, user: null, profile: null });
     },
     syncOnlineStatus: async (isOnline: boolean) => {
         const { user } = get();
