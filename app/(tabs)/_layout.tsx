@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +10,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -20,11 +22,11 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: '#EBD8B7',
           borderTopWidth: 0,
-          height: 65,
+          height: 65 + (Platform.OS === 'ios' ? 0 : 0), // Base height
           paddingBottom: 0,
           borderRadius: 20,
           position: 'absolute',
-          bottom: Platform.OS === 'ios' ? 30 : 15,
+          bottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 35,
           left: 15,
           right: 15,
           elevation: 5,

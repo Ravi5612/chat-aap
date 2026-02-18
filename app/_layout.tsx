@@ -65,7 +65,7 @@ export default function RootLayout() {
       syncOnlineStatus(true);
     }
 
-    const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup');
+    const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup') || (segments as string[]).includes('forgot-password') || (segments as string[]).includes('reset-password');
     const isRoot = (segments as string[]).length === 0;
 
     if (session) {

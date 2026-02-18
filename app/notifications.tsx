@@ -1,4 +1,5 @@
-import { View, Text, SafeAreaView, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useRouter } from 'expo-router';
@@ -9,16 +10,18 @@ export default function NotificationsScreen() {
 
     const handleNotificationClick = (item: any) => {
         markAsRead(item.id);
-        // Navigate based on type if needed
+        if (item.type === 'friend_request') {
+            router.push('/friend-requests' as any);
+        }
     };
 
     return (
-        <SafeAreaView className="flex-1 bg-white">
-            <View className="px-4 py-4 border-b border-gray-100 flex-row items-center">
-                <TouchableOpacity onPress={() => router.back()} className="mr-4">
+        <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }}>
+            <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
                     <Ionicons name="arrow-back" size={24} color="#F68537" />
                 </TouchableOpacity>
-                <Text className="text-2xl font-bold text-[#F68537]">Notifications</Text>
+                <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#F68537' }}>Notifications</Text>
             </View>
 
             <FlatList
@@ -30,11 +33,18 @@ export default function NotificationsScreen() {
                 renderItem={({ item }) => (
                     <TouchableOpacity
                         onPress={() => handleNotificationClick(item)}
-                        className={`px-4 py-4 border-b border-gray-50 flex-row items-center ${item.is_read ? 'opacity-60' : ''}`}
+                        style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', flexDirection: 'row', alignItems: 'center', opacity: item.is_read ? 0.6 : 1 }}
                     >
-                        <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${item.type === 'friend_request' ? 'bg-blue-50' :
-                                item.type === 'friend_accepted' ? 'bg-green-50' : 'bg-orange-50'
-                            }`}>
+                        <View style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 24,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 16,
+                            backgroundColor: item.type === 'friend_request' ? '#EFF6FF' :
+                                item.type === 'friend_accepted' ? '#ECFDF5' : '#FFF7ED'
+                        }}>
                             <Ionicons
                                 name={
                                     item.type === 'friend_request' ? 'person-add' :
@@ -47,21 +57,21 @@ export default function NotificationsScreen() {
                                 }
                             />
                         </View>
-                        <View className="flex-1">
-                            <Text className={`text-base ${!item.is_read ? 'font-bold' : ''}`}>{item.message}</Text>
-                            <Text className="text-gray-400 text-xs mt-1">
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, fontWeight: !item.is_read ? 'bold' : 'normal', color: '#1F2937' }}>{item.message}</Text>
+                            <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 4 }}>
                                 {new Date(item.created_at).toLocaleDateString()}
                             </Text>
                         </View>
                         {!item.is_read && (
-                            <View className="w-2 h-2 bg-[#F68537] rounded-full ml-2" />
+                            <View style={{ width: 8, height: 8, backgroundColor: '#F68537', borderRadius: 4, marginLeft: 8 }} />
                         )}
                     </TouchableOpacity>
                 )}
                 ListEmptyComponent={
-                    <View className="flex-1 items-center justify-center p-10 mt-20">
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
                         <Ionicons name="notifications-off-outline" size={64} color="#CBD5E1" />
-                        <Text className="text-gray-400 mt-4 text-center">No notifications yet.</Text>
+                        <Text style={{ color: '#94A3B8', marginTop: 16, textAlign: 'center' }}>No notifications yet.</Text>
                     </View>
                 }
             />

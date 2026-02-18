@@ -17,28 +17,33 @@ export const usePresence = (myUserId: string | null) => {
             },
         });
 
+        const updateStatus = async (online: boolean) => {
+            try {
+                await supabase
+                    .from('profiles')
+                    .update({
+                        is_online: online
+                    })
+                    .eq('id', myUserId);
+            } catch (err) {
+                console.error('Error updating status:', err);
+            }
+        };
+
         channel
             .on('presence', { event: 'sync' }, () => {
                 const state = channel.presenceState();
-                console.log('Presence: Sync State Keys:', Object.keys(state));
-                console.log('Presence: Full State (first 2 keys):', Object.keys(state).slice(0, 2));
                 setOnlineUsers(state);
             })
-            .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-                console.log('Presence: Join:', key, newPresences[0]?.online_at);
-            })
-            .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-                console.log('Presence: Leave:', key);
-            })
             .subscribe(async (status) => {
-                console.log('Presence: Subscription Status:', status);
                 if (status === 'SUBSCRIBED') {
                     await channel.track({ online_at: new Date().toISOString() });
+                    await updateStatus(true);
                 }
             });
 
         return () => {
-            console.log('Presence: Removing channel...');
+            updateStatus(false);
             supabase.removeChannel(channel);
         };
     }, [myUserId]);

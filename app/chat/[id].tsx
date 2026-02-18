@@ -26,8 +26,10 @@ export default function ChatScreen() {
     const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const router = useRouter();
     const { user: currentUser } = useAuthStore();
-    const { blockedUserIds, blockUser, unblockUser } = useFriendsStore();
+    const { blockedUserIds, blockUser, unblockUser, combinedItems } = useFriendsStore();
     const isBlocked = blockedUserIds.includes(friendId as string);
+
+    const friendData = (combinedItems || []).find(f => f.id === friendId);
 
     const chatRoom = useChatRoom(friendId as string, currentUser, isGroup === 'true');
     const { isUserOnline } = usePresence(currentUser?.id);
@@ -35,6 +37,7 @@ export default function ChatScreen() {
     const {
         messages,
         loading,
+        loadingMore,
         isTyping,
         handleSendMessage,
         handleTypingStatus,
@@ -43,7 +46,8 @@ export default function ChatScreen() {
         handleDeleteMessage,
         handleForwardMessage,
         flyingEmoji,
-        isMember
+        isMember,
+        handleLoadMore,
     } = chatRoom;
 
     // Call Management
@@ -180,8 +184,25 @@ export default function ChatScreen() {
         setViewerVisible(true);
     };
 
+    const formatLastSeen = (timestamp: string) => {
+        if (!timestamp) return 'offline';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffInMs = now.getTime() - date.getTime();
+        const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        if (diffInDays === 0 && now.getDate() === date.getDate()) {
+            return `last seen today at ${timeStr}`;
+        } else if (diffInDays === 1 || (diffInDays === 0 && now.getDate() !== date.getDate())) {
+            return `last seen yesterday at ${timeStr}`;
+        } else {
+            return `last seen ${date.toLocaleDateString()}`;
+        }
+    };
+
     const headerHeight = useHeaderHeight();
-    const keyboardOffset = Platform.OS === 'ios' ? headerHeight : headerHeight + (StatusBar.currentHeight || 0);
 
     if (!currentUser || (loading && messages.length === 0)) {
         return (
@@ -220,12 +241,12 @@ export default function ChatScreen() {
                                     <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
                                     <Text style={{
                                         fontSize: 10,
-                                        color: isTyping ? '#F68537' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
+                                        color: isTyping ? '#10B981' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
                                         fontWeight: 'bold',
                                         textTransform: 'uppercase',
                                         letterSpacing: 0.5
                                     }}>
-                                        {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : 'offline')}
+                                        {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : formatLastSeen(friendData?.lastSeen))}
                                     </Text>
                                 </View>
                             </TouchableOpacity>
@@ -308,65 +329,50 @@ export default function ChatScreen() {
                 offer={callSession?.offer}
             />
 
-            {Platform.OS === 'ios' ? (
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={{ flex: 1, backgroundColor: '#EBD8B7' }}
-                    keyboardVerticalOffset={headerHeight}
-                >
-                    <View style={{ flex: 1 }}>
-                        <MessageList
-                            messages={messages}
-                            currentUser={currentUser}
-                            onReply={(msg) => setReplyingTo(msg)}
-                            friendName={friendName}
-                            onLongPress={handleLongPress}
-                            onImagePress={handleImagePress}
-                            flyingEmoji={flyingEmoji}
-                        />
-                    </View>
-
-                    <ChatInput
-                        onSendMessage={onSendMessage}
-                        onTyping={handleTypingStatus}
-                        replyingTo={replyingTo}
-                        onCancelReply={() => setReplyingTo(null)}
-                        editingMessage={editingMessage}
-                        onCancelEdit={() => setEditingMessage(null)}
-                        onSaveEdit={onSaveEdit}
-                        isMember={isMember}
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+                style={{ flex: 1, backgroundColor: '#EBD8B7' }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 70}
+                enabled={true}
+            >
+                <View style={{ flex: 1 }}>
+                    <MessageList
+                        messages={messages}
+                        currentUser={currentUser}
+                        onReply={(msg) => setReplyingTo(msg)}
+                        friendName={friendName}
+                        onLongPress={handleLongPress}
+                        onImagePress={handleImagePress}
+                        flyingEmoji={flyingEmoji}
+                        onLoadMore={handleLoadMore}
+                        loadingMore={loadingMore}
                     />
-                </KeyboardAvoidingView>
-            ) : (
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={{ flex: 1, backgroundColor: '#EBD8B7' }}
-                    keyboardVerticalOffset={70}
-                >
-                    <View style={{ flex: 1 }}>
-                        <MessageList
-                            messages={messages}
-                            currentUser={currentUser}
-                            onReply={(msg) => setReplyingTo(msg)}
-                            friendName={friendName}
-                            onLongPress={handleLongPress}
-                            onImagePress={handleImagePress}
-                            flyingEmoji={flyingEmoji}
-                        />
-                    </View>
 
-                    <ChatInput
-                        onSendMessage={onSendMessage}
-                        onTyping={handleTypingStatus}
-                        replyingTo={replyingTo}
-                        onCancelReply={() => setReplyingTo(null)}
-                        editingMessage={editingMessage}
-                        onCancelEdit={() => setEditingMessage(null)}
-                        onSaveEdit={onSaveEdit}
-                        isMember={isMember}
-                    />
-                </KeyboardAvoidingView>
-            )}
+                    {isTyping && (
+                        <View style={styles.typingIndicatorContainer}>
+                            <View style={styles.typingBubble}>
+                                <View style={styles.dotsContainer}>
+                                    <View style={styles.dot} />
+                                    <View style={[styles.dot, { opacity: 0.6 }]} />
+                                    <View style={[styles.dot, { opacity: 0.3 }]} />
+                                </View>
+                                <Text style={styles.typingText}>{friendName} is typing...</Text>
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                <ChatInput
+                    onSendMessage={onSendMessage}
+                    onTyping={handleTypingStatus}
+                    replyingTo={replyingTo}
+                    onCancelReply={() => setReplyingTo(null)}
+                    editingMessage={editingMessage}
+                    onCancelEdit={() => setEditingMessage(null)}
+                    onSaveEdit={onSaveEdit}
+                    isMember={isMember}
+                />
+            </KeyboardAvoidingView>
 
             <MessageContextMenu
                 visible={contextMenuVisible}
@@ -393,3 +399,45 @@ export default function ChatScreen() {
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    typingIndicatorContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+    },
+    typingBubble: {
+        backgroundColor: '#E8F9F1',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderBottomLeftRadius: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        maxWidth: '80%',
+        shadowColor: '#10B981',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    dotsContainer: {
+        flexDirection: 'row',
+        gap: 3,
+    },
+    dot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        backgroundColor: '#10B981',
+    },
+    typingText: {
+        fontSize: 13,
+        color: '#10B981',
+        fontWeight: '600',
+        fontStyle: 'italic',
+    }
+});

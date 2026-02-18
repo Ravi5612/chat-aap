@@ -1,4 +1,4 @@
-import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -12,6 +12,8 @@ import { useNotifications } from '@/hooks/useNotifications';
 import FilterTabs from '@/components/chat/FilterTabs';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import FriendContextMenu from '@/components/chat/FriendContextMenu';
+import { useReceivedRequests } from '@/hooks/useReceivedRequests';
+import { useSentRequests } from '@/hooks/useSentRequests';
 import { Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -22,6 +24,8 @@ export default function HomeScreen() {
   const swipeHandlers = useSwipeNavigation();
   const { user: currentUser, profile } = useAuthStore();
   const { combinedItems, myStatuses, loading, error, loadFriends } = useFriends();
+  const { receivedRequests } = useReceivedRequests();
+  const { sentRequests } = useSentRequests();
   const { getCounts } = useNotifications();
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -161,27 +165,92 @@ export default function HomeScreen() {
             <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)}>
               <Image
                 source={{ uri: profile?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || 'User')}&backgroundColor=F68537` }}
-                style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: '#F68537' }}
+                style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: Platform.OS === 'android' ? 'white' : '#F68537' }}
               />
             </TouchableOpacity>
-            <Text style={{ color: '#F68537', fontWeight: 'bold', fontSize: 18, textTransform: 'lowercase' }}>{profile?.username || 'user'}</Text>
+            <Text style={{
+              color: Platform.OS === 'android' ? 'white' : '#F68537',
+              fontWeight: 'bold',
+              fontSize: 18,
+              textTransform: 'lowercase'
+            }}>{profile?.username || 'user'}</Text>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {/* Search Button */}
             <TouchableOpacity
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/search' as any);
               }}
-              style={{ backgroundColor: '#F68537', borderRadius: 9999, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+              style={{
+                backgroundColor: Platform.OS === 'android' ? 'white' : '#F68537',
+                borderRadius: 9999,
+                paddingLeft: 10,
+                paddingRight: 4,
+                paddingVertical: 4,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4
+              }}
             >
-              <Text style={{ color: 'white', fontWeight: '900', fontSize: 10, letterSpacing: -0.5 }}>SEARCH FRIEND</Text>
-              <View style={{ backgroundColor: 'white', padding: 6, borderRadius: 9999 }}>
-                <Ionicons name="search" size={16} color="#F68537" />
+              <Text style={{
+                color: Platform.OS === 'android' ? '#F68537' : 'white',
+                fontWeight: '900',
+                fontSize: 9,
+                letterSpacing: -0.5
+              }}>SEARCH</Text>
+              <View style={{ backgroundColor: Platform.OS === 'android' ? '#F68537' : 'white', padding: 4, borderRadius: 9999 }}>
+                <Ionicons name="search" size={12} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
               </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); }}>
-              <Ionicons name="menu-outline" size={32} color="#F68537" />
+
+            {/* Sent Requests - 🆕 Added */}
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/sent-requests' as any);
+              }}
+              style={{ position: 'relative' }}
+            >
+              <Ionicons name="paper-plane-outline" size={26} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
+              {sentRequests.filter(r => r.status === 'pending').length > 0 && (
+                <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: Platform.OS === 'android' ? '#F68537' : 'white' }}>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{sentRequests.filter(r => r.status === 'pending').length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Received Friend Requests */}
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/friend-requests' as any);
+              }}
+              style={{ position: 'relative' }}
+            >
+              <Ionicons name="people-outline" size={26} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
+              {receivedRequests.filter(r => r.status === 'pending').length > 0 && (
+                <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: Platform.OS === 'android' ? '#F68537' : 'white' }}>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{receivedRequests.filter(r => r.status === 'pending').length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Notifications */}
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/notifications' as any);
+              }}
+              style={{ position: 'relative' }}
+            >
+              <Ionicons name="notifications-outline" size={26} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
+              {getCounts().unread > 0 && (
+                <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: Platform.OS === 'android' ? '#F68537' : 'white' }}>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{getCounts().unread}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
         </GlassHeader>

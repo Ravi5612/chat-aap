@@ -108,11 +108,34 @@ export const useReceivedRequests = () => {
         }
     };
 
+    const deleteRequest = async (requestId: string) => {
+        try {
+            const { error } = await supabase
+                .from('friend_requests')
+                .delete()
+                .eq('id', requestId);
+
+            if (error) throw error;
+            loadReceivedRequests();
+        } catch (error: any) {
+            Alert.alert('Error', error.message);
+        }
+    };
+
+    const getCounts = () => ({
+        pending: receivedRequests.filter(r => r.status === 'pending').length,
+        accepted: receivedRequests.filter(r => r.status === 'accepted').length,
+        rejected: receivedRequests.filter(r => r.status === 'rejected').length,
+        total: receivedRequests.length
+    });
+
     return {
         receivedRequests,
         loading,
         acceptRequest,
         rejectRequest,
+        deleteRequest,
+        getCounts,
         refresh: loadReceivedRequests
     };
 };

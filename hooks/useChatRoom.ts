@@ -8,11 +8,14 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
     const {
         messages,
         loading,
+        loadingMore,
+        hasMore,
         isTyping,
         flyingEmoji,
         chatKey,
         initChat,
         loadMessages,
+        loadMoreMessages,
         sendMessage,
         reactToMessage,
         saveEdit,
@@ -94,12 +97,47 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     loadMessages(friendId, currentUser, isGroup);
                 }
             })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, async (payload) => {
+                const updatedMsg = payload.new;
+                const isRelevant = isGroup
+                    ? updatedMsg.group_id === friendId
+                    : (updatedMsg.sender_id === currentUser.id && updatedMsg.receiver_id === friendId) ||
+                    (updatedMsg.sender_id === friendId && updatedMsg.receiver_id === currentUser.id);
+
+                if (isRelevant) {
+                    const statusOrder = { 'sent': 1, 'delivered': 2, 'read': 3 };
+                    const newStatus = updatedMsg.is_read ? 'read' : updatedMsg.status;
+
+                    useChatStore.setState((state) => ({
+                        messages: state.messages.map(msg => {
+                            if (msg.id === updatedMsg.id) {
+                                const currentStatus = msg.status || 'sent';
+                                if (statusOrder[newStatus as keyof typeof statusOrder] > statusOrder[currentStatus as keyof typeof statusOrder]) {
+                                    return { ...msg, ...updatedMsg, status: newStatus };
+                                }
+                            }
+                            return msg;
+                        })
+                    }));
+                }
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+                const deletedMsg = payload.old;
+                useChatStore.setState((state) => ({
+                    messages: state.messages.filter(m => m.id !== deletedMsg.id)
+                }));
+            })
             .on('broadcast', { event: 'new_message' }, (payload) => {
                 const msg = payload.payload;
                 if (msg.sender_id === currentUser.id) return;
+
+                // Add to list
                 useChatStore.setState((state) => ({
                     messages: state.messages.some(m => m.id === msg.id) ? state.messages : [...state.messages, msg]
                 }));
+
+                // ✅ Mark as read instantly
+                useChatStore.getState().markAsRead(msg.id, currentUser, friendId, isGroup);
             })
             .on('broadcast', { event: 'typing' }, (payload) => {
                 const data = payload.payload || payload;
@@ -109,10 +147,25 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             })
             .on('broadcast', { event: 'status_update' }, (payload) => {
                 const update = payload.payload;
+                const statusOrder = { 'sent': 1, 'delivered': 2, 'read': 3 };
+                const newStatus = update.status;
+
                 useChatStore.setState((state) => ({
                     messages: state.messages.map(msg => {
-                        if (msg.id === update.message_id || (msg.sender_id === currentUser.id && update.status === 'read')) {
-                            return { ...msg, status: update.status };
+                        const isMyMessage = msg.sender_id === currentUser.id;
+                        if (!isMyMessage) return msg;
+
+                        const isMatch = isGroup
+                            ? msg.group_id === update.group_id
+                            : (msg.receiver_id === update.sender_id);
+
+                        if (isMatch) {
+                            if (update.message_id && msg.id !== update.message_id) return msg;
+
+                            const currentStatus = msg.status || 'sent';
+                            if (statusOrder[newStatus as keyof typeof statusOrder] > statusOrder[currentStatus as keyof typeof statusOrder]) {
+                                return { ...msg, status: newStatus, is_read: newStatus === 'read' };
+                            }
                         }
                         return msg;
                     })
@@ -176,9 +229,18 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
         if (currentUser) setTypingStatus(typing, friendId, currentUser);
     }, [currentUser, friendId, setTypingStatus]);
 
+    // ✅ Pagination - Jab user upar scroll kare
+    const handleLoadMore = useCallback(() => {
+        if (currentUser && hasMore && !loadingMore) {
+            loadMoreMessages(friendId, currentUser, isGroup);
+        }
+    }, [currentUser, friendId, isGroup, hasMore, loadingMore, loadMoreMessages]);
+
     return {
         messages,
         loading,
+        loadingMore,
+        hasMore,
         isTyping,
         isMember,
         handleSendMessage,
@@ -188,6 +250,7 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
         handleDeleteMessage,
         handleForwardMessage,
         handleTypingStatus,
+        handleLoadMore,
         loadMore: () => currentUser && loadMessages(friendId, currentUser, isGroup)
     };
 };

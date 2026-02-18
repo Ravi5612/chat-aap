@@ -34,7 +34,7 @@ export const useFriends = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'statuses' }, () => loadFriends(currentUser.id))
             .on('postgres_changes', { event: '*', schema: 'public', table: 'status_views' }, () => loadFriends(currentUser.id))
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-                if (payload.new.receiver_id === currentUser.id || payload.new.group_id) {
+                if (payload.new.receiver_id === currentUser.id || payload.new.sender_id === currentUser.id || payload.new.group_id) {
                     loadFriends(currentUser.id);
                 }
             })

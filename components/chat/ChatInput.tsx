@@ -10,6 +10,7 @@ import {
     Image,
     Alert
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import ReplyPreview from './ReplyPreview';
@@ -50,6 +51,7 @@ export default function ChatInput({
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [emojiModalVisible, setEmojiModalVisible] = useState(false);
+    const insets = useSafeAreaInsets();
     const inputRef = useRef<TextInput>(null);
     const typingTimeoutRef = useRef<any>(null);
 
@@ -156,7 +158,13 @@ export default function ChatInput({
     };
 
     return (
-        <View style={{ backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingBottom: 8, position: 'relative' }}>
+        <View style={{
+            backgroundColor: 'white',
+            borderTopWidth: 1,
+            borderTopColor: '#F3F4F6',
+            paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 16),
+            position: 'relative'
+        }}>
             {!isMember && (
                 <View style={{
                     position: 'absolute',
@@ -217,7 +225,7 @@ export default function ChatInput({
 
                 {selectedImage && !isRecording && (
                     <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center' }}>
-                        <Image source={{ uri: selectedImage }} style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16 }} />
+                        <Image source={{ uri: selectedImage as string }} style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16 }} />
                         <TouchableOpacity onPress={() => setSelectedImage(null)} style={{ position: 'absolute', top: 4, left: 64, backgroundColor: '#EF4444', borderRadius: 9999 }}>
                             <Ionicons name="close" size={16} color="white" />
                         </TouchableOpacity>

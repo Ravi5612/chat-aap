@@ -14,6 +14,7 @@ interface AuthState {
     signOut: () => Promise<void>;
     syncOnlineStatus: (isOnline: boolean) => Promise<void>;
     syncProfile: () => Promise<void>;
+    updateProfile: (updates: any) => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -59,4 +60,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             if (data) set({ profile: data });
         }
     },
+    updateProfile: async (updates: any) => {
+        const { user } = get();
+        if (!user?.id) return false;
+
+        try {
+            const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
+            if (error) throw error;
+
+            // Re-sync after update
+            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            if (data) set({ profile: data });
+            return true;
+        } catch (e) {
+            console.error('AuthStore: Profile update failed:', e);
+            return false;
+        }
+    }
 }));

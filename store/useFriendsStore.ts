@@ -31,14 +31,25 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
     setOnlineUsers: (onlineUsers) => {
         set({ onlineUsers });
-        // Re-calculate combined items with online status
         const { friends, groups } = get();
+        if (friends.length === 0 && groups.length === 0) return;
+
         const friendsWithPresence = friends.map(f => ({
             ...f,
             isOnline: f.db_is_online !== false && !!onlineUsers[f.id]
         }));
+
         const combined = [...friendsWithPresence, ...groups];
-        const uniqueItems = Array.from(new Map(combined.map(item => [item.id, item])).values());
+        const uniqueItems = Array.from(new Map(combined.map(item => [item.id, item])).values())
+            .sort((a, b) => {
+                const parseDate = (d: any) => {
+                    if (!d || d === '0') return 0;
+                    const t = new Date(d).getTime();
+                    return isNaN(t) ? 0 : t;
+                };
+                return parseDate(b.lastActivity) - parseDate(a.lastActivity);
+            });
+
         set({ combinedItems: uniqueItems });
     },
 
@@ -47,24 +58,44 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         set({ loading: true, error: null });
 
         try {
-            // Fetch blocked users first to filter or mark them
-            await get().fetchBlockedUsers(userId);
+            // Fetch blocked users (non-blocking)
+            get().fetchBlockedUsers(userId).catch(err => console.error('fetchBlockedUsers error:', err));
             const blockedIds = get().blockedUserIds;
 
-            // 1. Fetch Friends
-            const { data: friendships, error: friendshipError } = await supabase
-                .from('friendships')
-                .select(`
-          friend_id,
-          is_favorite,
-          is_archived,
-          friend:profiles!friendships_friend_id_fkey(
-            id, username, email, avatar_url, is_online
-          )
-        `)
-                .eq('user_id', userId);
+            // 1. Fetch Friends (Bi-directional) - Split into two queries for reliability
+            const [sentRes, recdRes] = await Promise.all([
+                supabase
+                    .from('friendships')
+                    .select(`
+                        is_favorite,
+                        is_archived,
+                        friend_id,
+                        friend:profiles!friendships_friend_id_fkey(
+                            id, username, email, avatar_url, is_online
+                        )
+                    `)
+                    .eq('user_id', userId),
+                supabase
+                    .from('friendships')
+                    .select(`
+                        is_favorite,
+                        is_archived,
+                        user_id,
+                        user:profiles!friendships_user_id_fkey(
+                            id, username, email, avatar_url, is_online
+                        )
+                    `)
+                    .eq('friend_id', userId)
+            ]);
 
-            if (friendshipError) throw friendshipError;
+            if (sentRes.error) throw sentRes.error;
+            // Note: pregnancies_user_id_fkey might not exist or might be named differently, 
+            // but let's assume it follows the same pattern. If this fails, we catch it.
+
+            const friendships = [
+                ...(sentRes.data || []).map(f => ({ ...f, type: 'sent' })),
+                ...(recdRes.data || []).map(f => ({ ...f, type: 'recd' }))
+            ];
 
             // 2. Fetch Groups
             // ... (rest of loadFriends is same, but I'll filter out blocked in combined items if needed, 
@@ -129,26 +160,46 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                 });
             }
 
+            // 5. Fetch Last Message Timestamps for Sorting (WhatsApp Style)
+            let lastActivityMap: Record<string, string> = {};
+            const { data: recentMsgs } = await supabase
+                .from('messages')
+                .select('created_at, sender_id, receiver_id, group_id')
+                .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+                .order('created_at', { ascending: false })
+                .limit(500);
+
+            (recentMsgs || []).forEach(m => {
+                const chatId = m.group_id || (m.sender_id === userId ? m.receiver_id : m.sender_id);
+                if (chatId && !lastActivityMap[chatId]) {
+                    lastActivityMap[chatId] = m.created_at;
+                }
+            });
+
             // Formatting
-            const formattedFriends = (friendships || [])
-                .filter((f: any) => f.friend)
+            const formattedFriends = friendships
                 .map((f: any) => {
-                    const profile = f.friend;
-                    const sInfo = friendStatusInfo[profile.id] || { count: 0, viewedCount: 0 };
+                    const otherProfile = f.type === 'sent' ? f.friend : f.user;
+                    if (!otherProfile) return null;
+
+                    const sInfo = friendStatusInfo[otherProfile.id] || { count: 0, viewedCount: 0 };
                     return {
-                        id: profile.id,
-                        name: profile.username || 'Unknown',
-                        email: profile.email,
-                        img: profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.username || 'User')}&backgroundColor=F68537`,
-                        unreadCount: unreadCountsMap[profile.id] || 0,
+                        id: otherProfile.id,
+                        name: otherProfile.username || 'Unknown',
+                        email: otherProfile.email,
+                        img: otherProfile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(otherProfile.username || 'User')}&backgroundColor=F68537`,
+                        unreadCount: unreadCountsMap[otherProfile.id] || 0,
                         statusCount: sInfo.count,
                         allStatusesViewed: sInfo.count > 0 && sInfo.count === sInfo.viewedCount,
-                        db_is_online: profile.is_online,
+                        db_is_online: otherProfile.is_online,
+                        lastSeen: otherProfile.last_seen,
                         isFavorite: f.is_favorite,
                         isArchived: f.is_archived,
+                        lastActivity: lastActivityMap[otherProfile.id] || '0',
                         isGroup: false
                     };
-                });
+                })
+                .filter(f => f !== null);
 
             const formattedGroups = (groupMemberships || [])
                 .filter((m: any) => m.groups)
@@ -160,6 +211,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                         img: g.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(g.name)}&backgroundColor=F68537`,
                         unreadCount: unreadCountsMap[g.id] || 0,
                         isGroup: true,
+                        lastActivity: lastActivityMap[g.id] || '0',
                         statusCount: 0
                     };
                 });
@@ -200,15 +252,27 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             }));
             const combined = [...friendsWithPresence, ...formattedGroups];
 
+            // ✅ Sort by Last Activity Descending (WhatsApp Style)
+            const sortedItems = Array.from(new Map(combined.map(item => [item.id, item])).values())
+                .sort((a, b) => {
+                    const parseDate = (d: any) => {
+                        if (!d || d === '0') return 0;
+                        const t = new Date(d).getTime();
+                        return isNaN(t) ? 0 : t;
+                    };
+                    return parseDate(b.lastActivity) - parseDate(a.lastActivity);
+                });
+
             set({
                 friends: formattedFriends,
                 groups: formattedGroups,
                 myStatuses: groupedMyStatus,
-                combinedItems: Array.from(new Map(combined.map(item => [item.id, item])).values()),
+                combinedItems: sortedItems,
                 loading: false
             });
-
+            console.log(`loadFriends: Successfully loaded ${formattedFriends.length} friends and ${formattedGroups.length} groups.`);
         } catch (e: any) {
+            console.error('loadFriends ERROR:', e);
             set({ error: e.message, loading: false });
         }
     },

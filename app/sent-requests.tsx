@@ -1,11 +1,11 @@
 import { View, Text, FlatList, TouchableOpacity, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useReceivedRequests } from '@/hooks/useReceivedRequests';
+import { useSentRequests } from '@/hooks/useSentRequests';
 import { useRouter } from 'expo-router';
 
-export default function FriendRequestsScreen() {
-    const { receivedRequests, loading, acceptRequest, rejectRequest, deleteRequest, getCounts, refresh } = useReceivedRequests();
+export default function SentRequestsScreen() {
+    const { sentRequests, loading, cancelRequest, deleteRequest, getCounts, refresh } = useSentRequests();
     const router = useRouter();
 
     return (
@@ -14,7 +14,7 @@ export default function FriendRequestsScreen() {
                 <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
                     <Ionicons name="arrow-back" size={24} color="#F68537" />
                 </TouchableOpacity>
-                <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#F68537' }}>Friend Requests</Text>
+                <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#F68537' }}>Sent Requests</Text>
             </View>
 
             {/* Stats Cards */}
@@ -33,8 +33,9 @@ export default function FriendRequestsScreen() {
             </View>
 
             <FlatList
-                data={receivedRequests}
+                data={sentRequests}
                 keyExtractor={(item) => item.id}
+                contentContainerStyle={{ paddingBottom: 20 }}
                 refreshControl={
                     <RefreshControl refreshing={loading} onRefresh={refresh} tintColor="#F68537" />
                 }
@@ -56,29 +57,21 @@ export default function FriendRequestsScreen() {
                             item.status === 'rejected' ? '#EF4444' + '30' : '#F3F4F6'
                     }}>
                         <Image
-                            source={{ uri: item.sender?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.sender?.username || 'User')}&backgroundColor=F68537` }}
+                            source={{ uri: item.receiver?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.receiver?.username || 'User')}&backgroundColor=F68537` }}
                             style={{ width: 56, height: 56, borderRadius: 28, marginRight: 16 }}
                         />
                         <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1F2937' }}>{item.sender?.username}</Text>
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1F2937' }}>{item.receiver?.username || 'Unknown User'}</Text>
 
                             {item.status === 'pending' ? (
                                 <>
-                                    <Text style={{ color: '#6B7280', fontSize: 14 }}>wants to be your friend</Text>
-                                    <View style={{ flexDirection: 'row', marginTop: 12, gap: 12 }}>
-                                        <TouchableOpacity
-                                            onPress={() => acceptRequest(item.id, item.sender_id)}
-                                            style={{ backgroundColor: '#F68537', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 9999 }}
-                                        >
-                                            <Text style={{ color: 'white', fontWeight: 'bold' }}>Accept</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            onPress={() => rejectRequest(item.id)}
-                                            style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 9999 }}
-                                        >
-                                            <Text style={{ color: '#374151', fontWeight: 'bold' }}>Reject</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                    <Text style={{ color: '#6B7280', fontSize: 14 }}>Request pending...</Text>
+                                    <TouchableOpacity
+                                        onPress={() => cancelRequest(item.id)}
+                                        style={{ marginTop: 12, backgroundColor: '#FEE2E2', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999, alignSelf: 'flex-start' }}
+                                    >
+                                        <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>Cancel Request</Text>
+                                    </TouchableOpacity>
                                 </>
                             ) : item.status === 'accepted' ? (
                                 <View style={{ marginTop: 4 }}>
@@ -88,7 +81,7 @@ export default function FriendRequestsScreen() {
                                         <Text style={{ color: '#6B7280', fontSize: 12 }}> • {new Date(item.updated_at || item.created_at).toLocaleDateString()}</Text>
                                     </View>
                                     <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, alignSelf: 'flex-start', marginTop: 8 }}>
-                                        <Text style={{ color: '#065F46', fontSize: 12, fontWeight: '600' }}>Friends ✅</Text>
+                                        <Text style={{ color: '#065F46', fontSize: 12, fontWeight: '600' }}>Now Friends 🤝</Text>
                                     </View>
                                 </View>
                             ) : (
@@ -112,8 +105,8 @@ export default function FriendRequestsScreen() {
                 )}
                 ListEmptyComponent={
                     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
-                        <Ionicons name="people-outline" size={64} color="#CBD5E1" />
-                        <Text style={{ color: '#94A3B8', marginTop: 16, textAlign: 'center' }}>No requests yet.</Text>
+                        <Ionicons name="paper-plane-outline" size={64} color="#CBD5E1" />
+                        <Text style={{ color: '#94A3B8', marginTop: 16, textAlign: 'center' }}>No sent requests yet.</Text>
                     </View>
                 }
             />

@@ -7,6 +7,9 @@ import { uploadChatMessageMedia } from '../utils/uploadHelper';
 interface ChatState {
     messages: any[];
     loading: boolean;
+    loadingMore: boolean;  // ✅ Pagination loader
+    hasMore: boolean;      // ✅ Kya aur messages hain?
+    pageOffset: number;    // ✅ Current page offset
     isTyping: boolean;
     flyingEmoji: any;
     chatKey: Uint8Array | null;
@@ -17,6 +20,7 @@ interface ChatState {
     // Actions
     initChat: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
+    loadMoreMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>; // ✅ Pagination
     sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string) => Promise<void>;
     reactToMessage: (messageId: string, emoji: string, currentUser: any) => Promise<void>;
     saveEdit: (messageId: string, newText: string, currentUser: any) => Promise<void>;
@@ -25,6 +29,7 @@ interface ChatState {
     setTypingStatus: (typing: boolean, friendId: string, currentUser: any) => void;
     cleanupChat: () => void;
     setFlyingEmoji: (emoji: any) => void;
+    markAsRead: (messageId: string, currentUser: any, friendId: string, isGroup: boolean) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => {
@@ -34,6 +39,9 @@ export const useChatStore = create<ChatState>((set, get) => {
     return {
         messages: [],
         loading: false,
+        loadingMore: false,
+        hasMore: true,
+        pageOffset: 0,
         isTyping: false,
         flyingEmoji: null,
         chatKey: null,
@@ -74,10 +82,34 @@ export const useChatStore = create<ChatState>((set, get) => {
             const { chatKey, cache } = get();
             if (!friendId || !currentUser || !chatKey) return;
 
+            const PAGE_SIZE = 50;
             const isFirstLoad = !cache[friendId] || cache[friendId].messages.length === 0;
             if (isFirstLoad) set({ loading: true });
 
             try {
+                // ✅ Pehle total count lo
+                let countQuery = supabase
+                    .from('messages')
+                    .select('id', { count: 'exact', head: true });
+
+                if (isGroup) {
+                    countQuery = countQuery.eq('group_id', friendId);
+                } else {
+                    countQuery = countQuery.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
+                }
+
+                const { count } = await countQuery;
+                const totalCount = count || 0;
+
+                // ✅ Agar koi message nahi to loading band karo
+                if (totalCount === 0) {
+                    set({ messages: [], loading: false, hasMore: false, pageOffset: 0 });
+                    return;
+                }
+
+                // ✅ Last PAGE_SIZE messages lo (ascending order mein)
+                const startOffset = Math.max(0, totalCount - PAGE_SIZE);
+
                 let query = supabase
                     .from('messages')
                     .select(`
@@ -95,19 +127,23 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 const { data, error } = await query
                     .order('created_at', { ascending: true })
-                    .range(0, 50);
+                    .range(startOffset, totalCount - 1);
 
                 if (error) throw error;
 
                 const decryptedMessages = await Promise.all((data || []).map(async (msg) => {
                     try {
                         let decryptedText = msg.message;
-                        if (msg.message && typeof msg.message === 'string' && (msg.message.startsWith('{') || !msg.message.startsWith('SYSTEM_MSG:'))) {
-                            try {
+
+                        // ✅ Try decrypt karo agar JSON format hai (encrypted message)
+                        if (msg.message && typeof msg.message === 'string') {
+                            const trimmed = msg.message.trim();
+                            // JSON object = encrypted message
+                            if (trimmed.startsWith('{') && trimmed.includes('"iv"') && trimmed.includes('"content"')) {
                                 decryptedText = await decryptText(msg.message, chatKey);
-                            } catch (e) {
-                                decryptedText = msg.message;
                             }
+                            // SYSTEM_MSG: plain text hai, decrypt mat karo
+                            // Baaki sab plain text treat karo
                         }
 
                         let decryptedReply = null;
@@ -116,18 +152,23 @@ export const useChatStore = create<ChatState>((set, get) => {
                                 const replyText = await decryptText(msg.reply.message, chatKey);
                                 decryptedReply = { ...msg.reply, message: replyText };
                             } catch (e) {
-                                decryptedReply = { ...msg.reply, message: '[Encrypted Reply]' };
+                                decryptedReply = { ...msg.reply, message: msg.reply.message };
                             }
                         }
                         return { ...msg, message: decryptedText, reply: decryptedReply };
                     } catch (e) {
-                        return { ...msg, message: msg.message || '[Encrypted Message]' };
+                        return { ...msg }; // ✅ Original message as-is
                     }
                 }));
 
                 const activeChatId = get().activeChatId;
                 if (activeChatId === friendId) {
-                    set({ messages: decryptedMessages, loading: false });
+                    set({
+                        messages: decryptedMessages,
+                        loading: false,
+                        pageOffset: startOffset,
+                        hasMore: startOffset > 0,
+                    });
                 }
 
                 // Update cache
@@ -142,10 +183,108 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 if (unreadIds.length > 0) {
                     await supabase.from('messages').update({ is_read: true, status: 'read' }).in('id', unreadIds);
+
+                    // ✅ Real-time Broadcast: Blue Tick update
+                    const { activeChannel } = get();
+                    if (activeChannel) {
+                        activeChannel.send({
+                            type: 'broadcast',
+                            event: 'status_update',
+                            payload: {
+                                status: 'read',
+                                sender_id: currentUser.id,
+                                group_id: isGroup ? friendId : null
+                            }
+                        });
+                    }
                 }
             } catch (error: any) {
                 console.error('ChatStore: Load error:', error.message);
                 set({ loading: false });
+            }
+        },
+
+        // ✅ PAGINATION - Jab user upar scroll kare to purane messages load karo
+        loadMoreMessages: async (friendId, currentUser, isGroup) => {
+            const { chatKey, messages, pageOffset, hasMore, loadingMore } = get();
+            if (!friendId || !currentUser || !chatKey || !hasMore || loadingMore) return;
+
+            const PAGE_SIZE = 50;
+            set({ loadingMore: true });
+
+            try {
+                // ✅ pageOffset se pehle ke messages lo (ascending order)
+                const endOffset = Math.max(0, pageOffset - 1);
+                const startOffset = Math.max(0, pageOffset - PAGE_SIZE);
+
+                if (endOffset < 0) {
+                    set({ loadingMore: false, hasMore: false });
+                    return;
+                }
+
+                let query = supabase
+                    .from('messages')
+                    .select(`
+            *,
+            sender:profiles!sender_id(id, username, avatar_url),
+            reply:reply_to_id(id, message, sender_id, created_at),
+            status_context:status_id(id, user_id, media_type, media_url, content)
+          `);
+
+                if (isGroup) {
+                    query = query.eq('group_id', friendId);
+                } else {
+                    query = query.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
+                }
+
+                const { data, error } = await query
+                    .order('created_at', { ascending: true })
+                    .range(startOffset, endOffset);
+
+                if (error) throw error;
+
+                const decryptedOlderMessages = await Promise.all((data || []).map(async (msg) => {
+                    try {
+                        let decryptedText = msg.message;
+                        if (msg.message && typeof msg.message === 'string') {
+                            const trimmed = msg.message.trim();
+                            if (trimmed.startsWith('{') && trimmed.includes('"iv"') && trimmed.includes('"content"')) {
+                                decryptedText = await decryptText(msg.message, chatKey);
+                            }
+                        }
+                        let decryptedReply = null;
+                        if (msg.reply && msg.reply.id) {
+                            try {
+                                const replyText = await decryptText(msg.reply.message, chatKey);
+                                decryptedReply = { ...msg.reply, message: replyText };
+                            } catch (e) {
+                                decryptedReply = { ...msg.reply, message: msg.reply.message };
+                            }
+                        }
+                        return { ...msg, message: decryptedText, reply: decryptedReply };
+                    } catch (e) {
+                        return { ...msg }; // ✅ Original message as-is
+                    }
+                }));
+
+                // ✅ Purane messages pehle, naye baad mein
+                const combinedMessages = [...decryptedOlderMessages, ...messages];
+
+                set({
+                    messages: combinedMessages,
+                    loadingMore: false,
+                    pageOffset: startOffset,
+                    hasMore: startOffset > 0,
+                });
+
+                // Update cache
+                set((state) => ({
+                    cache: { ...state.cache, [friendId]: { messages: combinedMessages, key: chatKey } }
+                }));
+
+            } catch (error: any) {
+                console.error('ChatStore: LoadMore error:', error.message);
+                set({ loadingMore: false });
             }
         },
 
@@ -393,9 +532,31 @@ export const useChatStore = create<ChatState>((set, get) => {
             }
         },
 
+        markAsRead: async (messageId, currentUser, friendId, isGroup) => {
+            const { activeChannel } = get();
+            try {
+                await supabase.from('messages').update({ is_read: true, status: 'read' }).eq('id', messageId);
+
+                if (activeChannel) {
+                    activeChannel.send({
+                        type: 'broadcast',
+                        event: 'status_update',
+                        payload: {
+                            status: 'read',
+                            sender_id: currentUser.id,
+                            group_id: isGroup ? friendId : null,
+                            message_id: messageId
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error("markAsRead error:", err);
+            }
+        },
+
         cleanupChat: () => {
             // Only clear active state, keep messages/key in cache
-            set({ activeChannel: null, activeChatId: null, isTyping: false });
+            set({ activeChannel: null, activeChatId: null, isTyping: false, pageOffset: 0, hasMore: true, loadingMore: false });
             if (typingTimeout) clearTimeout(typingTimeout);
         }
     };

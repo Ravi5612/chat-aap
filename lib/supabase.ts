@@ -77,7 +77,7 @@ export const resendVerification = async (email: string) => {
             type: 'signup',
             email: email,
             options: {
-                emailRedirectTo: `chatwarriors://login`,
+                emailRedirectTo: `https://chat-warrios.vercel.app/login`,
             }
         });
         if (error) throw error;
