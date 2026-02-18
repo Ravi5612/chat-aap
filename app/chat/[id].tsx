@@ -377,8 +377,9 @@ export default function ChatScreen() {
                     onCancelEdit={() => setEditingMessage(null)}
                     onSaveEdit={onSaveEdit}
                     isMember={isMember}
+                    isKeyboardOpen={keyboardOffset > 0}
                 />
-                <View style={{ height: keyboardOffset > 0 ? keyboardOffset + 40 : 0 }} />
+                <View style={{ height: keyboardOffset }} />
             </View>
 
             <MessageContextMenu

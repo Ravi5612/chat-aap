@@ -35,6 +35,7 @@ interface ChatInputProps {
     onCancelEdit?: () => void;
     onSaveEdit?: (text: string) => void;
     isMember?: boolean;
+    isKeyboardOpen?: boolean;
 }
 
 export default function ChatInput({
@@ -46,7 +47,8 @@ export default function ChatInput({
     editingMessage,
     onCancelEdit,
     onSaveEdit,
-    isMember = true
+    isMember = true,
+    isKeyboardOpen = false
 }: ChatInputProps) {
     const [message, setMessage] = useState('');
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -189,7 +191,10 @@ export default function ChatInput({
             backgroundColor: 'white',
             borderTopWidth: 1,
             borderTopColor: '#F3F4F6',
-            paddingBottom: insets.bottom > 0 ? insets.bottom + 10 : 20, // Increased padding for safety
+            // Jab keyboard open ho toh padding kam (5), jab band ho toh buttons ke liye zyada (20)
+            paddingBottom: isKeyboardOpen
+                ? 5
+                : (insets.bottom > 0 ? insets.bottom + 10 : 20),
             position: 'relative'
         }}>
             {!isMember && (
