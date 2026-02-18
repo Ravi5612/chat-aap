@@ -189,7 +189,7 @@ export default function ChatInput({
             backgroundColor: 'white',
             borderTopWidth: 1,
             borderTopColor: '#F3F4F6',
-            paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 16),
+            paddingBottom: insets.bottom > 0 ? insets.bottom + 10 : 20, // Increased padding for safety
             position: 'relative'
         }}>
             {!isMember && (

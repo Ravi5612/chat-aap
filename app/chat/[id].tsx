@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -22,6 +22,7 @@ import { useFriendsStore } from '@/store/useFriendsStore';
 import * as Haptics from 'expo-haptics';
 
 export default function ChatScreen() {
+    const [keyboardOffset, setKeyboardOffset] = useState(0);
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
     const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const router = useRouter();
@@ -204,6 +205,16 @@ export default function ChatScreen() {
 
     const headerHeight = useHeaderHeight();
 
+    useEffect(() => {
+        const show = Keyboard.addListener('keyboardDidShow', (e) => {
+            setKeyboardOffset(e.endCoordinates.height);
+        });
+        const hide = Keyboard.addListener('keyboardDidHide', () => {
+            setKeyboardOffset(0);
+        });
+        return () => { show.remove(); hide.remove(); };
+    }, []);
+
     if (!currentUser || (loading && messages.length === 0)) {
         return (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
@@ -329,12 +340,7 @@ export default function ChatScreen() {
                 offer={callSession?.offer}
             />
 
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-                style={{ flex: 1, backgroundColor: '#EBD8B7' }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 70}
-                enabled={true}
-            >
+            <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
                 <View style={{ flex: 1 }}>
                     <MessageList
                         messages={messages}
@@ -372,7 +378,8 @@ export default function ChatScreen() {
                     onSaveEdit={onSaveEdit}
                     isMember={isMember}
                 />
-            </KeyboardAvoidingView>
+                <View style={{ height: keyboardOffset > 0 ? keyboardOffset + 40 : 0 }} />
+            </View>
 
             <MessageContextMenu
                 visible={contextMenuVisible}

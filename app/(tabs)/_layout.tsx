@@ -12,6 +12,10 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
 
+  const tabBarBottomOffset = Platform.OS === 'ios'
+    ? Math.max(insets.bottom, 20)
+    : Math.max(insets.bottom, 8);
+
   return (
     <Tabs
       screenOptions={{
@@ -26,7 +30,7 @@ export default function TabLayout() {
           paddingBottom: 0,
           borderRadius: 20,
           position: 'absolute',
-          bottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 35,
+          bottom: tabBarBottomOffset,
           left: 15,
           right: 15,
           elevation: 5,
