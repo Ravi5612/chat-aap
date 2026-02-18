@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import ReplyPreview from './ReplyPreview';
 
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import * as Contacts from 'expo-contacts';
 import AttachmentMenu from './AttachmentMenu';
@@ -134,6 +135,32 @@ export default function ChatInput({
         }
     };
 
+    const handleDocument = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*', // allow all files, including .apk
+                copyToCacheDirectory: true,
+            });
+
+            // New SDK returns { assets, canceled }
+            // Older shape: { name, uri, size, mimeType, type }
+            // Handle both safely
+            // @ts-ignore
+            if (result.canceled) return;
+
+            // @ts-ignore
+            const asset = result.assets?.[0] ?? result;
+            if (!asset) return;
+
+            const name = asset.name || 'file';
+            const uri = asset.uri;
+
+            onSendMessage(`📎 Document: ${name}\n${uri}`);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to pick document.');
+        }
+    };
+
     const handleSelectEmoji = (emoji: string) => {
         setMessage(prev => prev + emoji);
     };
@@ -239,7 +266,7 @@ export default function ChatInput({
                             onImage={handlePickImage}
                             onLocation={handleLocation}
                             onContact={handleContact}
-                            onDocument={() => Alert.alert("Coming soon")}
+                            onDocument={handleDocument}
                         />
 
                         <TextInput
