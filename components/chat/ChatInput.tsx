@@ -8,7 +8,8 @@ import {
     Platform,
     StyleSheet,
     Image,
-    Alert
+    Alert,
+    Keyboard
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -186,17 +187,19 @@ export default function ChatInput({
         }
     };
 
+    const bottomPadding = Platform.OS === 'android'
+        ? (insets.bottom > 0 ? insets.bottom + 10 : 12) // Constant padding for Android to prevent jumps
+        : (isKeyboardOpen ? 5 : (insets.bottom > 0 ? insets.bottom + 10 : 20));
+
     return (
         <View style={{
-            backgroundColor: 'white',
-            borderTopWidth: 1,
-            borderTopColor: '#F3F4F6',
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
             // Jab keyboard open ho toh padding kam (5), jab band ho toh buttons ke liye zyada (20)
-            paddingBottom: isKeyboardOpen
-                ? 5
-                : (insets.bottom > 0 ? insets.bottom + 10 : 20),
+            paddingBottom: bottomPadding,
             position: 'relative'
         }}>
+
             {!isMember && (
                 <View style={{
                     position: 'absolute',

@@ -14,7 +14,7 @@ export default function TabLayout() {
 
   const tabBarBottomOffset = Platform.OS === 'ios'
     ? Math.max(insets.bottom, 20)
-    : Math.max(insets.bottom, 8);
+    : Math.max(insets.bottom + 10, 20);
 
   return (
     <Tabs

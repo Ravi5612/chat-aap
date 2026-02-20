@@ -22,8 +22,9 @@ import { useFriendsStore } from '@/store/useFriendsStore';
 import * as Haptics from 'expo-haptics';
 
 export default function ChatScreen() {
-    const [keyboardOffset, setKeyboardOffset] = useState(0);
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
+    const insets = useSafeAreaInsets();
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
     const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const router = useRouter();
     const { user: currentUser } = useAuthStore();
@@ -206,14 +207,29 @@ export default function ChatScreen() {
     const headerHeight = useHeaderHeight();
 
     useEffect(() => {
-        const show = Keyboard.addListener('keyboardDidShow', (e) => {
-            setKeyboardOffset(e.endCoordinates.height);
-        });
-        const hide = Keyboard.addListener('keyboardDidHide', () => {
-            setKeyboardOffset(0);
-        });
-        return () => { show.remove(); hide.remove(); };
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+        const keyboardShowListener = Keyboard.addListener(
+            showEvent,
+            () => {
+                setKeyboardVisible(true);
+            }
+        );
+        const keyboardHideListener = Keyboard.addListener(
+            hideEvent,
+            () => {
+                setKeyboardVisible(false);
+            }
+        );
+
+        return () => {
+            keyboardHideListener.remove();
+            keyboardShowListener.remove();
+        };
     }, []);
+
+
 
     if (!currentUser || (loading && messages.length === 0)) {
         return (
@@ -222,6 +238,58 @@ export default function ChatScreen() {
             </View>
         );
     }
+
+    const chatContent = (
+        <View style={{ flex: 1 }}>
+            <MessageList
+                messages={messages}
+                currentUser={currentUser}
+                onReply={(msg) => setReplyingTo(msg)}
+                friendName={friendName}
+                onLongPress={handleLongPress}
+                onImagePress={handleImagePress}
+                flyingEmoji={flyingEmoji}
+                onLoadMore={handleLoadMore}
+                loadingMore={loadingMore}
+            />
+
+            {isTyping && (
+                <View style={styles.typingIndicatorContainer}>
+                    <View style={styles.typingBubble}>
+                        <View style={styles.dotsContainer}>
+                            <View style={styles.dot} />
+                            <View style={[styles.dot, { opacity: 0.6 }]} />
+                            <View style={[styles.dot, { opacity: 0.3 }]} />
+                        </View>
+                        <Text style={styles.typingText}>{friendName} is typing...</Text>
+                    </View>
+                </View>
+            )}
+
+            <CallScreen
+                visible={!!callSession}
+                callState={callSession?.status}
+                onEndCall={endCall}
+                onAcceptCall={setCallActive}
+                currentUser={currentUser}
+                callType={callSession?.type || 'video'}
+                friend={callSession?.friend || {}}
+                offer={callSession?.offer}
+            />
+
+            <ChatInput
+                onSendMessage={onSendMessage}
+                onTyping={handleTypingStatus}
+                replyingTo={replyingTo}
+                onCancelReply={() => setReplyingTo(null)}
+                editingMessage={editingMessage}
+                onCancelEdit={() => setEditingMessage(null)}
+                onSaveEdit={onSaveEdit}
+                isMember={isMember}
+                isKeyboardOpen={keyboardVisible}
+            />
+        </View>
+    );
 
     return (
         <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
@@ -329,58 +397,14 @@ export default function ChatScreen() {
                 }}
             />
 
-            <CallScreen
-                visible={!!callSession}
-                callState={callSession?.status}
-                onEndCall={endCall}
-                onAcceptCall={setCallActive}
-                currentUser={currentUser}
-                callType={callSession?.type || 'video'}
-                friend={callSession?.friend || {}}
-                offer={callSession?.offer}
-            />
-
-            <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
-                <View style={{ flex: 1 }}>
-                    <MessageList
-                        messages={messages}
-                        currentUser={currentUser}
-                        onReply={(msg) => setReplyingTo(msg)}
-                        friendName={friendName}
-                        onLongPress={handleLongPress}
-                        onImagePress={handleImagePress}
-                        flyingEmoji={flyingEmoji}
-                        onLoadMore={handleLoadMore}
-                        loadingMore={loadingMore}
-                    />
-
-                    {isTyping && (
-                        <View style={styles.typingIndicatorContainer}>
-                            <View style={styles.typingBubble}>
-                                <View style={styles.dotsContainer}>
-                                    <View style={styles.dot} />
-                                    <View style={[styles.dot, { opacity: 0.6 }]} />
-                                    <View style={[styles.dot, { opacity: 0.3 }]} />
-                                </View>
-                                <Text style={styles.typingText}>{friendName} is typing...</Text>
-                            </View>
-                        </View>
-                    )}
-                </View>
-
-                <ChatInput
-                    onSendMessage={onSendMessage}
-                    onTyping={handleTypingStatus}
-                    replyingTo={replyingTo}
-                    onCancelReply={() => setReplyingTo(null)}
-                    editingMessage={editingMessage}
-                    onCancelEdit={() => setEditingMessage(null)}
-                    onSaveEdit={onSaveEdit}
-                    isMember={isMember}
-                    isKeyboardOpen={keyboardOffset > 0}
-                />
-                <View style={{ height: keyboardOffset }} />
-            </View>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 35}
+                enabled={true}
+            >
+                {chatContent}
+            </KeyboardAvoidingView>
 
             <MessageContextMenu
                 visible={contextMenuVisible}
@@ -404,6 +428,17 @@ export default function ChatScreen() {
                 onClose={() => setViewerVisible(false)}
                 imageUri={viewerImage}
             />
+            {Platform.OS === 'android' && !keyboardVisible && (
+                <View style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: insets.bottom + 20,
+                    backgroundColor: 'white',
+                    // zIndex removed to ensure visibility on top of background
+                }} />
+            )}
         </View>
     );
 }
