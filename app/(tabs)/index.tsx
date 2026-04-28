@@ -10,6 +10,7 @@ import { useStatusActions } from '@/hooks/useStatusActions';
 import { Ionicons } from '@expo/vector-icons';
 import { useNotifications } from '@/hooks/useNotifications';
 import FilterTabs from '@/components/chat/FilterTabs';
+import ContactSuggestions from '@/components/chat/ContactSuggestions';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import FriendContextMenu from '@/components/chat/FriendContextMenu';
 import { useReceivedRequests } from '@/hooks/useReceivedRequests';
@@ -260,12 +261,15 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
           contentContainerStyle={{ paddingBottom: 110 }}
           ListHeaderComponent={
-            <FilterTabs
-              activeTab={activeTab}
-              onTabChange={onTabChange}
-              counts={tabCounts}
-              onSearchChange={setSearchQuery}
-            />
+            <View>
+              {activeTab === 'all' && !searchQuery && <ContactSuggestions />}
+              <FilterTabs
+                activeTab={activeTab}
+                onTabChange={onTabChange}
+                counts={tabCounts}
+                onSearchChange={setSearchQuery}
+              />
+            </View>
           }
           renderItem={({ item }) => (
             <FriendListItem
