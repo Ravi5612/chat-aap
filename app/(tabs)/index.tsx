@@ -111,6 +111,7 @@ export default function HomeScreen() {
     // Tab filtering
     let tabMatch = true;
     if (activeTab === 'all') tabMatch = !item.isArchived;
+    else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived;
     else if (activeTab === 'groups') tabMatch = item.isGroup && !item.isArchived;
     else if (activeTab === 'favourites') tabMatch = item.isFavorite && !item.isArchived;
     else if (activeTab === 'archive') tabMatch = item.isArchived;
@@ -124,6 +125,7 @@ export default function HomeScreen() {
 
   const tabCounts = {
     all: combinedItems.filter(i => !i.isArchived).length,
+    friends: combinedItems.filter(i => !i.isGroup && !i.isArchived).length,
     groups: combinedItems.filter(i => i.isGroup && !i.isArchived).length,
     favourites: combinedItems.filter(i => i.isFavorite && !i.isArchived).length,
     archive: combinedItems.filter(i => i.isArchived).length,
@@ -262,13 +264,13 @@ export default function HomeScreen() {
           contentContainerStyle={{ paddingBottom: 110 }}
           ListHeaderComponent={
             <View>
-              {activeTab === 'all' && !searchQuery && <ContactSuggestions />}
               <FilterTabs
                 activeTab={activeTab}
                 onTabChange={onTabChange}
                 counts={tabCounts}
                 onSearchChange={setSearchQuery}
               />
+              {activeTab === 'all' && !searchQuery && <ContactSuggestions />}
             </View>
           }
           renderItem={({ item }) => (

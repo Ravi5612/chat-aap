@@ -4,14 +4,26 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Alert } from 'react-native';
 
+// Module-level cache to prevent re-fetching on tab switches
+let cachedSuggestions: any[] | null = null;
+let lastFetchTime = 0;
+const CACHE_DURATION = 1000 * 60 * 5; // 5 minutes
+
 export const useContactSuggestions = () => {
     const { user: currentUser } = useAuthStore();
-    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [suggestions, setSuggestions] = useState<any[]>(cachedSuggestions || []);
     const [loading, setLoading] = useState(false);
     const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
 
-    const loadSuggestions = async () => {
+    const loadSuggestions = async (forceRefresh = false) => {
         if (!currentUser?.id) return;
+        
+        // Use cache if it's recent and not forced to refresh
+        if (!forceRefresh && cachedSuggestions && (Date.now() - lastFetchTime < CACHE_DURATION)) {
+            setSuggestions(cachedSuggestions);
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -65,20 +77,26 @@ export const useContactSuggestions = () => {
 
                 // Split array into chunks of 100 to avoid overly large queries
                 const chunkSize = 100;
-                let registeredProfiles: any[] = [];
+                const chunkPromises = [];
                 
                 for (let i = 0; i < uniquePhones.length; i += chunkSize) {
                     const chunk = uniquePhones.slice(i, i + chunkSize);
-                    const { data: profiles, error } = await supabase
-                        .from('profiles')
-                        .select('id, username, phone, avatar_url, email')
-                        .in('phone', chunk)
-                        .neq('id', currentUser.id);
-
-                    if (!error && profiles) {
-                        registeredProfiles = [...registeredProfiles, ...profiles];
-                    }
+                    chunkPromises.push(
+                        supabase
+                            .from('profiles')
+                            .select('id, username, phone, avatar_url, email')
+                            .in('phone', chunk)
+                            .neq('id', currentUser.id)
+                    );
                 }
+
+                const chunkResults = await Promise.all(chunkPromises);
+                let registeredProfiles: any[] = [];
+                chunkResults.forEach(({ data, error }) => {
+                    if (!error && data) {
+                        registeredProfiles = [...registeredProfiles, ...data];
+                    }
+                });
 
                 if (registeredProfiles.length === 0) {
                     setSuggestions([]);
@@ -88,41 +106,43 @@ export const useContactSuggestions = () => {
 
                 const profileIds = registeredProfiles.map(p => p.id);
 
-                // 2. Filter out existing friends
-                const { data: friendships } = await supabase
-                    .from('friendships')
-                    .select('friend_id')
-                    .eq('user_id', currentUser.id)
-                    .in('friend_id', profileIds);
+                // 2. Fetch existing friends and requests in parallel
+                const [friendshipsRes, sentRequestsRes, receivedRequestsRes] = await Promise.all([
+                    supabase
+                        .from('friendships')
+                        .select('friend_id')
+                        .eq('user_id', currentUser.id)
+                        .in('friend_id', profileIds),
+                    supabase
+                        .from('friend_requests')
+                        .select('receiver_id')
+                        .eq('sender_id', currentUser.id)
+                        .in('receiver_id', profileIds)
+                        .in('status', ['pending', 'accepted']),
+                    supabase
+                        .from('friend_requests')
+                        .select('sender_id')
+                        .eq('receiver_id', currentUser.id)
+                        .in('sender_id', profileIds)
+                        .in('status', ['pending', 'accepted'])
+                ]);
 
-                const friendIds = new Set(friendships?.map(f => f.friend_id) || []);
+                const friendIds = new Set(friendshipsRes.data?.map(f => f.friend_id) || []);
+                const sentRequestIds = new Set(sentRequestsRes.data?.map(r => r.receiver_id) || []);
+                const receivedRequestIds = new Set(receivedRequestsRes.data?.map(r => r.sender_id) || []);
 
-                // 3. Filter out sent requests
-                const { data: sentRequests } = await supabase
-                    .from('friend_requests')
-                    .select('receiver_id')
-                    .eq('sender_id', currentUser.id)
-                    .in('receiver_id', profileIds)
-                    .in('status', ['pending', 'accepted']);
+                const finalSuggestions = registeredProfiles
+                    .filter(p => 
+                        !friendIds.has(p.id) && 
+                        !receivedRequestIds.has(p.id)
+                    )
+                    .map(p => ({
+                        ...p,
+                        requestStatus: sentRequestIds.has(p.id) ? 'pending' : null
+                    }));
 
-                const sentRequestIds = new Set(sentRequests?.map(r => r.receiver_id) || []);
-
-                // 4. Filter out received requests
-                const { data: receivedRequests } = await supabase
-                    .from('friend_requests')
-                    .select('sender_id')
-                    .eq('receiver_id', currentUser.id)
-                    .in('sender_id', profileIds)
-                    .in('status', ['pending', 'accepted']);
-
-                const receivedRequestIds = new Set(receivedRequests?.map(r => r.sender_id) || []);
-
-                const finalSuggestions = registeredProfiles.filter(p => 
-                    !friendIds.has(p.id) && 
-                    !sentRequestIds.has(p.id) && 
-                    !receivedRequestIds.has(p.id)
-                );
-
+                cachedSuggestions = finalSuggestions;
+                lastFetchTime = Date.now();
                 setSuggestions(finalSuggestions);
             }
         } catch (error) {
@@ -141,7 +161,9 @@ export const useContactSuggestions = () => {
         
         try {
             // Optimistic update UI
-            setSuggestions(prev => prev.filter(p => p.id !== receiverId));
+            setSuggestions(prev => prev.map(p => 
+                p.id === receiverId ? { ...p, requestStatus: 'pending' } : p
+            ));
 
             const { error } = await supabase
                 .from('friend_requests')

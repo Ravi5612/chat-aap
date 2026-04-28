@@ -15,6 +15,7 @@ export default function FilterTabs({ activeTab, onTabChange, counts = {}, onSear
 
     const tabs = [
         { id: 'all', label: 'All', icon: '💬' },
+        { id: 'friends', label: 'Friends', icon: '👥' },
         { id: 'groups', label: 'Groups', icon: '👨‍👩‍👧‍👦' },
         { id: 'favourites', label: 'Favourites', icon: '⭐' },
         { id: 'archive', label: 'Archive', icon: '📦' },
