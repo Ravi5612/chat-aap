@@ -25,7 +25,12 @@
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "MODIFY_AUDIO_SETTINGS"
+        "MODIFY_AUDIO_SETTINGS",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT"
       ],
       "softwareKeyboardLayoutMode": "adjustResize"
     },
@@ -45,7 +50,26 @@
       ],
       "expo-font",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ChatWarriors to access your camera",
+          "microphonePermission": "Allow ChatWarriors to access your microphone"
+        }
+      ],
+      "expo-av",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24
+          },
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

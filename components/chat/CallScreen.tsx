@@ -1,18 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Modal, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useWebRTC } from '@/hooks/useWebRTC';
+import { RtcSurfaceView, RenderModeType } from 'react-native-agora';
+import { useAgora } from '@/hooks/useAgora';
 import { useCallLogger } from '@/hooks/useCallLogger';
-
-let RTCView: any = View; // Fallback to View if WebRTC is missing
-try {
-    const WebRTCModule = require('react-native-webrtc');
-    if (WebRTCModule.RTCView) {
-        RTCView = WebRTCModule.RTCView;
-    }
-} catch (e) {
-    console.warn("RTCView not found. Calling UI will be limited.");
-}
 
 const { width, height } = Dimensions.get('window');
 
@@ -42,27 +30,33 @@ export default function CallScreen({
     const durationRef = useRef(0);
 
     const {
-        localStream,
-        remoteStream,
+        joined,
+        remoteUid,
         connectionStatus,
         isMuted,
         isVideoOff,
-        acceptCall,
-        endCall,
         toggleMute,
         toggleVideo,
-        switchCamera
-    } = useWebRTC({
+        switchCamera,
+        channelName
+    } = useAgora({
         currentUser,
         friend,
         callType,
         callState,
         onAcceptCall,
-        onEndCall,
-        incomingOffer
+        onEndCall
     });
 
     const { saveCallLog } = useCallLogger(currentUser, friend, callType, callState);
+
+    const acceptCall = () => {
+        onAcceptCall();
+    };
+
+    const endCall = () => {
+        onEndCall();
+    };
 
     // Call Duration Timer
     useEffect(() => {
@@ -101,11 +95,10 @@ export default function CallScreen({
             <View style={styles.container}>
                 {/* Main Video (Remote) */}
                 <View style={styles.mainVideoContainer}>
-                    {callType === 'video' && remoteStream && !isSwapped && RTCView !== View ? (
-                        <RTCView
-                            streamURL={(remoteStream as any).toURL()}
+                    {callType === 'video' && remoteUid !== 0 && !isSwapped ? (
+                        <RtcSurfaceView
+                            canvas={{ uid: remoteUid }}
                             style={styles.fullVideo}
-                            objectFit="cover"
                         />
                     ) : (
                         <View style={styles.placeholderContainer}>
@@ -122,24 +115,19 @@ export default function CallScreen({
                                     callState === 'incoming' ? 'Incoming Call...' :
                                         callType === 'audio' ? 'On Call' : 'Connecting video...'}
                             </Text>
-                            {RTCView === View && callType === 'video' && (
-                                <Text style={styles.debugText}>(Video preview not available in Expo Go)</Text>
-                            )}
                         </View>
                     )}
                 </View>
 
                 {/* Local Preview (PIP) */}
-                {callType === 'video' && localStream && RTCView !== View && (
+                {callType === 'video' && joined && (
                     <TouchableOpacity
                         onPress={() => setIsSwapped(!isSwapped)}
                         style={styles.pipContainer}
                     >
-                        <RTCView
-                            streamURL={(localStream as any).toURL()}
+                        <RtcSurfaceView
+                            canvas={{ uid: 0 }}
                             style={styles.pipVideo}
-                            objectFit="cover"
-                            mirror={true}
                         />
                         {isVideoOff && (
                             <View style={styles.videoOffOverlay}>

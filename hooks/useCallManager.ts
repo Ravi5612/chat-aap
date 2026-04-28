@@ -31,11 +31,28 @@ export const useCallManager = (currentUser: any, combinedItems: any[]) => {
         };
     }, [currentUser, combinedItems]);
 
-    const handleStartCall = (friend: any, type: 'audio' | 'video' = 'video', onlineUsers?: any) => {
-        if (!friend) return;
+    const handleStartCall = (friend: any, type: 'audio' | 'video' = 'video') => {
+        if (!friend || !currentUser) return;
 
-        // In a real app, check if friend is online
         setCallSession({ status: 'outgoing', friend, type });
+
+        // Signaling: Send ring event to the friend
+        const personalChannel = supabase.channel(`calls:${friend.id}`);
+        personalChannel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                personalChannel.send({
+                    type: 'broadcast',
+                    event: 'signal',
+                    payload: {
+                        type: 'offer',
+                        call_type: type,
+                        caller_id: currentUser.id
+                    }
+                });
+                // Auto clean up after signaling
+                setTimeout(() => supabase.removeChannel(personalChannel), 5000);
+            }
+        });
     };
 
     const setCallActive = () => {
