@@ -21,6 +21,10 @@
         "backgroundColor": "#FFF5E6"
       },
       "edgeToEdgeEnabled": false,
+      "navigationBar": {
+        "backgroundColor": "#EBD8B7",
+        "barStyle": "dark-content"
+      },
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "CAMERA",

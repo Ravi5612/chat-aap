@@ -399,8 +399,8 @@ export default function ChatScreen() {
 
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 35}
+                behavior="padding"
+                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 20}
                 enabled={true}
             >
                 {chatContent}
@@ -428,17 +428,6 @@ export default function ChatScreen() {
                 onClose={() => setViewerVisible(false)}
                 imageUri={viewerImage}
             />
-            {Platform.OS === 'android' && !keyboardVisible && (
-                <View style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: insets.bottom + 20,
-                    backgroundColor: 'white',
-                    // zIndex removed to ensure visibility on top of background
-                }} />
-            )}
         </View>
     );
 }

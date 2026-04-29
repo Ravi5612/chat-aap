@@ -163,18 +163,24 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 const activeChatId = get().activeChatId;
                 if (activeChatId === friendId) {
+                    // Deduplicate by ID
+                    const uniqueMessages = Array.from(new Map(decryptedMessages.map(m => [m.id, m])).values());
+                    
                     set({
-                        messages: decryptedMessages,
+                        messages: uniqueMessages,
                         loading: false,
                         pageOffset: startOffset,
                         hasMore: startOffset > 0,
                     });
                 }
 
-                // Update cache
-                set((state) => ({
-                    cache: { ...state.cache, [friendId]: { messages: decryptedMessages, key: chatKey } }
-                }));
+                // Update cache with deduplicated messages
+                set((state) => {
+                    const uniqueMessages = Array.from(new Map(decryptedMessages.map(m => [m.id, m])).values());
+                    return {
+                        cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: chatKey } }
+                    };
+                });
 
                 // Mark as read
                 const unreadIds = (data || [])
@@ -267,11 +273,12 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
                 }));
 
-                // ✅ Purane messages pehle, naye baad mein
+                // ✅ Purane messages pehle, naye baad mein - Deduplicate by ID
                 const combinedMessages = [...decryptedOlderMessages, ...messages];
+                const uniqueMessages = Array.from(new Map(combinedMessages.map(m => [m.id, m])).values());
 
                 set({
-                    messages: combinedMessages,
+                    messages: uniqueMessages,
                     loadingMore: false,
                     pageOffset: startOffset,
                     hasMore: startOffset > 0,
@@ -279,7 +286,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 // Update cache
                 set((state) => ({
-                    cache: { ...state.cache, [friendId]: { messages: combinedMessages, key: chatKey } }
+                    cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: chatKey } }
                 }));
 
             } catch (error: any) {

@@ -7,9 +7,10 @@ interface FriendListItemProps {
     onLongPress?: (friend: any) => void;
     isOnline?: boolean;
     onViewUserStatus?: (friend: any) => void;
+    onImageClick?: (friend: any) => void;
 }
 
-export default function FriendListItem({ friend, onClick, onLongPress, isOnline, onViewUserStatus }: FriendListItemProps) {
+export default function FriendListItem({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
     // Determine ring color for status updates like web app
     const hasStatus = friend.statusCount > 0;
     const ringColor = hasStatus
@@ -34,9 +35,11 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
             <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={(e) => {
+                    e.stopPropagation();
                     if (hasStatus && onViewUserStatus) {
-                        e.stopPropagation();
                         onViewUserStatus(friend);
+                    } else if (onImageClick) {
+                        onImageClick(friend);
                     }
                 }}
                 style={{ position: 'relative' }}

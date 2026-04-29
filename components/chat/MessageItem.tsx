@@ -126,28 +126,19 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     activeOpacity={0.9}
                     style={{
                         maxWidth: '85%',
-                        borderRadius: 20,
+                        borderRadius: 18,
+                        paddingVertical: 4,
+                        paddingHorizontal: 2,
+                        backgroundColor: isCurrentUser ? '#F68537' : 'white',
+                        borderTopRightRadius: isCurrentUser ? 4 : 18,
+                        borderTopLeftRadius: isCurrentUser ? 18 : 4,
+                        elevation: 1,
                         shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
+                        shadowOffset: { width: 0, height: 1 },
                         shadowOpacity: 0.1,
-                        shadowRadius: 8,
-                        elevation: 5,
-                        overflow: 'hidden',
-                        backgroundColor: isCurrentUser ? 'transparent' : 'white',
-                        borderTopRightRadius: isCurrentUser ? 4 : 20,
-                        borderTopLeftRadius: isCurrentUser ? 20 : 4,
-                        borderWidth: isCurrentUser ? 0 : 1.5,
-                        borderColor: isCurrentUser ? 'transparent' : '#F9F1E7'
+                        shadowRadius: 1,
                     }}
                 >
-                    {isCurrentUser ? (
-                        <LinearGradient
-                            colors={['#F68537', '#E67527']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-                        />
-                    ) : null}
                     {/* Group Sender Name */}
                     {!isCurrentUser && message.group_id && (
                         <Text style={{ paddingHorizontal: 12, paddingTop: 8, fontSize: 11, fontWeight: 'bold', color: '#F68537' }}>

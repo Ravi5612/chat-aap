@@ -1,4 +1,8 @@
-import { RtcSurfaceView, RenderModeType } from 'react-native-agora';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
+import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useCallLogger } from '@/hooks/useCallLogger';
 
@@ -96,8 +100,8 @@ export default function CallScreen({
                 {/* Main Video (Remote) */}
                 <View style={styles.mainVideoContainer}>
                     {callType === 'video' && remoteUid !== 0 && !isSwapped ? (
-                        <RtcSurfaceView
-                            canvas={{ uid: remoteUid }}
+                        <AgoraVideoView
+                            uid={remoteUid}
                             style={styles.fullVideo}
                         />
                     ) : (
@@ -125,8 +129,8 @@ export default function CallScreen({
                         onPress={() => setIsSwapped(!isSwapped)}
                         style={styles.pipContainer}
                     >
-                        <RtcSurfaceView
-                            canvas={{ uid: 0 }}
+                        <AgoraVideoView
+                            uid={0}
                             style={styles.pipVideo}
                         />
                         {isVideoOff && (

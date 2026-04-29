@@ -1,4 +1,5 @@
-import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
+import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet, Platform, Modal } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -32,6 +33,7 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFriendForMenu, setSelectedFriendForMenu] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [selectedImageForZoom, setSelectedImageForZoom] = useState<string | null>(null);
 
   const onTabChange = (tab: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -105,6 +107,11 @@ export default function HomeScreen() {
     const imageParam = encodeURIComponent(friend.img || '');
     const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
     router.push(url as any);
+  };
+
+  const handleImageClick = (friend: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`);
   };
 
   const filteredItems = combinedItems.filter(item => {
@@ -280,6 +287,7 @@ export default function HomeScreen() {
               onLongPress={handleLongPress}
               isOnline={item.isOnline}
               onViewUserStatus={handleViewUserStatus}
+              onImageClick={handleImageClick}
             />
           )}
           ListEmptyComponent={
@@ -302,6 +310,35 @@ export default function HomeScreen() {
           onClose={() => setMenuVisible(false)}
           onAction={handleMenuAction}
         />
+
+        {/* Profile Image Zoom Modal */}
+        <Modal
+          visible={!!selectedImageForZoom}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setSelectedImageForZoom(null)}
+        >
+          <TouchableOpacity
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+            activeOpacity={1}
+            onPress={() => setSelectedImageForZoom(null)}
+          >
+            <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={{ width: '85%', aspectRatio: 1, backgroundColor: 'white', borderRadius: 20, overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20 }}>
+              <Image
+                source={{ uri: selectedImageForZoom || '' }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+              />
+              <TouchableOpacity
+                onPress={() => setSelectedImageForZoom(null)}
+                style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 20, padding: 8 }}
+              >
+                <Ionicons name="close" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </View>
     </View>
   );

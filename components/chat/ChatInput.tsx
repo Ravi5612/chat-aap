@@ -188,7 +188,7 @@ export default function ChatInput({
     };
 
     const bottomPadding = Platform.OS === 'android'
-        ? (insets.bottom > 0 ? insets.bottom + 10 : 12) // Constant padding for Android to prevent jumps
+        ? (isKeyboardOpen ? 4 : Math.max(insets.bottom, 14))
         : (isKeyboardOpen ? 5 : (insets.bottom > 0 ? insets.bottom + 10 : 20));
 
     return (
@@ -268,18 +268,45 @@ export default function ChatInput({
                     </View>
                 )}
 
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 16, paddingVertical: 8, opacity: isRecording ? 0 : 1 }}>
-                    <View style={{ flex: 1, backgroundColor: 'white', borderWidth: 1, borderColor: '#F6853740', borderRadius: 30, paddingHorizontal: 4, paddingVertical: 4, minHeight: 48, flexDirection: 'row', alignItems: 'center' }}>
-                        <AttachmentMenu
-                            onImage={handlePickImage}
-                            onLocation={handleLocation}
-                            onContact={handleContact}
-                            onDocument={handleDocument}
-                        />
+                <View style={{ 
+                    flexDirection: 'row', 
+                    alignItems: 'flex-end', 
+                    gap: 6, 
+                    paddingHorizontal: 8, 
+                    paddingVertical: 10, 
+                    opacity: isRecording ? 0 : 1 
+                }}>
+                    <View style={{ 
+                        flex: 1, 
+                        backgroundColor: 'white', 
+                        borderRadius: 25, 
+                        minHeight: 48, 
+                        flexDirection: 'row', 
+                        alignItems: 'center',
+                        paddingHorizontal: 6,
+                        elevation: 2,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 2,
+                    }}>
+                        <TouchableOpacity 
+                            onPress={() => setEmojiModalVisible(true)}
+                            style={{ padding: 8 }}
+                        >
+                            <Ionicons name="happy-outline" size={26} color="#6B7280" />
+                        </TouchableOpacity>
 
                         <TextInput
                             ref={inputRef}
-                            style={{ flex: 1, fontSize: 16, paddingVertical: 8, paddingHorizontal: 8, color: '#1F2937' }}
+                            style={{ 
+                                flex: 1, 
+                                fontSize: 16, 
+                                paddingVertical: 10, 
+                                paddingHorizontal: 4, 
+                                color: '#1F2937',
+                                maxHeight: 120
+                            }}
                             placeholder={editingMessage ? "Edit message..." : "Message"}
                             placeholderTextColor="#94A3B8"
                             value={message}
@@ -289,14 +316,21 @@ export default function ChatInput({
                             editable={!disabled}
                         />
 
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 }}>
-                            <TouchableOpacity onPress={() => setEmojiModalVisible(true)}>
-                                <Ionicons name="happy-outline" size={24} color={emojiModalVisible ? "#F68537" : "#94A3B8"} />
+                        <AttachmentMenu
+                            onImage={handlePickImage}
+                            onLocation={handleLocation}
+                            onContact={handleContact}
+                            onDocument={handleDocument}
+                        />
+
+                        {!message.trim() && !selectedImage && (
+                            <TouchableOpacity 
+                                onPress={handlePickImage}
+                                style={{ padding: 8 }}
+                            >
+                                <Ionicons name="camera" size={26} color="#6B7280" />
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={handlePickImage}>
-                                <Ionicons name="camera-outline" size={24} color="#94A3B8" />
-                            </TouchableOpacity>
-                        </View>
+                        )}
                     </View>
 
                     <TouchableOpacity
@@ -309,17 +343,18 @@ export default function ChatInput({
                             alignItems: 'center',
                             justifyContent: 'center',
                             backgroundColor: '#F68537',
+                            elevation: 3,
                             shadowColor: '#F68537',
                             shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 4,
-                            elevation: 4
+                            shadowOpacity: 0.4,
+                            shadowRadius: 3,
                         }}
                     >
                         <Ionicons
-                            name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic-outline")}
+                            name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic")}
                             size={24}
                             color="white"
+                            style={{ marginLeft: (message.trim() || selectedImage) ? 3 : 0 }}
                         />
                     </TouchableOpacity>
                 </View>

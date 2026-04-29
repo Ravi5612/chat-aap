@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
-import {
-    createAgoraRtcEngine,
-    ChannelProfileType,
-    ClientRoleType,
-    IRtcEngine,
-    RtcConnection,
-    IRtcEngineEventHandler,
-    VideoSourceType,
-    RenderModeType
-} from 'react-native-agora';
-import { supabase } from '@/lib/supabase';
+
+let AgoraRTC: any = null;
+try {
+    // Attempt to load Agora only on native and if available
+    if (Platform.OS !== 'web') {
+        AgoraRTC = require('react-native-agora');
+    }
+} catch (e) {
+    console.warn('Agora SDK not found or not linked. Calling features will be disabled.');
+}
 
 const APP_ID = process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
 
@@ -20,21 +19,20 @@ export const useAgora = ({
     callType,
     callState,
     onAcceptCall,
-    onEndCall,
-    incomingOffer // This was for WebRTC, we'll ignore it for Agora or use it as a trigger
+    onEndCall
 }: any) => {
     const [joined, setJoined] = useState(false);
     const [remoteUid, setRemoteUid] = useState<number>(0);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(callType === 'audio');
-    const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+    const [connectionStatus, setConnectionStatus] = useState(AgoraRTC ? 'Disconnected' : 'SDK Not Found');
     
-    const engine = useRef<IRtcEngine | null>(null);
+    const engine = useRef<any>(null);
     const channelName = useRef<string>('');
 
-    // Request permissions
     const requestPermissions = async () => {
         if (Platform.OS === 'android') {
+            const { PermissionsAndroid } = require('react-native');
             await PermissionsAndroid.requestMultiple([
                 PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
                 PermissionsAndroid.PERMISSIONS.CAMERA,
@@ -43,47 +41,39 @@ export const useAgora = ({
     };
 
     const init = useCallback(async () => {
+        if (!AgoraRTC) return;
         if (!APP_ID || APP_ID === 'YOUR_AGORA_APP_ID_HERE') {
-            console.error('Agora App ID is missing. Please set it in .env');
+            console.error('Agora App ID is missing.');
             return;
         }
 
         try {
             await requestPermissions();
             
-            engine.current = createAgoraRtcEngine();
+            engine.current = AgoraRTC.createAgoraRtcEngine();
             const rtcEngine = engine.current;
 
             rtcEngine.initialize({
                 appId: APP_ID,
-                channelProfile: ChannelProfileType.ChannelProfileCommunication,
+                channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileCommunication,
             });
 
-            const eventHandler: IRtcEngineEventHandler = {
-                onJoinChannelSuccess: (connection: RtcConnection, elapsed: number) => {
-                    console.log('Joined channel successfully', connection.channelId);
+            const eventHandler = {
+                onJoinChannelSuccess: (connection: any) => {
                     setJoined(true);
                     setConnectionStatus('Connected');
                 },
-                onUserJoined: (connection: RtcConnection, remoteUid: number, elapsed: number) => {
-                    console.log('Remote user joined', remoteUid);
+                onUserJoined: (connection: any, remoteUid: number) => {
                     setRemoteUid(remoteUid);
-                    if (callState === 'outgoing') {
-                        onAcceptCall();
-                    }
+                    if (callState === 'outgoing') onAcceptCall();
                 },
-                onUserOffline: (connection: RtcConnection, remoteUid: number, reason: any) => {
-                    console.log('Remote user left', remoteUid);
+                onUserOffline: () => {
                     setRemoteUid(0);
                     onEndCall();
                 },
-                onLeaveChannel: (connection: RtcConnection, stats: any) => {
-                    console.log('Left channel');
+                onLeaveChannel: () => {
                     setJoined(false);
                     setConnectionStatus('Disconnected');
-                },
-                onError: (err: any) => {
-                    console.error('Agora error', err);
                 }
             };
 
@@ -91,21 +81,17 @@ export const useAgora = ({
             rtcEngine.enableVideo();
             rtcEngine.startPreview();
 
-            // Set unique channel name based on user IDs
             const ids = [currentUser.id, friend.id].sort();
             channelName.current = `call_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
 
         } catch (e) {
             console.error('Failed to initialize Agora', e);
         }
-    }, [currentUser?.id, friend?.id]);
+    }, [currentUser?.id, friend?.id, callState, onAcceptCall, onEndCall]);
 
     const join = async () => {
-        if (!engine.current) return;
-        
+        if (!engine.current || !AgoraRTC) return;
         try {
-            // In a real app, you would fetch a token from your server here.
-            // For testing, we use token = null (ensure "Testing Mode" is enabled in Agora Console)
             engine.current.joinChannel(null, channelName.current, 0, {});
         } catch (e) {
             console.error('Failed to join channel', e);
@@ -145,16 +131,18 @@ export const useAgora = ({
     };
 
     useEffect(() => {
-        init().then(() => {
-            if (callState === 'active' || callState === 'outgoing') {
-                join();
-            }
-        });
+        if (AgoraRTC) {
+            init().then(() => {
+                if (callState === 'active' || callState === 'outgoing') {
+                    join();
+                }
+            });
+        }
 
         return () => {
             leave();
         };
-    }, [callState]);
+    }, [callState, AgoraRTC]);
 
     return {
         joined,

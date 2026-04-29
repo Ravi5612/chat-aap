@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { FlatList, View, Platform, LayoutAnimation, UIManager, ActivityIndicator } from 'react-native';
+import { FlatList, View, Platform, LayoutAnimation, UIManager, ActivityIndicator, Text } from 'react-native';
 import MessageItem from './MessageItem';
 
 interface MessageListProps {
@@ -35,19 +35,50 @@ export default function MessageList({
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }, [messages.length]);
 
+    // ✅ Date Grouping Logic
+    const groupedMessages = React.useMemo(() => {
+        const items: any[] = [];
+        let lastDate = '';
+
+        messages.forEach((msg) => {
+            const date = new Date(msg.created_at).toDateString();
+            if (date !== lastDate) {
+                items.push({ id: `date-${date}`, type: 'date', date });
+                lastDate = date;
+            }
+            items.push({ ...msg, type: 'message' });
+        });
+
+        return items;
+    }, [messages]);
+
     // ✅ useCallback - renderItem function baar baar recreate nahi hoga
-    const renderItem = useCallback(({ item }: { item: any }) => (
-        <MessageItem
-            message={item}
-            isCurrentUser={item.sender_id === currentUser?.id}
-            onLongPress={onLongPress}
-            onReply={onReply}
-            onReplyClick={handleScrollToMessage}
-            onImagePress={onImagePress}
-            friendName={friendName}
-            flyingEmoji={flyingEmoji}
-        />
-    ), [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji]);
+    const renderItem = useCallback(({ item }: { item: any }) => {
+        if (item.type === 'date') {
+            return (
+                <View style={{ alignItems: 'center', marginVertical: 20 }}>
+                    <View style={{ backgroundColor: 'rgba(0,0,0,0.05)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 }}>
+                        <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: 'bold' }}>
+                            {item.date === new Date().toDateString() ? 'TODAY' : item.date.toUpperCase()}
+                        </Text>
+                    </View>
+                </View>
+            );
+        }
+
+        return (
+            <MessageItem
+                message={item}
+                isCurrentUser={item.sender_id === currentUser?.id}
+                onLongPress={onLongPress}
+                onReply={onReply}
+                onReplyClick={handleScrollToMessage}
+                onImagePress={onImagePress}
+                friendName={friendName}
+                flyingEmoji={flyingEmoji}
+            />
+        );
+    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji]);
 
     // ✅ useCallback - scroll to message memoize
     const handleScrollToMessage = useCallback((replyMsg: any) => {
@@ -83,7 +114,7 @@ export default function MessageList({
         <View style={{ flex: 1 }}>
             <FlatList
                 ref={flatListRef}
-                data={messages}
+                data={groupedMessages}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeaderComponent}
