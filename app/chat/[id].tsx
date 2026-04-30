@@ -377,14 +377,6 @@ export default function ChatScreen() {
                 />
             </View>
 
-            {/* Manual Keyboard Spacer */}
-            {Platform.OS === 'android' && keyboardHeight > 0 && (
-                <View style={{ height: keyboardHeight + 45 }} />
-            )}
-            {Platform.OS === 'ios' && (
-                <View style={{ height: keyboardHeight }} />
-            )}
-
             <MessageContextMenu
                 visible={contextMenuVisible}
                 onClose={() => setContextMenuVisible(false)}
