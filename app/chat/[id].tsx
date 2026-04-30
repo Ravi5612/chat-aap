@@ -204,32 +204,26 @@ export default function ChatScreen() {
         }
     };
 
-    const headerHeight = useHeaderHeight();
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
         const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-        const keyboardShowListener = Keyboard.addListener(
-            showEvent,
-            () => {
-                setKeyboardVisible(true);
-            }
-        );
-        const keyboardHideListener = Keyboard.addListener(
-            hideEvent,
-            () => {
-                setKeyboardVisible(false);
-            }
-        );
+        const keyboardShowListener = Keyboard.addListener(showEvent, (e) => {
+            setKeyboardHeight(e.endCoordinates.height);
+            setKeyboardVisible(true);
+        });
+        const keyboardHideListener = Keyboard.addListener(hideEvent, () => {
+            setKeyboardHeight(0);
+            setKeyboardVisible(false);
+        });
 
         return () => {
-            keyboardHideListener.remove();
             keyboardShowListener.remove();
+            keyboardHideListener.remove();
         };
     }, []);
-
-
 
     if (!currentUser || (loading && messages.length === 0)) {
         return (
@@ -239,172 +233,144 @@ export default function ChatScreen() {
         );
     }
 
-    const chatContent = (
-        <View style={{ flex: 1 }}>
-            <MessageList
-                messages={messages}
-                currentUser={currentUser}
-                onReply={(msg) => setReplyingTo(msg)}
-                friendName={friendName}
-                onLongPress={handleLongPress}
-                onImagePress={handleImagePress}
-                flyingEmoji={flyingEmoji}
-                onLoadMore={handleLoadMore}
-                loadingMore={loadingMore}
-            />
-
-            {isTyping && (
-                <View style={styles.typingIndicatorContainer}>
-                    <View style={styles.typingBubble}>
-                        <View style={styles.dotsContainer}>
-                            <View style={styles.dot} />
-                            <View style={[styles.dot, { opacity: 0.6 }]} />
-                            <View style={[styles.dot, { opacity: 0.3 }]} />
-                        </View>
-                        <Text style={styles.typingText}>{friendName} is typing...</Text>
-                    </View>
-                </View>
-            )}
-
-            <CallScreen
-                visible={!!callSession}
-                callState={callSession?.status}
-                onEndCall={endCall}
-                onAcceptCall={setCallActive}
-                currentUser={currentUser}
-                callType={callSession?.type || 'video'}
-                friend={callSession?.friend || {}}
-                offer={callSession?.offer}
-            />
-
-            <ChatInput
-                onSendMessage={onSendMessage}
-                onTyping={handleTypingStatus}
-                replyingTo={replyingTo}
-                onCancelReply={() => setReplyingTo(null)}
-                editingMessage={editingMessage}
-                onCancelEdit={() => setEditingMessage(null)}
-                onSaveEdit={onSaveEdit}
-                isMember={isMember}
-                isKeyboardOpen={keyboardVisible}
-            />
-        </View>
-    );
-
     return (
         <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
             <StatusBar barStyle="dark-content" />
-            <Stack.Screen
-                options={{
-                    headerTitle: '',
-                    headerStyle: {
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    },
-                    headerShadowVisible: true,
-                    headerLeft: () => (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginLeft: 8 }}>
-                            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); router.back(); }}>
-                                <Ionicons name="chevron-back" size={28} color="#F68537" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={handleViewProfile}
-                                style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
-                            >
-                                <Image
-                                    source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
-                                    style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }}
-                                    contentFit="cover"
-                                    transition={200}
-                                />
-                                <View>
-                                    <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
-                                    <Text style={{
-                                        fontSize: 10,
-                                        color: isTyping ? '#10B981' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
-                                        fontWeight: 'bold',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: 0.5
-                                    }}>
-                                        {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : formatLastSeen(friendData?.lastSeen))}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        </View>
-                    ),
-                    headerRight: () => (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 8 }}>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                    handleStartCall({ id: friendId, name: friendName }, 'audio');
-                                }}
-                                style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                            >
-                                <Ionicons name="call" size={18} color="white" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                    handleStartCall({ id: friendId, name: friendName }, 'video');
-                                }}
-                                style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                            >
-                                <Ionicons name="videocam" size={18} color="white" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    Haptics.selectionAsync();
-                                    setMenuVisible(!menuVisible);
-                                }}
-                                style={{ padding: 4 }}
-                            >
-                                <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
-                            </TouchableOpacity>
-                            <ChatMenu
-                                visible={menuVisible}
-                                onClose={() => setMenuVisible(false)}
-                                onViewProfile={handleViewProfile}
-                                onClearChat={handleClearChat}
-                                onBlockUser={handleBlockToggle}
-                                isBlocked={isBlocked}
-                                isMember={isMember}
-                                isGroup={isGroup === 'true'}
-                                onLeaveGroup={async () => {
-                                    if (!currentUser) return;
-                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                                    Alert.alert(
-                                        "Leave Group",
-                                        "Are you sure you want to leave this group?",
-                                        [
-                                            { text: "Cancel", style: "cancel" },
-                                            {
-                                                text: "Leave",
-                                                style: "destructive",
-                                                onPress: async () => {
-                                                    const success = await useFriendsStore.getState().leaveGroup(currentUser.id, friendId as string);
-                                                    if (success) {
-                                                        setMenuVisible(false);
-                                                        router.back();
-                                                    }
-                                                }
-                                            }
-                                        ]
-                                    );
-                                }}
-                            />
-                        </View>
-                    ),
-                }}
-            />
+            <Stack.Screen options={{ headerShown: false }} />
 
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior="padding"
-                keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 20}
-                enabled={true}
-            >
-                {chatContent}
-            </KeyboardAvoidingView>
+            {/* Custom Header */}
+            <View style={{ 
+                paddingTop: insets.top, 
+                backgroundColor: 'white',
+                borderBottomWidth: 1,
+                borderBottomColor: 'rgba(0,0,0,0.05)',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 8,
+                paddingVertical: 10,
+                zIndex: 1000,
+                elevation: 4
+            }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <TouchableOpacity onPress={() => { Haptics.selectionAsync(); router.back(); }}>
+                        <Ionicons name="chevron-back" size={28} color="#F68537" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={handleViewProfile}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                    >
+                        <Image
+                            source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
+                            style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }}
+                            contentFit="cover"
+                        />
+                        <View>
+                            <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
+                            <Text style={{
+                                fontSize: 10,
+                                color: isTyping ? '#10B981' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
+                                fontWeight: 'bold',
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.5
+                            }}>
+                                {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : formatLastSeen(friendData?.lastSeen))}
+                            </Text>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <TouchableOpacity
+                        onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio')}
+                        style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        <Ionicons name="call" size={18} color="white" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video')}
+                        style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        <Ionicons name="videocam" size={18} color="white" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 4 }}>
+                        <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
+                    </TouchableOpacity>
+
+                    <ChatMenu
+                        visible={menuVisible}
+                        onClose={() => setMenuVisible(false)}
+                        onViewProfile={handleViewProfile}
+                        onClearChat={handleClearChat}
+                        onBlockUser={handleBlockToggle}
+                        isBlocked={isBlocked}
+                        isMember={isMember}
+                        isGroup={isGroup === 'true'}
+                        onLeaveGroup={async () => {
+                            if (!currentUser) return;
+                            router.back();
+                        }}
+                    />
+                </View>
+            </View>
+
+            <View style={{ flex: 1 }}>
+                <MessageList
+                    messages={messages}
+                    currentUser={currentUser}
+                    onReply={(msg) => setReplyingTo(msg)}
+                    friendName={friendName}
+                    onLongPress={handleLongPress}
+                    onImagePress={handleImagePress}
+                    flyingEmoji={flyingEmoji}
+                    onLoadMore={handleLoadMore}
+                    loadingMore={loadingMore}
+                />
+
+                {isTyping && (
+                    <View style={styles.typingIndicatorContainer}>
+                        <View style={styles.typingBubble}>
+                            <View style={styles.dotsContainer}>
+                                <View style={styles.dot} />
+                                <View style={[styles.dot, { opacity: 0.6 }]} />
+                                <View style={[styles.dot, { opacity: 0.3 }]} />
+                            </View>
+                            <Text style={styles.typingText}>{friendName} is typing...</Text>
+                        </View>
+                    </View>
+                )}
+
+                <CallScreen
+                    visible={!!callSession}
+                    callState={callSession?.status}
+                    onEndCall={endCall}
+                    onAcceptCall={setCallActive}
+                    currentUser={currentUser}
+                    callType={callSession?.type || 'video'}
+                    friend={callSession?.friend || {}}
+                    offer={callSession?.offer}
+                />
+
+                <ChatInput
+                    onSendMessage={onSendMessage}
+                    onTyping={handleTypingStatus}
+                    replyingTo={replyingTo}
+                    onCancelReply={() => setReplyingTo(null)}
+                    editingMessage={editingMessage}
+                    onCancelEdit={() => setEditingMessage(null)}
+                    onSaveEdit={onSaveEdit}
+                    isMember={isMember}
+                    isKeyboardOpen={keyboardVisible}
+                />
+            </View>
+
+            {/* Manual Keyboard Spacer */}
+            {Platform.OS === 'android' && keyboardHeight > 0 && (
+                <View style={{ height: keyboardHeight + 45 }} />
+            )}
+            {Platform.OS === 'ios' && (
+                <View style={{ height: keyboardHeight }} />
+            )}
 
             <MessageContextMenu
                 visible={contextMenuVisible}

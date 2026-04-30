@@ -187,9 +187,7 @@ export default function ChatInput({
         }
     };
 
-    const bottomPadding = Platform.OS === 'android'
-        ? (isKeyboardOpen ? 4 : Math.max(insets.bottom, 14))
-        : (isKeyboardOpen ? 5 : (insets.bottom > 0 ? insets.bottom + 10 : 20));
+    const bottomPadding = isKeyboardOpen ? 0 : (insets.bottom > 0 ? insets.bottom : 12);
 
     return (
         <View style={{

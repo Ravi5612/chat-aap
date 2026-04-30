@@ -2,9 +2,30 @@ import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { usePushNotifications } from './usePushNotifications';
 import { decryptText, getChatKey } from '@/utils/chatCrypto';
+import { Audio } from 'expo-av';
+import { useAuthStore } from '@/store/useAuthStore';
+
+const DEFAULT_MESSAGE_TONE = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
 export const useGlobalRealtime = (userId: string | null) => {
     const { showLocalNotification } = usePushNotifications(userId);
+    const { profile } = useAuthStore();
+
+    const playMessageSound = async () => {
+        try {
+            const soundUrl = profile?.message_tone || DEFAULT_MESSAGE_TONE;
+            const { sound } = await Audio.Sound.createAsync(
+                { uri: soundUrl },
+                { shouldPlay: true }
+            );
+            // Auto unload after play
+            sound.setOnPlaybackStatusUpdate((status: any) => {
+                if (status.didJustFinish) sound.unloadAsync();
+            });
+        } catch (error) {
+            console.error('Error playing message sound:', error);
+        }
+    };
 
     useEffect(() => {
         if (!userId) return;
@@ -23,6 +44,9 @@ export const useGlobalRealtime = (userId: string | null) => {
                 },
                 async (payload) => {
                     console.log('GlobalRealtime: New message received:', payload.new.id);
+                    
+                    // Play notification sound
+                    playMessageSound();
 
                     try {
                         // 1. Get sender profile
@@ -57,5 +81,5 @@ export const useGlobalRealtime = (userId: string | null) => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [userId]);
+    }, [userId, profile?.message_tone]);
 };

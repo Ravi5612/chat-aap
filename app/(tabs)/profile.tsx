@@ -137,13 +137,16 @@ export default function ProfileScreen() {
                             <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.settingsItem}>
+                        <TouchableOpacity 
+                            onPress={() => router.push('/notifications' as any)}
+                            style={styles.settingsItem}
+                        >
                             <View style={[styles.settingsIconBg, { backgroundColor: '#FFF7ED' }]}>
                                 <Ionicons name="notifications-outline" size={20} color="#F68537" />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.settingsTitle}>Notifications</Text>
-                                <Text style={styles.settingsSubtitle}>Manage alerts and activities</Text>
+                                <Text style={styles.settingsSubtitle}>Manage sounds and alerts</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
                         </TouchableOpacity>
