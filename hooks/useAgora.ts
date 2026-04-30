@@ -81,6 +81,11 @@ export const useAgora = ({
             rtcEngine.enableVideo();
             rtcEngine.startPreview();
 
+            if (!currentUser?.id || !friend?.id) {
+                // Not an error, just waiting for data to load
+                return;
+            }
+
             const ids = [currentUser.id, friend.id].sort();
             channelName.current = `call_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
 

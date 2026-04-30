@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
     const insets = useSafeAreaInsets();
+    const headerHeight = useHeaderHeight();
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const router = useRouter();
@@ -233,8 +234,20 @@ export default function ChatScreen() {
         );
     }
 
+    // Calculate custom header height: insets.top + header padding/content
+    const customHeaderHeight = insets.top + 60; 
+
+    const MainContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+    const containerProps = Platform.OS === 'ios' ? {
+        behavior: 'padding' as const,
+        keyboardVerticalOffset: headerHeight
+    } : {};
+
     return (
-        <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
+        <MainContainer 
+            {...containerProps}
+            style={{ flex: 1, backgroundColor: '#EBD8B7' }}
+        >
             <StatusBar barStyle="dark-content" />
             <Stack.Screen options={{ headerShown: false }} />
 
@@ -394,7 +407,7 @@ export default function ChatScreen() {
                 onClose={() => setViewerVisible(false)}
                 imageUri={viewerImage}
             />
-        </View>
+        </MainContainer>
     );
 }
 
