@@ -1,22 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Audio } from 'expo-av';
-import { useAuthStore } from '@/store/useAuthStore';
+import { logErrorToDB } from '@/utils/errorLogger';
+import { useCallStore } from '@/store/useCallStore';
 
-const RINGTONE_URL = 'https://assets.mixkit.co/active_storage/sfx/135/135-preview.mp3';
+const RINGTONE_URL = 'https://vgqasnzpnnmshclnshob.supabase.co/storage/v1/object/public/system/ringtone.mp3';
 
-export const useCallManager = (currentUser: any, combinedItems: any[]) => {
-    const { profile } = useAuthStore();
-    const [callSession, setCallSession] = useState<any>(null);
+export const useCallManager = (currentUser: any, combinedItems: any[], isListener = true) => {
+    const { callSession, setCallSession, setCallActive, endCall: endGlobalCall } = useCallStore();
     const soundRef = useRef<Audio.Sound | null>(null);
-    const callProcessed = useRef(false);
+    const profile = currentUser;
 
     // Handle ringtone
     useEffect(() => {
         const manageRingtone = async () => {
-            if (callSession?.status === 'incoming') {
-                const userCallTone = profile?.call_tone || RINGTONE_URL;
-                try {
+            try {
+                if (callSession?.status === 'incoming') {
+                    const userCallTone = profile?.call_tone || RINGTONE_URL;
                     if (soundRef.current) {
                         await soundRef.current.unloadAsync();
                     }
@@ -25,20 +25,19 @@ export const useCallManager = (currentUser: any, combinedItems: any[]) => {
                         { shouldPlay: true, isLooping: true }
                     );
                     soundRef.current = sound;
-                } catch (error) {
-                    console.error('Error playing ringtone:', error);
+                } else {
+                    if (soundRef.current) {
+                        await soundRef.current.stopAsync();
+                        await soundRef.current.unloadAsync();
+                        soundRef.current = null;
+                    }
                 }
-            } else {
-                if (soundRef.current) {
-                    await soundRef.current.stopAsync();
-                    await soundRef.current.unloadAsync();
-                    soundRef.current = null;
-                }
+            } catch (error) {
+                console.error('Error managing ringtone:', error);
             }
         };
 
         manageRingtone();
-
         return () => {
             if (soundRef.current) {
                 soundRef.current.unloadAsync();
@@ -46,40 +45,46 @@ export const useCallManager = (currentUser: any, combinedItems: any[]) => {
         };
     }, [callSession?.status]);
 
+    // Setup Global Realtime Listener for calls
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser?.id || !isListener) return;
 
-        const channel = supabase.channel(`calls:${currentUser.id}`);
+        const channelName = `calls-signal-${currentUser.id}`;
+
+        const channel = supabase.channel(channelName);
+
         channel.on('broadcast', { event: 'signal' }, ({ payload }) => {
             if (payload.type === 'offer') {
-                const caller = combinedItems.find(f => f.id === payload.caller_id) || {
-                    id: payload.caller_id,
-                    name: "Incoming Call",
-                    avatar_url: null
-                };
+                const caller = combinedItems.find(f => f.id === payload.caller_id) || { id: payload.caller_id, name: 'Unknown' };
                 setCallSession({
                     status: 'incoming',
-                    friend: caller,
                     type: payload.call_type,
-                    offer: payload.sdp
+                    offer: payload.sdp,
+                    friend: caller
                 });
+            } else if (payload.type === 'accepted') {
+                setCallActive();
             } else if (payload.type === 'end') {
                 setCallSession(null);
             }
-        }).subscribe();
+        });
+
+        channel.subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [currentUser, combinedItems]);
+    }, [currentUser?.id, combinedItems]);
 
     const handleStartCall = (friend: any, type: 'audio' | 'video' = 'video') => {
-        if (!friend || !currentUser) return;
+        setCallSession({
+            status: 'outgoing',
+            type,
+            friend
+        });
 
-        setCallSession({ status: 'outgoing', friend, type });
-
-        // Signaling: Send ring event to the friend
-        const personalChannel = supabase.channel(`calls:${friend.id}`);
+        const signalChannelName = `calls-signal-${friend.id}`;
+        const personalChannel = supabase.channel(signalChannelName);
         personalChannel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
                 personalChannel.send({
@@ -91,19 +96,19 @@ export const useCallManager = (currentUser: any, combinedItems: any[]) => {
                         caller_id: currentUser.id
                     }
                 });
-                // Auto clean up after signaling
-                setTimeout(() => supabase.removeChannel(personalChannel), 5000);
+                console.log('[DEBUG] CallManager: Offer broadcasted successfully');
+                setTimeout(() => {
+                    supabase.removeChannel(personalChannel);
+                }, 5000);
             }
         });
     };
 
-    const setCallActive = () => {
-        setCallSession((prev: any) => prev ? { ...prev, status: 'active' } : null);
-    };
-
     const endCall = () => {
+        console.log('[DEBUG] CallManager: Manual end call triggered');
         if (callSession?.friend?.id) {
-            const personalChannel = supabase.channel(`calls:${callSession.friend.id}`);
+            const signalChannelName = `calls-signal-${callSession.friend.id}`;
+            const personalChannel = supabase.channel(signalChannelName);
             personalChannel.subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
                     personalChannel.send({
@@ -111,7 +116,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[]) => {
                         event: 'signal',
                         payload: { type: 'end' }
                     });
-                    setTimeout(() => supabase.removeChannel(personalChannel), 2000);
+                    setTimeout(() => supabase.removeChannel(personalChannel), 1000);
                 }
             });
         }
@@ -122,7 +127,6 @@ export const useCallManager = (currentUser: any, combinedItems: any[]) => {
         callSession,
         handleStartCall,
         setCallActive,
-        endCall,
-        callProcessed
+        endCall
     };
 };

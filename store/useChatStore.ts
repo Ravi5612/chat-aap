@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { Alert } from 'react-native';
 import { getChatKey, decryptText, encryptText } from '@/utils/chatCrypto';
 import { uploadChatMessageMedia } from '../utils/uploadHelper';
+import { logErrorToDB } from '@/utils/errorLogger';
 
 interface ChatState {
     messages: any[];
@@ -207,6 +208,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             } catch (error: any) {
                 console.error('ChatStore: Load error:', error.message);
                 set({ loading: false });
+                logErrorToDB(error, 'ChatStore: Load Messages', currentUser.id, currentUser.username);
             }
         },
 
@@ -292,6 +294,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             } catch (error: any) {
                 console.error('ChatStore: LoadMore error:', error.message);
                 set({ loadingMore: false });
+                logErrorToDB(error, 'ChatStore: Load More Messages', currentUser.id, currentUser.username);
             }
         },
 
@@ -396,6 +399,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     messages: state.messages.filter(m => m.id !== tempId),
                     cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: state.messages.filter(m => m.id !== tempId), key: chatKey } }
                 }));
+                logErrorToDB(error, 'ChatStore: Send Message', currentUser.id, currentUser.username);
                 Alert.alert('Error', 'Failed to send message');
             }
         },

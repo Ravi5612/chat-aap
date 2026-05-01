@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useCallLogger } from '@/hooks/useCallLogger';
+import { supabase } from '@/lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,6 +33,20 @@ export default function CallScreen({
     const [callDuration, setCallDuration] = useState(0);
     const [isSwapped, setIsSwapped] = useState(false);
     const durationRef = useRef(0);
+    const lastCallInfo = useRef({
+        state: callState,
+        friend: friend,
+        type: callType
+    });
+
+    // Keep memory of the call info even if props become null
+    if (callState && friend?.id) {
+        lastCallInfo.current = {
+            state: callState,
+            friend: friend,
+            type: callType
+        };
+    }
 
     const {
         joined,
@@ -55,10 +70,31 @@ export default function CallScreen({
     const { saveCallLog } = useCallLogger(currentUser, friend, callType, callState);
 
     const acceptCall = () => {
+        console.log('[DEBUG] CallScreen: Accept button pressed');
+        // Signaling: Tell the caller we accepted
+        const signalChannelName = `calls-signal-${friend.id}`;
+        console.log('[DEBUG] CallScreen: Sending accepted signal to caller:', signalChannelName);
+        const personalChannel = supabase.channel(signalChannelName);
+        personalChannel.subscribe((status) => {
+            console.log('[DEBUG] CallScreen: Acceptance channel status:', status);
+            if (status === 'SUBSCRIBED') {
+                personalChannel.send({
+                    type: 'broadcast',
+                    event: 'signal',
+                    payload: { type: 'accepted', caller_id: currentUser.id }
+                });
+                console.log('[DEBUG] CallScreen: Accepted signal sent');
+                setTimeout(() => {
+                    console.log('[DEBUG] CallScreen: Cleaning up acceptance channel');
+                    supabase.removeChannel(personalChannel);
+                }, 2000);
+            }
+        });
         onAcceptCall();
     };
 
     const endCall = () => {
+        console.log('[DEBUG] CallScreen: End call button pressed');
         onEndCall();
     };
 
@@ -77,14 +113,24 @@ export default function CallScreen({
         return () => clearInterval(interval);
     }, [callState]);
 
-    // Logging on unmount
+    // Logging on unmount - Use the remembered info
     useEffect(() => {
         return () => {
-            if (callState === 'active' || callState === 'outgoing') {
-                saveCallLog(durationRef.current > 0 ? 'completed' : 'missed', durationRef.current);
+            const finalState = lastCallInfo.current.state;
+            const finalDuration = durationRef.current;
+            const finalFriend = lastCallInfo.current.friend;
+            const finalType = lastCallInfo.current.type;
+
+            if (finalState && finalFriend?.id) {
+                // Determine status manually if needed or use the state
+                const logStatus = finalDuration > 0 ? 'completed' : 
+                                (finalState === 'incoming' ? 'missed' : 'cancelled');
+                
+                // Directly call supabase or a more reliable logger
+                saveCallLog(logStatus, finalDuration);
             }
         };
-    }, []);
+    }, [saveCallLog]); // Keep saveCallLog as dependency
 
     const formatDuration = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -123,8 +169,8 @@ export default function CallScreen({
                     )}
                 </View>
 
-                {/* Local Preview (PIP) */}
-                {callType === 'video' && joined && (
+                {/* Local Preview (PIP) - Show for caller always, for receiver only after joining */}
+                {callType === 'video' && (joined || callState === 'outgoing') && (
                     <TouchableOpacity
                         onPress={() => setIsSwapped(!isSwapped)}
                         style={styles.pipContainer}

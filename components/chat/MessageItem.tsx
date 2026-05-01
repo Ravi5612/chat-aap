@@ -96,6 +96,10 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
         }
     }
 
+    // Call Log detection
+    const isCallLog = message.message_type === 'call' || !!message.call_details;
+    const callDetails = message.call_details || {};
+
     return (
         <View style={{ position: 'relative', width: '100%', overflow: 'visible' }}>
             <Animated.View
@@ -231,6 +235,45 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     {/* Voice Message Content */}
                     {isVoiceMessage && voiceUri && (
                         <VoiceMessagePlayer uri={voiceUri} isCurrentUser={isCurrentUser} />
+                    )}
+
+                    {/* Call Log Content */}
+                    {isCallLog && (
+                        <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 180 }}>
+                            <View style={{ 
+                                width: 40, 
+                                height: 40, 
+                                borderRadius: 20, 
+                                backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)', 
+                                alignItems: 'center', 
+                                justifyContent: 'center' 
+                            }}>
+                                <Ionicons 
+                                    name={callDetails.type === 'video' ? "videocam" : "call"} 
+                                    size={20} 
+                                    color={isCurrentUser ? 'white' : '#F68537'} 
+                                />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ 
+                                    fontSize: 14, 
+                                    fontWeight: 'bold', 
+                                    color: isCurrentUser ? 'white' : '#1F2937' 
+                                }}>
+                                    {callDetails.status === 'missed' ? 'Missed Call' : 
+                                     callDetails.type === 'video' ? 'Video Call' : 'Audio Call'}
+                                </Text>
+                                <Text style={{ 
+                                    fontSize: 12, 
+                                    color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280',
+                                    marginTop: 2
+                                }}>
+                                    {callDetails.status === 'completed' ? 
+                                        (callDetails.duration > 0 ? `Duration: ${Math.floor(callDetails.duration / 60)}m ${callDetails.duration % 60}s` : 'Call Ended') 
+                                        : 'No answer'}
+                                </Text>
+                            </View>
+                        </View>
                     )}
 
                     <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>

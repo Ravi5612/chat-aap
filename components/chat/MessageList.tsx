@@ -32,7 +32,13 @@ export default function MessageList({
     const flatListRef = useRef<FlatList>(null);
 
     useEffect(() => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        if (messages.length > 0) {
+            try {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            } catch (e) {
+                console.warn('LayoutAnimation failed:', e);
+            }
+        }
     }, [messages.length]);
 
     // ✅ Date Grouping Logic

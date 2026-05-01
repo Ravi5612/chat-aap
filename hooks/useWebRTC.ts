@@ -53,13 +53,16 @@ export const useWebRTC = ({
     const setupSignaling = useCallback(() => {
         if (!currentUser || !friend) return;
         const ids = [currentUser.id, friend.id].sort();
-        const sharedChannelName = `call-${ids[0]}-${ids[1]}`;
+        // Stable shared channel for this specific pair of users
+        const sharedChannelName = `webrtc-sig-${ids[0].substring(0, 8)}-${ids[1].substring(0, 8)}`;
 
+        console.log('[DEBUG] WebRTC: Subscribing to signaling:', sharedChannelName);
         const channel = supabase.channel(sharedChannelName);
         channelRef.current = channel;
 
         channel
             .on('broadcast', { event: 'signal' }, async ({ payload }) => {
+                console.log('[DEBUG] WebRTC: Received signal:', payload.type);
                 try {
                     if (payload.type === 'answer') {
                         if (peerConnection.current) {
@@ -74,12 +77,15 @@ export const useWebRTC = ({
                         onEndCall();
                     }
                 } catch (err) {
-                    console.error("Signaling error:", err);
+                    console.error("[ERROR] WebRTC Signaling:", err);
                 }
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log('[DEBUG] WebRTC: Signaling Status:', status);
+            });
 
         return () => {
+            console.log('[DEBUG] WebRTC: Cleaning up signaling channel');
             supabase.removeChannel(channel);
         };
     }, [currentUser?.id, friend?.id, onAcceptCall, onEndCall]);
@@ -166,7 +172,9 @@ export const useWebRTC = ({
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
 
-            const personalChannel = supabase.channel(`calls:${friend.id}`);
+            const signalChannelName = `calls-signal-${friend.id}`;
+            console.log('[DEBUG] WebRTC: Sending offer to:', signalChannelName);
+            const personalChannel = supabase.channel(signalChannelName);
             personalChannel.subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
                     personalChannel.send({

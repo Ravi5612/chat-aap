@@ -4,12 +4,14 @@ import { usePushNotifications } from './usePushNotifications';
 import { decryptText, getChatKey } from '@/utils/chatCrypto';
 import { Audio } from 'expo-av';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useFriendsStore } from '@/store/useFriendsStore';
 
 const DEFAULT_MESSAGE_TONE = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
 export const useGlobalRealtime = (userId: string | null) => {
     const { showLocalNotification } = usePushNotifications(userId);
     const { profile } = useAuthStore();
+    const setOnlineUsers = useFriendsStore(state => state.setOnlineUsers);
 
     const playMessageSound = async () => {
         try {
@@ -18,7 +20,6 @@ export const useGlobalRealtime = (userId: string | null) => {
                 { uri: soundUrl },
                 { shouldPlay: true }
             );
-            // Auto unload after play
             sound.setOnPlaybackStatusUpdate((status: any) => {
                 if (status.didJustFinish) sound.unloadAsync();
             });
@@ -30,10 +31,10 @@ export const useGlobalRealtime = (userId: string | null) => {
     useEffect(() => {
         if (!userId) return;
 
-        console.log('GlobalRealtime: Subscribing for user:', userId);
+        console.log('[DEBUG] GlobalRealtime: Initializing messages channel for:', userId);
 
-        const channel = supabase
-            .channel(`global-messages:${userId}`)
+        const msgChannel = supabase
+            .channel(`global-messages-${userId}`)
             .on(
                 'postgres_changes',
                 {
@@ -43,43 +44,40 @@ export const useGlobalRealtime = (userId: string | null) => {
                     filter: `receiver_id=eq.${userId}`
                 },
                 async (payload) => {
-                    console.log('GlobalRealtime: New message received:', payload.new.id);
-                    
-                    // Play notification sound
+                    console.log('[DEBUG] GlobalRealtime: New message arrived:', payload.new.id);
                     playMessageSound();
-
                     try {
-                        // 1. Get sender profile
                         const { data: sender } = await supabase
                             .from('profiles')
                             .select('username')
                             .eq('id', payload.new.sender_id)
                             .single();
 
-                        // 2. Decrypt message content
                         const chatKey = await getChatKey(userId, payload.new.sender_id);
                         let content = '[Encrypted Message]';
                         try {
                             content = await decryptText(payload.new.message, chatKey);
                         } catch (e) {
-                            console.warn('GlobalRealtime: Decryption failed');
+                            console.warn('[DEBUG] GlobalRealtime: Decryption failed');
                         }
 
-                        // 3. Show Local Notification
                         showLocalNotification(
                             sender?.username || 'New Message',
                             content,
                             { senderId: payload.new.sender_id, messageId: payload.new.id }
                         );
                     } catch (err) {
-                        console.error('GlobalRealtime: Error handling notification:', err);
+                        console.error('[ERROR] GlobalRealtime Message Handler:', err);
                     }
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                console.log('[DEBUG] GlobalRealtime: Status:', status);
+            });
 
         return () => {
-            supabase.removeChannel(channel);
+            console.log('[DEBUG] GlobalRealtime: Cleaning up...');
+            supabase.removeChannel(msgChannel);
         };
     }, [userId, profile?.message_tone]);
 };

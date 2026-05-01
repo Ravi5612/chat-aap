@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
+import { logErrorToDB } from '@/utils/errorLogger';
 
 let AgoraRTC: any = null;
 try {
@@ -29,6 +30,7 @@ export const useAgora = ({
     
     const engine = useRef<any>(null);
     const channelName = useRef<string>('');
+    const isJoining = useRef(false);
 
     const requestPermissions = async () => {
         if (Platform.OS === 'android') {
@@ -44,62 +46,88 @@ export const useAgora = ({
         if (!AgoraRTC) return;
         if (!APP_ID || APP_ID === 'YOUR_AGORA_APP_ID_HERE') {
             console.error('Agora App ID is missing.');
+            setConnectionStatus('Missing App ID');
             return;
         }
 
         try {
             await requestPermissions();
             
-            engine.current = AgoraRTC.createAgoraRtcEngine();
-            const rtcEngine = engine.current;
+            if (!engine.current) {
+                engine.current = AgoraRTC.createAgoraRtcEngine();
+                const rtcEngine = engine.current;
 
-            rtcEngine.initialize({
-                appId: APP_ID,
-                channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileCommunication,
-            });
+                rtcEngine.initialize({
+                    appId: APP_ID,
+                    channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileCommunication,
+                });
 
-            const eventHandler = {
-                onJoinChannelSuccess: (connection: any) => {
-                    setJoined(true);
-                    setConnectionStatus('Connected');
-                },
-                onUserJoined: (connection: any, remoteUid: number) => {
-                    setRemoteUid(remoteUid);
-                    if (callState === 'outgoing') onAcceptCall();
-                },
-                onUserOffline: () => {
-                    setRemoteUid(0);
-                    onEndCall();
-                },
-                onLeaveChannel: () => {
-                    setJoined(false);
-                    setConnectionStatus('Disconnected');
-                }
-            };
+                const eventHandler = {
+                    onJoinChannelSuccess: (connection: any) => {
+                        console.log('Joined channel successfully');
+                        setJoined(true);
+                        setConnectionStatus('Connected');
+                    },
+                    onUserJoined: (connection: any, remoteUid: number) => {
+                        console.log('Remote user joined:', remoteUid);
+                        setRemoteUid(remoteUid);
+                        if (callState === 'outgoing') onAcceptCall();
+                    },
+                    onUserOffline: (connection: any, remoteUid: number) => {
+                        console.log('Remote user offline:', remoteUid);
+                        setRemoteUid(0);
+                        onEndCall();
+                    },
+                    onLeaveChannel: () => {
+                        console.log('Left channel');
+                        setJoined(false);
+                        setConnectionStatus('Disconnected');
+                    },
+                    onError: (err: any) => {
+                        console.error('Agora Error:', err);
+                        setConnectionStatus(`Error: ${err}`);
+                        logErrorToDB(err, 'Agora Native Error', currentUser?.id, currentUser?.name);
+                    }
+                };
 
-            rtcEngine.registerEventHandler(eventHandler);
-            rtcEngine.enableVideo();
-            rtcEngine.startPreview();
+                rtcEngine.registerEventHandler(eventHandler);
+                rtcEngine.enableVideo();
+                rtcEngine.startPreview();
+            }
 
             if (!currentUser?.id || !friend?.id) {
-                // Not an error, just waiting for data to load
                 return;
             }
 
             const ids = [currentUser.id, friend.id].sort();
             channelName.current = `call_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+            console.log('Channel Name set:', channelName.current);
 
         } catch (e) {
             console.error('Failed to initialize Agora', e);
+            setConnectionStatus('Init Failed');
+            logErrorToDB(e, 'Agora Initialization', currentUser?.id, currentUser?.name);
         }
     }, [currentUser?.id, friend?.id, callState, onAcceptCall, onEndCall]);
 
     const join = async () => {
-        if (!engine.current || !AgoraRTC) return;
+        if (!engine.current || !AgoraRTC || !channelName.current || isJoining.current || joined) {
+            return;
+        }
         try {
-            engine.current.joinChannel(null, channelName.current, 0, {});
+            isJoining.current = true;
+            console.log('[DEBUG] Agora: Joining channel:', channelName.current);
+            engine.current.joinChannel('', channelName.current, 0, {
+                clientRoleType: AgoraRTC.ClientRoleType.ClientRoleBroadcaster,
+                publishMicrophoneTrack: true,
+                publishCameraTrack: callType === 'video',
+                autoSubscribeAudio: true,
+                autoSubscribeVideo: true,
+            });
         } catch (e) {
+            isJoining.current = false;
             console.error('Failed to join channel', e);
+            logErrorToDB(e, 'Agora Join Channel', currentUser?.id, currentUser?.name);
         }
     };
 
@@ -107,9 +135,7 @@ export const useAgora = ({
         try {
             if (engine.current) {
                 engine.current.leaveChannel();
-                engine.current.unregisterEventHandler({});
-                engine.current.release();
-                engine.current = null;
+                // We keep the engine but leave the channel
             }
             setJoined(false);
             setRemoteUid(0);
@@ -136,18 +162,22 @@ export const useAgora = ({
     };
 
     useEffect(() => {
-        if (AgoraRTC) {
+        const isCallActive = ['active', 'outgoing', 'incoming'].includes(callState);
+        
+        if (AgoraRTC && isCallActive) {
             init().then(() => {
-                if (callState === 'active' || callState === 'outgoing') {
+                if ((callState === 'active' || callState === 'outgoing') && channelName.current) {
                     join();
                 }
             });
         }
 
         return () => {
-            leave();
+            if (!isCallActive) {
+                leave();
+            }
         };
-    }, [callState, AgoraRTC]);
+    }, [callState, AgoraRTC, currentUser?.id, friend?.id, init]);
 
     return {
         joined,

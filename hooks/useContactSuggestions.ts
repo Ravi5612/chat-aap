@@ -106,13 +106,12 @@ export const useContactSuggestions = () => {
 
                 const profileIds = registeredProfiles.map(p => p.id);
 
-                // 2. Fetch existing friends and requests in parallel
-                const [friendshipsRes, sentRequestsRes, receivedRequestsRes] = await Promise.all([
+                // 2. Fetch existing friends (bi-directional) and requests in parallel
+                const [friendsRes, sentRequestsRes, receivedRequestsRes] = await Promise.all([
                     supabase
                         .from('friendships')
-                        .select('friend_id')
-                        .eq('user_id', currentUser.id)
-                        .in('friend_id', profileIds),
+                        .select('user_id, friend_id')
+                        .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`),
                     supabase
                         .from('friend_requests')
                         .select('receiver_id')
@@ -127,7 +126,13 @@ export const useContactSuggestions = () => {
                         .in('status', ['pending', 'accepted'])
                 ]);
 
-                const friendIds = new Set(friendshipsRes.data?.map(f => f.friend_id) || []);
+                // Collect ALL friend IDs where I am either user_id or friend_id
+                const friendIds = new Set<string>();
+                friendsRes.data?.forEach(f => {
+                    if (f.user_id === currentUser.id) friendIds.add(f.friend_id);
+                    else friendIds.add(f.user_id);
+                });
+                
                 const sentRequestIds = new Set(sentRequestsRes.data?.map(r => r.receiver_id) || []);
                 const receivedRequestIds = new Set(receivedRequestsRes.data?.map(r => r.sender_id) || []);
 

@@ -7,24 +7,33 @@ export const useSentRequests = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadSentRequests();
+        let channel: any;
 
-        const channel = supabase
-            .channel('sent-requests')
-            .on('postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'friend_requests'
-                },
-                () => {
-                    loadSentRequests();
-                }
-            )
-            .subscribe();
+        const init = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            loadSentRequests();
+
+            channel = supabase
+                .channel(`sent-requests-${user.id}`)
+                .on('postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'friend_requests'
+                    },
+                    () => {
+                        loadSentRequests();
+                    }
+                )
+                .subscribe();
+        };
+
+        init();
 
         return () => {
-            supabase.removeChannel(channel);
+            if (channel) supabase.removeChannel(channel);
         };
     }, []);
 

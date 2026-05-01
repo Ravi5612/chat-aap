@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import AuthScreen from '@/components/ui/AuthScreen';
 import * as Haptics from 'expo-haptics';
+import { logErrorToDB } from '@/utils/errorLogger';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -72,6 +73,7 @@ export default function LoginPage() {
                     Alert.alert('Verify Email', 'Please check your email to verify your account.');
                 }
             } catch (error: any) {
+                logErrorToDB(error, 'Auth: Sign Up', null, email);
                 Alert.alert('Sign Up Failed', error.message);
             } finally {
                 setLoading(false);
@@ -135,6 +137,7 @@ export default function LoginPage() {
                 }
             } catch (error: any) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                logErrorToDB(error, 'Auth: Login', null, identifier);
                 Alert.alert('Login Failed', error.message);
             } finally {
                 setLoading(false);
@@ -255,7 +258,7 @@ const styles = StyleSheet.create({
     },
     actionButton: {
         width: '100%',
-        backgroundColor: '#F68537',
+        backgroundColor: '#FF69B4',
         paddingVertical: 18,
         borderRadius: 16,
         alignItems: 'center',

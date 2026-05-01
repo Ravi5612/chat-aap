@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useHeaderHeight } from '@react-navigation/elements';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import MessageList from '@/components/chat/MessageList';
 import ChatInput from '@/components/chat/ChatInput';
 import { supabase } from '@/lib/supabase';
@@ -16,7 +14,6 @@ import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
 import MediaViewer from '@/components/chat/MediaViewer';
 import CallScreen from '@/components/chat/CallScreen';
 import { useCallManager } from '@/hooks/useCallManager';
-import { usePresence } from '@/hooks/usePresence';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import * as Haptics from 'expo-haptics';
@@ -24,18 +21,19 @@ import * as Haptics from 'expo-haptics';
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
     const insets = useSafeAreaInsets();
-    const headerHeight = useHeaderHeight();
+    const headerHeight = 0;
     const [keyboardVisible, setKeyboardVisible] = useState(false);
     const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const router = useRouter();
+    const safeFriendId = (friendId as string) || '';
     const { user: currentUser } = useAuthStore();
-    const { blockedUserIds, blockUser, unblockUser, combinedItems } = useFriendsStore();
-    const isBlocked = blockedUserIds.includes(friendId as string);
+    const { blockedUserIds = [], blockUser, unblockUser, combinedItems = [], onlineUsers = {} } = useFriendsStore();
+    
+    const isBlocked = safeFriendId && blockedUserIds ? blockedUserIds.includes(safeFriendId) : false;
+    const friendData = safeFriendId ? (combinedItems || []).find(f => (f?.id === safeFriendId)) : null;
 
-    const friendData = (combinedItems || []).find(f => f.id === friendId);
-
-    const chatRoom = useChatRoom(friendId as string, currentUser, isGroup === 'true');
-    const { isUserOnline } = usePresence(currentUser?.id);
+    const chatRoom = useChatRoom(safeFriendId, currentUser, isGroup === 'true');
+    const isUserOnline = safeFriendId ? !!onlineUsers[safeFriendId] : false;
 
     const {
         messages,
@@ -54,12 +52,7 @@ export default function ChatScreen() {
     } = chatRoom;
 
     // Call Management
-    const {
-        callSession,
-        handleStartCall,
-        setCallActive,
-        endCall
-    } = useCallManager(currentUser, [{ id: friendId, name: friendName, avatar_url: null }]);
+    const { handleStartCall } = useCallManager(currentUser, [], false);
 
     const [replyingTo, setReplyingTo] = useState<any>(null);
     const [editingMessage, setEditingMessage] = useState<any>(null);
@@ -228,14 +221,38 @@ export default function ChatScreen() {
 
     if (!currentUser || (loading && messages.length === 0)) {
         return (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
-                <ActivityIndicator size="large" color="#F68537" />
-            </View>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
+                {/* Skeleton Header */}
+                <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#E2E8F0' }} />
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E2E8F0' }} />
+                    <View>
+                        <View style={{ width: 100, height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 4 }} />
+                        <View style={{ width: 60, height: 10, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+                    </View>
+                </View>
+
+                {/* Skeleton Messages */}
+                <View style={{ flex: 1, padding: 16 }}>
+                    <View style={{ alignSelf: 'flex-start', width: '60%', height: 60, backgroundColor: 'white', borderRadius: 20, borderBottomLeftRadius: 4, marginBottom: 16, opacity: 0.6 }} />
+                    <View style={{ alignSelf: 'flex-end', width: '50%', height: 45, backgroundColor: '#F68537', borderRadius: 20, borderBottomRightRadius: 4, marginBottom: 16, opacity: 0.3 }} />
+                    <View style={{ alignSelf: 'flex-start', width: '70%', height: 80, backgroundColor: 'white', borderRadius: 20, borderBottomLeftRadius: 4, marginBottom: 16, opacity: 0.6 }} />
+                    <View style={{ alignSelf: 'flex-end', width: '40%', height: 45, backgroundColor: '#F68537', borderRadius: 20, borderBottomRightRadius: 4, marginBottom: 16, opacity: 0.3 }} />
+                    <View style={{ alignSelf: 'flex-start', width: '55%', height: 50, backgroundColor: 'white', borderRadius: 20, borderBottomLeftRadius: 4, marginBottom: 16, opacity: 0.6 }} />
+                    <View style={{ alignSelf: 'flex-end', width: '65%', height: 70, backgroundColor: '#F68537', borderRadius: 20, borderBottomRightRadius: 4, marginBottom: 16, opacity: 0.3 }} />
+                </View>
+
+                {/* Skeleton Input */}
+                <View style={{ padding: 16, backgroundColor: 'white', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ flex: 1, height: 45, borderRadius: 25, backgroundColor: '#E2E8F0' }} />
+                    <View style={{ width: 45, height: 45, borderRadius: 22.5, backgroundColor: '#E2E8F0' }} />
+                </View>
+            </SafeAreaView>
         );
     }
 
     // Calculate custom header height: insets.top + header padding/content
-    const customHeaderHeight = insets.top + 60; 
+    const customHeaderHeight = insets.top + 60;
 
     const MainContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
     const containerProps = Platform.OS === 'ios' ? {
@@ -244,7 +261,7 @@ export default function ChatScreen() {
     } : {};
 
     return (
-        <MainContainer 
+        <MainContainer
             {...containerProps}
             style={{ flex: 1, backgroundColor: '#EBD8B7' }}
         >
@@ -252,8 +269,8 @@ export default function ChatScreen() {
             <Stack.Screen options={{ headerShown: false }} />
 
             {/* Custom Header */}
-            <View style={{ 
-                paddingTop: insets.top, 
+            <View style={{
+                paddingTop: insets.top,
                 backgroundColor: 'white',
                 borderBottomWidth: 1,
                 borderBottomColor: 'rgba(0,0,0,0.05)',
@@ -282,12 +299,12 @@ export default function ChatScreen() {
                             <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
                             <Text style={{
                                 fontSize: 10,
-                                color: isTyping ? '#10B981' : (isUserOnline(friendId as string) ? '#10B981' : '#94A3B8'),
+                                color: isTyping ? '#10B981' : (isUserOnline ? '#10B981' : '#94A3B8'),
                                 fontWeight: 'bold',
                                 textTransform: 'uppercase',
                                 letterSpacing: 0.5
                             }}>
-                                {isTyping ? 'typing...' : (isUserOnline(friendId as string) ? 'online' : formatLastSeen(friendData?.lastSeen))}
+                                {isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(friendData?.lastSeen))}
                             </Text>
                         </View>
                     </TouchableOpacity>
@@ -353,16 +370,6 @@ export default function ChatScreen() {
                     </View>
                 )}
 
-                <CallScreen
-                    visible={!!callSession}
-                    callState={callSession?.status}
-                    onEndCall={endCall}
-                    onAcceptCall={setCallActive}
-                    currentUser={currentUser}
-                    callType={callSession?.type || 'video'}
-                    friend={callSession?.friend || {}}
-                    offer={callSession?.offer}
-                />
 
                 <ChatInput
                     onSendMessage={onSendMessage}

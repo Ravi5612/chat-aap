@@ -7,24 +7,33 @@ export const useReceivedRequests = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadReceivedRequests();
+        let channel: any;
 
-        const channel = supabase
-            .channel('received-requests')
-            .on('postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'friend_requests'
-                },
-                () => {
-                    loadReceivedRequests();
-                }
-            )
-            .subscribe();
+        const init = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            loadReceivedRequests();
+
+            channel = supabase
+                .channel(`received-requests-${user.id}`)
+                .on('postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'friend_requests'
+                    },
+                    () => {
+                        loadReceivedRequests();
+                    }
+                )
+                .subscribe();
+        };
+
+        init();
 
         return () => {
-            supabase.removeChannel(channel);
+            if (channel) supabase.removeChannel(channel);
         };
     }, []);
 

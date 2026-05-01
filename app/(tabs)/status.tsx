@@ -10,15 +10,24 @@ import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import StatusBar from '@/components/chat/StatusBar';
 
 export default function StatusScreen() {
+    console.log('[DEBUG] StatusScreen: Rendering component...');
     const router = useRouter();
     const swipeHandlers = useSwipeNavigation();
+    
+    console.log('[DEBUG] StatusScreen: Calling useFriends hook...');
     const { combinedItems, myStatuses, loading, loadFriends } = useFriends();
+    
     const [currentUser, setCurrentUser] = useState<any>(null);
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
+        console.log('[DEBUG] StatusScreen: Fetching currentUser...');
+        supabase.auth.getUser().then(({ data }) => {
+            console.log('[DEBUG] StatusScreen: CurrentUser fetched:', data.user?.id);
+            setCurrentUser(data.user);
+        });
     }, []);
 
+    console.log('[DEBUG] StatusScreen: Calling useStatusActions hook...');
     const {
         viewingStatus,
         setShowAddStatus,
@@ -30,9 +39,36 @@ export default function StatusScreen() {
 
     if (loading && combinedItems.length === 0) {
         return (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' }}>
-                <ActivityIndicator size="large" color="#F68537" />
-            </View>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
+                <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
+                    <View style={{ width: 100, height: 28, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 8, marginBottom: 4 }} />
+                    <View style={{ width: 80, height: 12, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 4 }} />
+                </View>
+
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10 }}>
+                    {/* Skeleton for My Status */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', padding: 14, borderRadius: 24, marginBottom: 20, opacity: 0.6 }}>
+                        <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#E2E8F0' }} />
+                        <View style={{ marginLeft: 16 }}>
+                            <View style={{ width: 120, height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 6 }} />
+                            <View style={{ width: 80, height: 12, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+                        </View>
+                    </View>
+
+                    <View style={{ width: 150, height: 20, backgroundColor: 'rgba(255,255,255,0.4)', borderRadius: 6, marginBottom: 16 }} />
+
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', padding: 14, borderRadius: 24, marginBottom: 12, opacity: 0.6 }}>
+                            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#E2E8F0' }} />
+                            <View style={{ marginLeft: 16, flex: 1 }}>
+                                <View style={{ width: '60%', height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 6 }} />
+                                <View style={{ width: '40%', height: 12, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+                            </View>
+                            <View style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: '#E2E8F0' }} />
+                        </View>
+                    ))}
+                </ScrollView>
+            </SafeAreaView>
         );
     }
 

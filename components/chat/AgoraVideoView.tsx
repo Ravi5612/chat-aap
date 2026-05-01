@@ -21,7 +21,7 @@ export default function AgoraVideoView({ uid, style }: { uid: number; style: any
 
     return (
         <RtcSurfaceView
-            canvas={{ uid }}
+            canvas={{ uid: uid }}
             style={style}
         />
     );

@@ -31,7 +31,12 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
     // 1. Derive Chat Key First
     // 1. Derive Chat Key & Check Membership
     useEffect(() => {
-        if (!friendId || !currentUser) return;
+        if (!friendId || !currentUser) {
+            console.log('[DEBUG] ChatRoom: Missing ID or User, skipping init.');
+            return;
+        }
+
+        console.log('[DEBUG] ChatRoom: Initializing for friend:', friendId);
         initChat(friendId, currentUser, isGroup);
 
         const checkMembership = async () => {
@@ -51,8 +56,10 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
 
         checkMembership();
 
-        // Realtime listener for membership changes
-        const membershipChannel = supabase.channel(`members-${friendId}-${currentUser.id}`)
+        // Unique membership channel name
+        const mChannelName = `membership-${friendId}-${currentUser.id}`;
+        console.log('[DEBUG] ChatRoom: Subscribing to membership:', mChannelName);
+        const membershipChannel = supabase.channel(mChannelName)
             .on(
                 'postgres_changes',
                 {
@@ -62,13 +69,16 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     filter: `group_id=eq.${friendId}`
                 },
                 () => {
-                    // Refresh membership status on ANY change to group members
+                    console.log('[DEBUG] ChatRoom: Membership change detected');
                     checkMembership();
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                console.log('[DEBUG] ChatRoom: Membership Channel Status:', status);
+            });
 
         return () => {
+            console.log('[DEBUG] ChatRoom: Cleaning up membership channel');
             supabase.removeChannel(membershipChannel);
         };
     }, [friendId, currentUser?.id, isGroup]);
@@ -77,9 +87,12 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
     useEffect(() => {
         if (!friendId || !currentUser || !chatKey) return;
 
-        const logPrefix = `[Chat:${friendId.substring(0, 4)}]`;
-        const channelName = isGroup ? `group-${friendId}` : `chat-${[currentUser.id, friendId].sort().join('-')}`;
-
+        // UNIQUE Channel Name to avoid collisions
+        const channelName = isGroup 
+            ? `group-chat-${friendId}-${currentUser.id}` 
+            : `p2p-chat-${[currentUser.id, friendId].sort().join('-')}`;
+        
+        console.log('[DEBUG] ChatRoom: Subscribing to messages on channel:', channelName);
         const channel = supabase.channel(channelName);
 
         // Configure internal channel state in store
@@ -195,11 +208,14 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     messages: state.messages.filter(m => m.id !== message_id)
                 }));
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log('[DEBUG] ChatRoom: Message Channel Status:', status);
+            });
 
         loadMessages(friendId, currentUser, isGroup);
 
         return () => {
+            console.log('[DEBUG] ChatRoom: Cleaning up message channel');
             supabase.removeChannel(channel);
             cleanupChat();
         };

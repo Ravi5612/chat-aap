@@ -1,4 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
@@ -19,6 +20,8 @@ import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { SplashScreen } from '@/components/SplashScreen';
+import { useCallManager } from '@/hooks/useCallManager';
+import CallScreen from '@/components/chat/CallScreen';
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
@@ -31,6 +34,16 @@ export default function RootLayout() {
   // Initialize notifications & global listeners
   usePushNotifications(session?.user?.id || null);
   useGlobalRealtime(session?.user?.id || null);
+
+  const { combinedItems = [] } = useFriendsStore();
+  const memoizedFriends = React.useMemo(() => combinedItems, [combinedItems.length]);
+
+  const { 
+    callSession, 
+    handleStartCall, 
+    setCallActive, 
+    endCall 
+  } = useCallManager(session?.user, memoizedFriends);
 
   useEffect(() => {
     // 1. Setup Auth Listener & Initial Session
@@ -95,9 +108,19 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="chat/[id]" options={{ headerShown: true }} />
+          <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
+        <CallScreen
+          visible={!!callSession}
+          callState={callSession?.status}
+          onEndCall={endCall}
+          onAcceptCall={setCallActive}
+          currentUser={session?.user}
+          callType={callSession?.type || 'video'}
+          friend={callSession?.friend || {}}
+          offer={callSession?.offer}
+        />
         <StatusBar style="auto" />
       </ThemeProvider>
     </GestureHandlerRootView>
