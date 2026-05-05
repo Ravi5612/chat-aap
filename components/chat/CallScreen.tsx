@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withDecay } from 'react-native-reanimated';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useCallLogger } from '@/hooks/useCallLogger';
@@ -33,11 +35,49 @@ export default function CallScreen({
     const [callDuration, setCallDuration] = useState(0);
     const [isSwapped, setIsSwapped] = useState(false);
     const durationRef = useRef(0);
+    const intervalRef = useRef<NodeJS.Timeout | null>(null); // NEW: Dedicated interval ref
     const lastCallInfo = useRef({
         state: callState,
         friend: friend,
         type: callType
     });
+    const hasLogged = useRef(false);
+
+    // Track props for debugging
+    useEffect(() => {
+        console.log(`[CALL_ACTION] Props Update - visible: ${visible}, state: ${callState}, type: ${callType}, friend: ${friend?.name}`);
+    }, [visible, callState, callType, friend?.id]);
+
+    // Draggable PIP values
+    const translateX = useSharedValue(0);
+    const translateY = useSharedValue(0);
+
+    const onGestureEvent = (event: any) => {
+        translateX.value = event.nativeEvent.translationX;
+        translateY.value = event.nativeEvent.translationY;
+        // console.log('[CALL_ACTION] PIP Dragging:', Math.round(event.nativeEvent.translationX), Math.round(event.nativeEvent.translationY));
+    };
+
+    const onHandlerStateChange = (event: any) => {
+        if (event.nativeEvent.state === State.END) {
+            console.log(`[CALL_ACTION] PIP Drag Ended at X: ${Math.round(event.nativeEvent.translationX)}, Y: ${Math.round(event.nativeEvent.translationY)}`);
+            translateX.value = withSpring(event.nativeEvent.translationX);
+            translateY.value = withSpring(event.nativeEvent.translationY);
+        }
+    };
+
+    const handleSwap = () => {
+        const nextSwapped = !isSwapped;
+        console.log('[CALL_ACTION] Video Swapped. Local is now:', nextSwapped ? 'Full Screen' : 'Small Box');
+        setIsSwapped(nextSwapped);
+    };
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateX: translateX.value },
+            { translateY: translateY.value },
+        ],
+    }));
 
     // Keep memory of the call info even if props become null
     if (callState && friend?.id) {
@@ -70,22 +110,22 @@ export default function CallScreen({
     const { saveCallLog } = useCallLogger(currentUser, friend, callType, callState);
 
     const acceptCall = () => {
-        console.log('[DEBUG] CallScreen: Accept button pressed');
+        console.log('[CALL_ACTION] Accept button pressed');
         // Signaling: Tell the caller we accepted
         const signalChannelName = `calls-signal-${friend.id}`;
-        console.log('[DEBUG] CallScreen: Sending accepted signal to caller:', signalChannelName);
+        console.log('[CALL_ACTION] Sending accepted signal to caller channel:', signalChannelName);
         const personalChannel = supabase.channel(signalChannelName);
         personalChannel.subscribe((status) => {
-            console.log('[DEBUG] CallScreen: Acceptance channel status:', status);
+            console.log('[CALL_ACTION] Acceptance channel status:', status);
             if (status === 'SUBSCRIBED') {
                 personalChannel.send({
                     type: 'broadcast',
                     event: 'signal',
                     payload: { type: 'accepted', caller_id: currentUser.id }
                 });
-                console.log('[DEBUG] CallScreen: Accepted signal sent');
+                console.log('[CALL_ACTION] "accepted" signal broadcasted');
                 setTimeout(() => {
-                    console.log('[DEBUG] CallScreen: Cleaning up acceptance channel');
+                    console.log('[CALL_ACTION] Cleaning up signaling channel');
                     supabase.removeChannel(personalChannel);
                 }, 2000);
             }
@@ -94,43 +134,70 @@ export default function CallScreen({
     };
 
     const endCall = () => {
-        console.log('[DEBUG] CallScreen: End call button pressed');
+        console.log('[CALL_ACTION] End call button pressed (Manual)');
         onEndCall();
     };
 
-    // Call Duration Timer
+    // Call Duration Timer - STABILIZED
     useEffect(() => {
-        let interval: any;
-        if (callState === 'active') {
-            interval = setInterval(() => {
-                setCallDuration(prev => {
-                    const next = prev + 1;
-                    durationRef.current = next;
-                    return next;
-                });
-            }, 1000);
+        const isCallActive = (callState === 'active');
+        
+        if (isCallActive) {
+            // ONLY start if there is no existing interval
+            if (!intervalRef.current) {
+                console.log('[CALL_ACTION] Starting Single Stable Timer');
+                intervalRef.current = setInterval(() => {
+                    setCallDuration(prev => {
+                        const next = prev + 1;
+                        durationRef.current = next;
+                        if (next % 5 === 0) {
+                            console.log(`[CALL_ACTION] Timer Tick: ${next}s`);
+                        }
+                        return next;
+                    });
+                }, 1000);
+            }
+        } else {
+            // Stop and clear if not active
+            if (intervalRef.current) {
+                console.log('[CALL_ACTION] Stopping and clearing Timer');
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
         }
-        return () => clearInterval(interval);
+
+        // Cleanup on unmount or state change
+        return () => {
+            if (intervalRef.current && callState !== 'active') {
+                console.log('[CALL_ACTION] Cleanup: Clearing Timer Interval');
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+        };
     }, [callState]);
 
-    // Logging on unmount - Use the remembered info
+    // Detect call end by visibility change
     useEffect(() => {
-        return () => {
+        if (!visible && lastCallInfo.current.state) {
+            // Screen just closed
             const finalState = lastCallInfo.current.state;
             const finalDuration = durationRef.current;
             const finalFriend = lastCallInfo.current.friend;
-            const finalType = lastCallInfo.current.type;
 
-            if (finalState && finalFriend?.id) {
-                // Determine status manually if needed or use the state
+            if (finalFriend?.id) {
                 const logStatus = finalDuration > 0 ? 'completed' : 
                                 (finalState === 'incoming' ? 'missed' : 'cancelled');
                 
-                // Directly call supabase or a more reliable logger
-                saveCallLog(logStatus, finalDuration);
+                console.log(`[CALL_ACTION] Triggering saveCallLog. Status: ${logStatus}, Duration: ${finalDuration}`);
+                saveCallLog(logStatus, finalDuration, finalFriend);
             }
-        };
-    }, [saveCallLog]); // Keep saveCallLog as dependency
+            
+            // Reset local memory for next call
+            lastCallInfo.current = { state: null as any, friend: null, type: null as any };
+            durationRef.current = 0;
+            setCallDuration(0);
+        }
+    }, [visible]); // ONLY trigger on visibility change
 
     const formatDuration = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -143,14 +210,51 @@ export default function CallScreen({
     return (
         <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onEndCall}>
             <View style={styles.container}>
-                {/* Main Video (Remote) */}
+                {/* Main Video Container */}
                 <View style={styles.mainVideoContainer}>
-                    {callType === 'video' && remoteUid !== 0 && !isSwapped ? (
-                        <AgoraVideoView
-                            uid={remoteUid}
-                            style={styles.fullVideo}
-                        />
+                    {callType === 'video' ? (
+                        <>
+                            {isSwapped ? (
+                                /* Local video in full screen */
+                                <AgoraVideoView
+                                    uid={0}
+                                    style={styles.fullVideo}
+                                />
+                            ) : remoteUid !== 0 ? (
+                                /* Remote video in full screen */
+                                <AgoraVideoView
+                                    uid={remoteUid}
+                                    style={styles.fullVideo}
+                                />
+                            ) : (
+                                /* Waiting for remote user */
+                                <View style={styles.placeholderContainer}>
+                                    <View style={styles.avatarContainer}>
+                                        {friend.avatar_url ? (
+                                            <Image source={{ uri: friend.avatar_url }} style={styles.fullImage} />
+                                        ) : (
+                                            <Ionicons name="person" size={64} color="#94A3B8" />
+                                        )}
+                                    </View>
+                                    <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
+                                    <Text style={styles.callStatus}>
+                                        {callState === 'outgoing' ? 'Calling...' :
+                                            callState === 'incoming' ? 'Incoming Call...' :
+                                                'Connecting video...'}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* Video Off Overlay for Main Screen (if local is full and off) */}
+                            {isSwapped && isVideoOff && (
+                                <View style={styles.videoOffOverlay}>
+                                    <Ionicons name="videocam-off" size={64} color="white" />
+                                    <Text className="text-white mt-4">Your camera is off</Text>
+                                </View>
+                            )}
+                        </>
                     ) : (
+                        /* Audio Call Placeholder */
                         <View style={styles.placeholderContainer}>
                             <View style={styles.avatarContainer}>
                                 {friend.avatar_url ? (
@@ -163,28 +267,38 @@ export default function CallScreen({
                             <Text style={styles.callStatus}>
                                 {callState === 'outgoing' ? 'Calling...' :
                                     callState === 'incoming' ? 'Incoming Call...' :
-                                        callType === 'audio' ? 'On Call' : 'Connecting video...'}
+                                        'On Call'}
                             </Text>
                         </View>
                     )}
                 </View>
 
-                {/* Local Preview (PIP) - Show for caller always, for receiver only after joining */}
-                {callType === 'video' && (joined || callState === 'outgoing') && (
-                    <TouchableOpacity
-                        onPress={() => setIsSwapped(!isSwapped)}
-                        style={styles.pipContainer}
+                {/* Local Preview (PIP) - Draggable & Swappable */}
+                {callType === 'video' && (callState === 'active' || callState === 'outgoing') && (
+                    <PanGestureHandler
+                        onGestureEvent={onGestureEvent}
+                        onHandlerStateChange={onHandlerStateChange}
                     >
-                        <AgoraVideoView
-                            uid={0}
-                            style={styles.pipVideo}
-                        />
-                        {isVideoOff && (
-                            <View style={styles.videoOffOverlay}>
-                                <Ionicons name="videocam-off" size={24} color="white" />
-                            </View>
-                        )}
-                    </TouchableOpacity>
+                        <Animated.View style={[styles.pipContainer, animatedStyle]}>
+                            <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={handleSwap}
+                                style={{ flex: 1 }}
+                            >
+                                <AgoraVideoView
+                                    uid={isSwapped ? remoteUid : 0}
+                                    style={styles.pipVideo}
+                                    zOrderMediaOverlay={true}
+                                    zOrderOnTop={true}
+                                />
+                                {!isSwapped && isVideoOff && (
+                                    <View style={styles.videoOffOverlay}>
+                                        <Ionicons name="videocam-off" size={24} color="white" />
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        </Animated.View>
+                    </PanGestureHandler>
                 )}
 
                 {/* Top Overlay (Timer) */}
@@ -203,7 +317,10 @@ export default function CallScreen({
                 {/* Controls */}
                 <View style={styles.controlsContainer}>
                     <TouchableOpacity
-                        onPress={toggleMute}
+                        onPress={() => {
+                            console.log('[CALL_ACTION] Mute toggled');
+                            toggleMute();
+                        }}
                         style={[styles.controlButton, isMuted && styles.dangerButton]}
                     >
                         <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
@@ -226,7 +343,10 @@ export default function CallScreen({
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        onPress={toggleVideo}
+                        onPress={() => {
+                            console.log('[CALL_ACTION] Video toggled');
+                            toggleVideo();
+                        }}
                         style={[
                             styles.controlButton,
                             isVideoOff && styles.dangerButton,
@@ -238,7 +358,10 @@ export default function CallScreen({
 
                     {callType === 'video' && (
                         <TouchableOpacity
-                            onPress={switchCamera}
+                            onPress={() => {
+                                console.log('[CALL_ACTION] Camera switched');
+                                switchCamera();
+                            }}
                             style={styles.controlButton}
                         >
                             <Ionicons name="refresh" size={24} color="white" />

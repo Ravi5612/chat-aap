@@ -1,183 +1,210 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
-import { logErrorToDB } from '@/utils/errorLogger';
-
-let AgoraRTC: any = null;
-try {
-    // Attempt to load Agora only on native and if available
-    if (Platform.OS !== 'web') {
-        AgoraRTC = require('react-native-agora');
-    }
-} catch (e) {
-    console.warn('Agora SDK not found or not linked. Calling features will be disabled.');
-}
+import { Platform } from 'react-native';
+import * as AgoraRTC from 'react-native-agora';
+import { 
+    IRtcEngine, 
+    ChannelProfileType, 
+    ClientRoleType,
+} from 'react-native-agora';
 
 const APP_ID = process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
 
+interface UseAgoraProps {
+    callState: 'incoming' | 'outgoing' | 'active' | null;
+    callType: 'audio' | 'video';
+    onEndCall: () => void;
+    onAcceptCall: () => void;
+    currentUser: any;
+    friend: any;
+}
+
 export const useAgora = ({
-    currentUser,
-    friend,
-    callType,
     callState,
+    callType,
+    onEndCall,
     onAcceptCall,
-    onEndCall
-}: any) => {
+    currentUser,
+    friend
+}: UseAgoraProps) => {
     const [joined, setJoined] = useState(false);
-    const [remoteUid, setRemoteUid] = useState<number>(0);
+    const [remoteUid, setRemoteUid] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
-    const [isVideoOff, setIsVideoOff] = useState(callType === 'audio');
-    const [connectionStatus, setConnectionStatus] = useState(AgoraRTC ? 'Disconnected' : 'SDK Not Found');
+    const [isVideoOff, setIsVideoOff] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState('Initializing...');
     
-    const engine = useRef<any>(null);
+    const engine = useRef<IRtcEngine | null>(null);
     const channelName = useRef<string>('');
     const isJoining = useRef(false);
+    const hasAcceptedRef = useRef(false); // NEW: Prevent multiple onAcceptCall triggers
 
-    const requestPermissions = async () => {
-        if (Platform.OS === 'android') {
-            const { PermissionsAndroid } = require('react-native');
-            await PermissionsAndroid.requestMultiple([
-                PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-                PermissionsAndroid.PERMISSIONS.CAMERA,
-            ]);
+    const init = async () => {
+        if (engine.current) return;
+        
+        try {
+            console.log('[CALL_ACTION] Initializing Agora Engine...');
+            
+            if (Platform.OS === 'android') {
+                const { PermissionsAndroid } = require('react-native');
+                await PermissionsAndroid.requestMultiple([
+                    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+                    PermissionsAndroid.PERMISSIONS.CAMERA,
+                ]);
+            }
+
+            const rtcEngine = AgoraRTC.createAgoraRtcEngine();
+            engine.current = rtcEngine;
+
+            const eventHandler = {
+                onJoinChannelSuccess: (connection: any) => {
+                    console.log('[CALL_ACTION] Joined successfully. Local UID:', connection.localUid);
+                    setJoined(true);
+                    setConnectionStatus('Connected');
+                    rtcEngine.enableLocalVideo(true);
+                },
+                onUserJoined: (connection: any, rUid: number) => {
+                    console.log('[CALL_ACTION] REMOTE USER JOINED! UID:', rUid);
+                    setRemoteUid(rUid);
+                    
+                    // Only trigger acceptance ONCE to avoid state loops
+                    if (stateRef.current === 'outgoing' && !hasAcceptedRef.current) {
+                        hasAcceptedRef.current = true;
+                        onAcceptCall();
+                    }
+                },
+                onUserOffline: (connection: any, rUid: number) => {
+                    console.log('[CALL_ACTION] Remote user offline:', rUid);
+                    setRemoteUid(0);
+                    onEndCall();
+                },
+                onLeaveChannel: () => {
+                    console.log('[CALL_ACTION] Left Agora channel');
+                    setJoined(false);
+                    setConnectionStatus('Disconnected');
+                },
+                onError: (err: any) => {
+                    console.error('[CALL_ACTION] Agora Error:', err);
+                    setConnectionStatus(`Error: ${err}`);
+                }
+            };
+
+            rtcEngine.initialize({
+                appId: APP_ID,
+                channelProfile: ChannelProfileType.ChannelProfileLiveBroadcasting,
+            });
+
+            rtcEngine.registerEventHandler(eventHandler);
+            rtcEngine.enableVideo();
+            rtcEngine.enableAudio();
+            rtcEngine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+            rtcEngine.startPreview();
+            console.log('[CALL_ACTION] Agora Engine Initialized Successfully');
+        } catch (e) {
+            console.error('[CALL_ACTION] Failed to initialize Agora:', e);
         }
     };
 
-    const init = useCallback(async () => {
-        if (!AgoraRTC) return;
-        if (!APP_ID || APP_ID === 'YOUR_AGORA_APP_ID_HERE') {
-            console.error('Agora App ID is missing.');
-            setConnectionStatus('Missing App ID');
-            return;
-        }
-
-        try {
-            await requestPermissions();
-            
-            if (!engine.current) {
-                engine.current = AgoraRTC.createAgoraRtcEngine();
-                const rtcEngine = engine.current;
-
-                rtcEngine.initialize({
-                    appId: APP_ID,
-                    channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileCommunication,
-                });
-
-                const eventHandler = {
-                    onJoinChannelSuccess: (connection: any) => {
-                        console.log('Joined channel successfully');
-                        setJoined(true);
-                        setConnectionStatus('Connected');
-                    },
-                    onUserJoined: (connection: any, remoteUid: number) => {
-                        console.log('Remote user joined:', remoteUid);
-                        setRemoteUid(remoteUid);
-                        if (callState === 'outgoing') onAcceptCall();
-                    },
-                    onUserOffline: (connection: any, remoteUid: number) => {
-                        console.log('Remote user offline:', remoteUid);
-                        setRemoteUid(0);
-                        onEndCall();
-                    },
-                    onLeaveChannel: () => {
-                        console.log('Left channel');
-                        setJoined(false);
-                        setConnectionStatus('Disconnected');
-                    },
-                    onError: (err: any) => {
-                        console.error('Agora Error:', err);
-                        setConnectionStatus(`Error: ${err}`);
-                        logErrorToDB(err, 'Agora Native Error', currentUser?.id, currentUser?.name);
-                    }
-                };
-
-                rtcEngine.registerEventHandler(eventHandler);
-                rtcEngine.enableVideo();
-                rtcEngine.startPreview();
-            }
-
-            if (!currentUser?.id || !friend?.id) {
-                return;
-            }
-
-            const ids = [currentUser.id, friend.id].sort();
-            channelName.current = `call_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
-            console.log('Channel Name set:', channelName.current);
-
-        } catch (e) {
-            console.error('Failed to initialize Agora', e);
-            setConnectionStatus('Init Failed');
-            logErrorToDB(e, 'Agora Initialization', currentUser?.id, currentUser?.name);
-        }
-    }, [currentUser?.id, friend?.id, callState, onAcceptCall, onEndCall]);
-
     const join = async () => {
-        if (!engine.current || !AgoraRTC || !channelName.current || isJoining.current || joined) {
+        if (!engine.current || isJoining.current || joined || !channelName.current) {
             return;
         }
+
         try {
             isJoining.current = true;
-            console.log('[DEBUG] Agora: Joining channel:', channelName.current);
-            engine.current.joinChannel('', channelName.current, 0, {
-                clientRoleType: AgoraRTC.ClientRoleType.ClientRoleBroadcaster,
+            console.log('[CALL_ACTION] Joining channel:', channelName.current);
+            engine.current.startPreview();
+            
+            const joinResult = engine.current.joinChannel('', channelName.current, 0, {
+                clientRoleType: ClientRoleType.ClientRoleBroadcaster,
                 publishMicrophoneTrack: true,
                 publishCameraTrack: callType === 'video',
                 autoSubscribeAudio: true,
                 autoSubscribeVideo: true,
             });
+
+            if (joinResult !== 0) {
+                isJoining.current = false;
+                setConnectionStatus(`Join Failed: ${joinResult}`);
+            }
         } catch (e) {
             isJoining.current = false;
-            console.error('Failed to join channel', e);
-            logErrorToDB(e, 'Agora Join Channel', currentUser?.id, currentUser?.name);
+            console.error('[CALL_ACTION] Join error:', e);
         }
     };
 
-    const leave = useCallback(async () => {
-        try {
-            if (engine.current) {
-                engine.current.leaveChannel();
-                // We keep the engine but leave the channel
-            }
+    const leave = useCallback(() => {
+        if (engine.current) {
+            console.log('[CALL_ACTION] Leaving channel and stopping media');
+            engine.current.leaveChannel();
+            engine.current.stopPreview();
             setJoined(false);
             setRemoteUid(0);
-        } catch (e) {
-            console.error('Failed to leave channel', e);
+            isJoining.current = false;
+            setConnectionStatus('Disconnected');
         }
     }, []);
 
-    const toggleMute = () => {
-        if (!engine.current) return;
-        engine.current.muteLocalAudioStream(!isMuted);
-        setIsMuted(!isMuted);
-    };
-
-    const toggleVideo = () => {
-        if (!engine.current) return;
-        engine.current.muteLocalVideoStream(!isVideoOff);
-        setIsVideoOff(!isVideoOff);
-    };
-
-    const switchCamera = () => {
-        if (!engine.current) return;
-        engine.current.switchCamera();
-    };
+    // Stabilize callState with a Ref to avoid closures issues
+    const stateRef = useRef(callState);
+    useEffect(() => {
+        stateRef.current = callState;
+        if (callState === null) {
+            hasAcceptedRef.current = false; // Reset on call end
+        }
+    }, [callState]);
 
     useEffect(() => {
-        const isCallActive = ['active', 'outgoing', 'incoming'].includes(callState);
+        if (currentUser?.id && friend?.id) {
+            const ids = [currentUser.id, friend.id].sort();
+            channelName.current = `call_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+        }
+    }, [currentUser?.id, friend?.id]);
+
+    useEffect(() => {
+        const isCallActive = ['active', 'outgoing', 'incoming'].includes(callState as string);
         
-        if (AgoraRTC && isCallActive) {
+        if (isCallActive) {
             init().then(() => {
-                if ((callState === 'active' || callState === 'outgoing') && channelName.current) {
+                if (callState === 'active' || callState === 'outgoing') {
                     join();
                 }
             });
-        }
-
-        return () => {
-            if (!isCallActive) {
+        } else {
+            if (joined || isJoining.current) {
                 leave();
             }
+        }
+    }, [callState, joined]);
+
+    useEffect(() => {
+        return () => {
+            if (engine.current) {
+                console.log('[CALL_ACTION] Cleanup - releasing Agora engine');
+                engine.current.leaveChannel();
+                engine.current.release();
+                engine.current = null;
+            }
         };
-    }, [callState, AgoraRTC, currentUser?.id, friend?.id, init]);
+    }, []);
+
+    const toggleMute = () => {
+        if (engine.current) {
+            engine.current.muteLocalAudioStream(!isMuted);
+            setIsMuted(!isMuted);
+        }
+    };
+
+    const toggleVideo = () => {
+        if (engine.current) {
+            engine.current.muteLocalVideoStream(!isVideoOff);
+            setIsVideoOff(!isVideoOff);
+        }
+    };
+
+    const switchCamera = () => {
+        if (engine.current) {
+            engine.current.switchCamera();
+        }
+    };
 
     return {
         joined,
@@ -188,8 +215,6 @@ export const useAgora = ({
         toggleMute,
         toggleVideo,
         switchCamera,
-        leave,
-        engine: engine.current,
-        channelName: channelName.current
+        leave
     };
 };

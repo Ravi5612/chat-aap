@@ -54,8 +54,27 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         const channel = supabase.channel(channelName);
 
         channel.on('broadcast', { event: 'signal' }, ({ payload }) => {
+            console.log('[CALL_ACTION] Signal received:', payload.type, 'from:', payload.caller_id);
             if (payload.type === 'offer') {
+                // If already in a call, send BUSY signal back to the caller
+                if (callSession) {
+                    console.log('[CALL_ACTION] Already in a call, sending BUSY to:', payload.caller_id);
+                    const busyChannel = supabase.channel(`calls-signal-${payload.caller_id}`);
+                    busyChannel.subscribe((status) => {
+                        if (status === 'SUBSCRIBED') {
+                            busyChannel.send({
+                                type: 'broadcast',
+                                event: 'signal',
+                                payload: { type: 'busy', receiver_id: currentUser.id }
+                            });
+                            setTimeout(() => supabase.removeChannel(busyChannel), 1000);
+                        }
+                    });
+                    return;
+                }
+
                 const caller = combinedItems.find(f => f.id === payload.caller_id) || { id: payload.caller_id, name: 'Unknown' };
+                console.log('[CALL_ACTION] Incoming call offer from:', caller.name);
                 setCallSession({
                     status: 'incoming',
                     type: payload.call_type,
@@ -63,8 +82,14 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                     friend: caller
                 });
             } else if (payload.type === 'accepted') {
+                console.log('[CALL_ACTION] Call accepted by remote user');
                 setCallActive();
+            } else if (payload.type === 'busy') {
+                console.log('[CALL_ACTION] Remote user is busy');
+                alert('User is busy on another call');
+                setCallSession(null);
             } else if (payload.type === 'end') {
+                console.log('[CALL_ACTION] Call ended by remote user signal');
                 setCallSession(null);
             }
         });
@@ -77,6 +102,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
     }, [currentUser?.id, combinedItems]);
 
     const handleStartCall = (friend: any, type: 'audio' | 'video' = 'video') => {
+        console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type);
         setCallSession({
             status: 'outgoing',
             type,
@@ -84,8 +110,10 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         });
 
         const signalChannelName = `calls-signal-${friend.id}`;
+        console.log('[CALL_ACTION] Subscribing to signaling channel:', signalChannelName);
         const personalChannel = supabase.channel(signalChannelName);
         personalChannel.subscribe((status) => {
+            console.log('[CALL_ACTION] Signaling channel status:', status);
             if (status === 'SUBSCRIBED') {
                 personalChannel.send({
                     type: 'broadcast',
@@ -96,8 +124,9 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                         caller_id: currentUser.id
                     }
                 });
-                console.log('[DEBUG] CallManager: Offer broadcasted successfully');
+                console.log('[CALL_ACTION] Offer broadcasted successfully');
                 setTimeout(() => {
+                    console.log('[CALL_ACTION] Cleaning up offer channel');
                     supabase.removeChannel(personalChannel);
                 }, 5000);
             }
