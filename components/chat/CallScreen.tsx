@@ -34,8 +34,8 @@ export default function CallScreen({
 }: CallScreenProps) {
     const [callDuration, setCallDuration] = useState(0);
     const [isSwapped, setIsSwapped] = useState(false);
-    const durationRef = useRef(0);
-    const intervalRef = useRef<NodeJS.Timeout | null>(null); // NEW: Dedicated interval ref
+    const startTimeRef = useRef<number | null>(null); // NEW: To track when the call actually started
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const lastCallInfo = useRef({
         state: callState,
         friend: friend,
@@ -138,38 +138,37 @@ export default function CallScreen({
         onEndCall();
     };
 
-    // Call Duration Timer - STABILIZED
+    // Call Duration Timer - TIMESTAMP BASED (Cannot Speed Up)
     useEffect(() => {
         const isCallActive = (callState === 'active');
         
         if (isCallActive) {
-            // ONLY start if there is no existing interval
+            if (!startTimeRef.current) {
+                startTimeRef.current = Date.now();
+                console.log('[CALL_ACTION] Timer Started - StartTime set');
+            }
+
             if (!intervalRef.current) {
-                console.log('[CALL_ACTION] Starting Single Stable Timer');
                 intervalRef.current = setInterval(() => {
-                    setCallDuration(prev => {
-                        const next = prev + 1;
-                        durationRef.current = next;
-                        if (next % 5 === 0) {
-                            console.log(`[CALL_ACTION] Timer Tick: ${next}s`);
-                        }
-                        return next;
-                    });
+                    if (startTimeRef.current) {
+                        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+                        setCallDuration(elapsed);
+                        if (elapsed % 5 === 0) console.log(`[CALL_ACTION] Stable Timer: ${elapsed}s`);
+                    }
                 }, 1000);
             }
         } else {
-            // Stop and clear if not active
+            // STOP EVERYTHING
             if (intervalRef.current) {
-                console.log('[CALL_ACTION] Stopping and clearing Timer');
+                console.log('[CALL_ACTION] Stopping Timer');
                 clearInterval(intervalRef.current);
                 intervalRef.current = null;
             }
+            // Don't reset startTimeRef here, wait for visibility hidden to reset the whole session
         }
 
-        // Cleanup on unmount or state change
         return () => {
             if (intervalRef.current && callState !== 'active') {
-                console.log('[CALL_ACTION] Cleanup: Clearing Timer Interval');
                 clearInterval(intervalRef.current);
                 intervalRef.current = null;
             }
@@ -179,25 +178,24 @@ export default function CallScreen({
     // Detect call end by visibility change
     useEffect(() => {
         if (!visible && lastCallInfo.current.state) {
-            // Screen just closed
+            const finalDuration = callDuration;
             const finalState = lastCallInfo.current.state;
-            const finalDuration = durationRef.current;
             const finalFriend = lastCallInfo.current.friend;
 
             if (finalFriend?.id) {
                 const logStatus = finalDuration > 0 ? 'completed' : 
                                 (finalState === 'incoming' ? 'missed' : 'cancelled');
                 
-                console.log(`[CALL_ACTION] Triggering saveCallLog. Status: ${logStatus}, Duration: ${finalDuration}`);
+                console.log(`[CALL_ACTION] Session Ended. Saving Log: ${logStatus}, Duration: ${finalDuration}`);
                 saveCallLog(logStatus, finalDuration, finalFriend);
             }
             
-            // Reset local memory for next call
+            // FULL RESET FOR NEXT SESSION
             lastCallInfo.current = { state: null as any, friend: null, type: null as any };
-            durationRef.current = 0;
+            startTimeRef.current = null;
             setCallDuration(0);
         }
-    }, [visible]); // ONLY trigger on visibility change
+    }, [visible]);
 
     const formatDuration = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
