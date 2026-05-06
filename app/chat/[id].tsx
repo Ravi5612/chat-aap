@@ -262,14 +262,14 @@ export default function ChatScreen() {
         );
     }
 
-    // Calculate custom header height: insets.top + header padding/content
-    const customHeaderHeight = insets.top + 60;
+    // Calculate keyboard offset: On Android we might need a small offset for the status bar
+    const keyboardOffset = Platform.OS === 'ios' ? 0 : (StatusBar.currentHeight || 0);
 
-    const MainContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
-    const containerProps = Platform.OS === 'ios' ? {
-        behavior: 'padding' as const,
-        keyboardVerticalOffset: headerHeight
-    } : {};
+    const MainContainer = KeyboardAvoidingView;
+    const containerProps = {
+        behavior: Platform.OS === 'ios' ? 'padding' as const : 'height' as const,
+        keyboardVerticalOffset: keyboardOffset
+    };
 
     return (
         <MainContainer
