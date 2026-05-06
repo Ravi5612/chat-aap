@@ -64,7 +64,7 @@ export default function StatusViewer() {
             .single();
 
         if (statusData) {
-            const { decryptText, getChatKey } = await import('@/utils/encryption');
+            const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
             // Use owner's self-key for status decryption
             const statusKey = await getChatKey(userId as string, userId as string);
 
@@ -213,7 +213,7 @@ export default function StatusViewer() {
         
         try {
             // 1. Get/Generate Chat Key for this conversation
-            const { getChatKey, encryptText } = await import('@/utils/encryption');
+            const { getChatKey, encryptText } = await import('@/utils/chatCrypto');
             const chatKey = await getChatKey(currentUser.id, userId as string);
             
             if (!chatKey) throw new Error("Encryption key not found");

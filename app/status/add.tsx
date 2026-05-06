@@ -68,7 +68,7 @@ export default function AddStatus() {
                 mediaType = isVideo ? 'video' : 'image';
             }
 
-            const { encryptText, getChatKey } = await import('@/utils/encryption');
+            const { encryptText, getChatKey } = await import('@/utils/chatCrypto');
             // For status, we use a self-encryption key so only authorized clients can read it
             const statusKey = await getChatKey(user.id, user.id); 
 
