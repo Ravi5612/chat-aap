@@ -101,14 +101,25 @@ export default function ChatInput({
     };
 
     const handlePickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            quality: 1,
-        });
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Allow gallery access to share photos.');
+                return;
+            }
 
-        if (!result.canceled) {
-            setSelectedImage(result.assets[0].uri);
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 1,
+            });
+
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('ChatInput PickImage Error:', error);
+            Alert.alert('Error', 'Failed to open gallery');
         }
     };
 

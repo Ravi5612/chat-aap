@@ -21,15 +21,28 @@ export default function AddStatus() {
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
     const pickMedia = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images', 'videos'],
-            allowsEditing: true,
-            aspect: [9, 16],
-            quality: 0.8,
-        });
+        try {
+            // Check permission first
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Please allow gallery access to post a status.');
+                return;
+            }
 
-        if (!result.canceled) {
-            setSelectedMedia(result.assets[0]);
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images', 'videos'],
+                allowsEditing: true,
+                aspect: [9, 16],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                setSelectedMedia(result.assets[0]);
+            }
+        } catch (error) {
+            console.error('PickMedia Error:', error);
+            Alert.alert('Error', 'Failed to open gallery');
         }
     };
 

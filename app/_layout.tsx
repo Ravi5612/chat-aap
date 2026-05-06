@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
+import { useInitialPermissions } from '@/hooks/useInitialPermissions';
 
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 
@@ -25,6 +26,10 @@ import CallScreen from '@/components/chat/CallScreen';
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
+  
+  // Request all permissions on mount
+  useInitialPermissions();
+
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
