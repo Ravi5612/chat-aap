@@ -94,6 +94,8 @@ export default function CallScreen({
         connectionStatus,
         isMuted,
         isVideoOff,
+        remoteAudioMuted,
+        remoteVideoMuted,
         toggleMute,
         toggleVideo,
         switchCamera,
@@ -243,11 +245,27 @@ export default function CallScreen({
                                 </View>
                             )}
 
+                            {/* Video Off Overlay for Main Screen (if remote is full and off) */}
+                            {(!isSwapped && remoteUid !== 0 && remoteVideoMuted) && (
+                                <View style={styles.videoOffOverlay}>
+                                    <Ionicons name="videocam-off" size={64} color="white" />
+                                    <Text style={{ color: 'white', marginTop: 12 }}>{friend.name} has turned off camera</Text>
+                                </View>
+                            )}
+
+                            {/* Remote Audio Muted Indicator */}
+                            {(!isSwapped && remoteUid !== 0 && remoteAudioMuted) && (
+                                <View style={styles.remoteStatusBadge}>
+                                    <Ionicons name="mic-off" size={16} color="white" />
+                                    <Text style={styles.remoteStatusText}>Muted</Text>
+                                </View>
+                            )}
+
                             {/* Video Off Overlay for Main Screen (if local is full and off) */}
                             {isSwapped && isVideoOff && (
                                 <View style={styles.videoOffOverlay}>
                                     <Ionicons name="videocam-off" size={64} color="white" />
-                                    <Text className="text-white mt-4">Your camera is off</Text>
+                                    <Text style={{ color: 'white', marginTop: 12 }}>Your camera is off</Text>
                                 </View>
                             )}
                         </>
@@ -267,6 +285,12 @@ export default function CallScreen({
                                     callState === 'incoming' ? 'Incoming Call...' :
                                         'On Call'}
                             </Text>
+                            {remoteAudioMuted && callState === 'active' && (
+                                <View style={[styles.remoteStatusBadge, { position: 'relative', marginTop: 16, top: 0, right: 0 }]}>
+                                    <Ionicons name="mic-off" size={16} color="white" />
+                                    <Text style={styles.remoteStatusText}>Friend Muted</Text>
+                                </View>
+                            )}
                         </View>
                     )}
                 </View>
@@ -290,6 +314,11 @@ export default function CallScreen({
                                     zOrderOnTop={true}
                                 />
                                 {!isSwapped && isVideoOff && (
+                                    <View style={styles.videoOffOverlay}>
+                                        <Ionicons name="videocam-off" size={24} color="white" />
+                                    </View>
+                                )}
+                                {isSwapped && remoteVideoMuted && (
                                     <View style={styles.videoOffOverlay}>
                                         <Ionicons name="videocam-off" size={24} color="white" />
                                     </View>
@@ -515,5 +544,24 @@ const styles = StyleSheet.create({
     },
     successButton: {
         backgroundColor: '#10B981',
+    },
+    remoteStatusBadge: {
+        position: 'absolute',
+        top: 120,
+        alignSelf: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        gap: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    remoteStatusText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: 'bold',
     },
 });

@@ -30,6 +30,8 @@ export const useAgora = ({
     const [remoteUid, setRemoteUid] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
+    const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
+    const [remoteVideoMuted, setRemoteVideoMuted] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('Initializing...');
     
     const engine = useRef<IRtcEngine | null>(null);
@@ -79,7 +81,18 @@ export const useAgora = ({
                 onLeaveChannel: () => {
                     console.log('[CALL_ACTION] Left Agora channel');
                     setJoined(false);
+                    setRemoteUid(0);
+                    setRemoteAudioMuted(false);
+                    setRemoteVideoMuted(false);
                     setConnectionStatus('Disconnected');
+                },
+                onUserMuteAudio: (connection: any, rUid: number, muted: boolean) => {
+                    console.log('[CALL_ACTION] Remote user mute audio:', rUid, muted);
+                    setRemoteAudioMuted(muted);
+                },
+                onUserMuteVideo: (connection: any, rUid: number, muted: boolean) => {
+                    console.log('[CALL_ACTION] Remote user mute video:', rUid, muted);
+                    setRemoteVideoMuted(muted);
                 },
                 onError: (err: any) => {
                     console.error('[CALL_ACTION] Agora Error:', err);
@@ -211,6 +224,8 @@ export const useAgora = ({
         remoteUid,
         isMuted,
         isVideoOff,
+        remoteAudioMuted,
+        remoteVideoMuted,
         connectionStatus,
         toggleMute,
         toggleVideo,
