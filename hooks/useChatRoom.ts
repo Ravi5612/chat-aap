@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useChatStore } from '@/store/useChatStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { decryptText } from '@/utils/chatCrypto';
 
 export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: boolean = false) => {
     const { user: currentUser } = useAuthStore();
@@ -107,7 +108,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
 
                 if (isRelevant) {
                     try {
-                        const { decryptText } = await import('@/utils/chatCrypto');
                         let decryptedText = newMsg.message;
                         
                         if (newMsg.message && typeof newMsg.message === 'string' && newMsg.message.trim().startsWith('{')) {
@@ -122,7 +122,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
 
                         let decryptedFileUrl = finalMsg.file_url;
                         if (finalMsg.file_url && finalMsg.file_url.trim().startsWith('{')) {
-                            const { decryptText } = await import('@/utils/chatCrypto');
                             decryptedFileUrl = await decryptText(finalMsg.file_url, chatKey);
                         }
 
@@ -174,7 +173,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                 if (!msg || msg.sender_id === currentUser.id) return;
 
                 try {
-                    const { decryptText } = await import('@/utils/chatCrypto');
                     let finalMsg = { ...msg };
 
                     // 1. Decrypt Message Text
@@ -249,7 +247,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             .on('broadcast', { event: 'message_edit' }, async (payload) => {
                 const { message_id, message: encText } = payload.payload;
                 if (chatKey) {
-                    const { decryptText } = await import('@/utils/chatCrypto');
                     const decText = await decryptText(encText, chatKey);
                     useChatStore.setState((state) => ({
                         messages: state.messages.map(m => m.id === message_id ? { ...m, message: decText, is_edited: true } : m)
