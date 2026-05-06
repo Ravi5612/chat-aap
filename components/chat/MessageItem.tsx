@@ -281,9 +281,11 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                             <Text style={{
                                 fontSize: 15,
                                 lineHeight: 22,
-                                color: isCurrentUser ? 'white' : '#1F2937'
+                                color: isCurrentUser ? 'white' : '#1F2937',
+                                fontStyle: textContent.trim().startsWith('{"iv":') ? 'italic' : 'normal',
+                                opacity: textContent.trim().startsWith('{"iv":') ? 0.7 : 1
                             }}>
-                                {textContent}
+                                {textContent.trim().startsWith('{"iv":') ? 'Decrypting...' : textContent}
                             </Text>
                         )}
 
