@@ -30,6 +30,17 @@
         "BLUETOOTH_CONNECT",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
@@ -90,6 +101,9 @@
         "projectId": "a5f0a97e-382f-4cd8-b3f2-b23797964284"
       }
     },
-    "owner": "ravirai"
+    "owner": "ravirai",
+    "updates": {
+      "url": "https://u.expo.dev/a5f0a97e-382f-4cd8-b3f2-b23797964284"
+    }
   }
 }
