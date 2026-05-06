@@ -171,20 +171,28 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             })
             .on('broadcast', { event: 'new_message' }, async (payload) => {
                 const msg = payload.payload;
-                if (msg.sender_id === currentUser.id) return;
+                if (!msg || msg.sender_id === currentUser.id) return;
 
                 try {
-                    let finalMsg = { ...msg };
                     const { decryptText } = await import('@/utils/chatCrypto');
+                    let finalMsg = { ...msg };
 
                     // 1. Decrypt Message Text
                     if (msg.message && typeof msg.message === 'string' && msg.message.trim().startsWith('{')) {
-                        finalMsg.message = await decryptText(msg.message, chatKey);
+                        try {
+                            finalMsg.message = await decryptText(msg.message, chatKey);
+                        } catch (err) {
+                            console.warn("Text decryption failed", err);
+                        }
                     }
 
                     // 2. Decrypt File URL
-                    if (msg.file_url && msg.file_url.trim().startsWith('{')) {
-                        finalMsg.file_url = await decryptText(msg.file_url, chatKey);
+                    if (msg.file_url && typeof msg.file_url === 'string' && msg.file_url.trim().startsWith('{')) {
+                        try {
+                            finalMsg.file_url = await decryptText(msg.file_url, chatKey);
+                        } catch (err) {
+                            console.warn("File URL decryption failed", err);
+                        }
                     }
 
                     useChatStore.setState((state) => {
@@ -195,7 +203,7 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     // Mark as read instantly
                     useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
                 } catch (e) {
-                    console.error("Broadcast decryption failed", e);
+                    console.error("Broadcast listener error:", e);
                 }
             })
             .on('broadcast', { event: 'typing' }, (payload) => {
