@@ -19,7 +19,6 @@
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#FFF5E6"
       },
-      "softwareKeyboardLayoutMode": "adjustResize",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
