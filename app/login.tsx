@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import AuthScreen from '@/components/ui/AuthScreen';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { logErrorToDB } from '@/utils/errorLogger';
 
 export default function LoginPage() {
@@ -18,10 +19,39 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');           // Used for SignUp
     const [phone, setPhone] = useState('');           // Used for SignUp
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+
+    const handleForgotPassword = async () => {
+        if (!resetEmail.trim() || !resetEmail.includes('@')) {
+            Alert.alert('Error', 'Please enter a valid email address');
+            return;
+        }
+        setLoading(true);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+                redirectTo: 'chatwarriors://reset-password',
+            });
+            if (error) throw error;
+            Alert.alert('Success', 'Password reset link sent to your email!');
+            setIsForgotPassword(false);
+        } catch (error: any) {
+            Alert.alert('Error', error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleAuth = async () => {
         if (loading) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        if (isForgotPassword) {
+            handleForgotPassword();
+            return;
+        }
 
         if (isSignUp) {
             // --- SIGN UP LOGIC ---
@@ -160,57 +190,100 @@ export default function LoginPage() {
     return (
         <View style={{ flex: 1 }}>
             <AuthScreen 
-                title={isSignUp ? "Create Account" : "Welcome Back"} 
-                subtitle={isSignUp ? "Join Chat Warriors today!" : "Login to your account"} 
+                title={isForgotPassword ? "Reset Password" : (isSignUp ? "Create Account" : "Welcome Back")} 
+                subtitle={isForgotPassword ? "We'll send a link to your email" : (isSignUp ? "Join Chat Warriors today!" : "Login to your account")} 
                 loading={loading}
             >
                 <View>
-                    {isSignUp ? (
+                    {isForgotPassword ? (
                         <>
                             <Text style={styles.label}>Email Address</Text>
                             <TextInput
-                                value={email}
-                                onChangeText={setEmail}
+                                value={resetEmail}
+                                onChangeText={setResetEmail}
                                 placeholder="you@example.com"
                                 keyboardType="email-address"
                                 autoCapitalize="none"
                                 style={inputStyle}
                                 editable={!loading}
                             />
-
-                            <Text style={styles.label}>Phone Number</Text>
-                            <TextInput
-                                value={phone}
-                                onChangeText={setPhone}
-                                placeholder="For your friends to find you"
-                                keyboardType="phone-pad"
-                                style={inputStyle}
-                                editable={!loading}
-                            />
                         </>
                     ) : (
                         <>
-                            <Text style={styles.label}>Email or Phone Number</Text>
-                            <TextInput
-                                value={identifier}
-                                onChangeText={setIdentifier}
-                                placeholder="Enter email or phone"
-                                autoCapitalize="none"
-                                style={inputStyle}
-                                editable={!loading}
-                            />
+                            {isSignUp ? (
+                                <>
+                                    <Text style={styles.label}>Email Address</Text>
+                                    <TextInput
+                                        value={email}
+                                        onChangeText={setEmail}
+                                        placeholder="you@example.com"
+                                        keyboardType="email-address"
+                                        autoCapitalize="none"
+                                        style={inputStyle}
+                                        editable={!loading}
+                                    />
+
+                                    <Text style={styles.label}>Phone Number</Text>
+                                    <TextInput
+                                        value={phone}
+                                        onChangeText={setPhone}
+                                        placeholder="For your friends to find you"
+                                        keyboardType="phone-pad"
+                                        style={inputStyle}
+                                        editable={!loading}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.label}>Email or Phone Number</Text>
+                                    <TextInput
+                                        value={identifier}
+                                        onChangeText={setIdentifier}
+                                        placeholder="Enter email or phone"
+                                        autoCapitalize="none"
+                                        style={inputStyle}
+                                        editable={!loading}
+                                    />
+                                </>
+                            )}
+
+                            <Text style={styles.label}>Password</Text>
+                            <View style={{ position: 'relative', width: '100%' }}>
+                                <TextInput
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    placeholder="Secret password"
+                                    secureTextEntry={!showPassword}
+                                    style={[inputStyle, { paddingRight: 50 }]}
+                                    editable={!loading}
+                                />
+                                <TouchableOpacity 
+                                    onPress={() => setShowPassword(!showPassword)}
+                                    style={{ 
+                                        position: 'absolute', 
+                                        right: 12, 
+                                        top: 12, 
+                                        padding: 4 
+                                    }}
+                                >
+                                    <Ionicons 
+                                        name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                                        size={22} 
+                                        color="#9CA3AF" 
+                                    />
+                                </TouchableOpacity>
+                            </View>
+
+                            {!isSignUp && (
+                                <TouchableOpacity 
+                                    onPress={() => setIsForgotPassword(true)}
+                                    style={{ alignSelf: 'flex-end', marginBottom: 16 }}
+                                >
+                                    <Text style={{ color: '#F68537', fontWeight: '600' }}>Forgot Password?</Text>
+                                </TouchableOpacity>
+                            )}
                         </>
                     )}
-
-                    <Text style={styles.label}>Password</Text>
-                    <TextInput
-                        value={password}
-                        onChangeText={setPassword}
-                        placeholder="Secret password"
-                        secureTextEntry
-                        style={inputStyle}
-                        editable={!loading}
-                    />
 
                     <TouchableOpacity
                         onPress={handleAuth}
@@ -222,7 +295,7 @@ export default function LoginPage() {
                             <ActivityIndicator color="white" />
                         ) : (
                             <Text style={styles.actionButtonText}>
-                                {isSignUp ? "Sign Up" : "Login"}
+                                {isForgotPassword ? "Send Reset Link" : (isSignUp ? "Sign Up" : "Login")}
                             </Text>
                         )}
                     </TouchableOpacity>
@@ -230,15 +303,23 @@ export default function LoginPage() {
                     <TouchableOpacity
                         onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setIsSignUp(!isSignUp);
+                            if (isForgotPassword) {
+                                setIsForgotPassword(false);
+                            } else {
+                                setIsSignUp(!isSignUp);
+                            }
                             setPassword('');
                         }}
                         style={{ alignItems: 'center', marginTop: 24, padding: 10 }}
                     >
                         <Text style={{ color: '#6B7280', fontSize: 15 }}>
-                            {isSignUp ? "Already have an account? " : "Don't have an account? "}
+                            {isForgotPassword 
+                                ? "Back to Login" 
+                                : (isSignUp ? "Already have an account? " : "Don't have an account? ")}
                             <Text style={{ color: '#F68537', fontWeight: 'bold' }}>
-                                {isSignUp ? "Login here" : "Sign Up"}
+                                {isForgotPassword 
+                                    ? "" 
+                                    : (isSignUp ? "Login here" : "Sign Up")}
                             </Text>
                         </Text>
                     </TouchableOpacity>
