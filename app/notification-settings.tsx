@@ -10,12 +10,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import { supabase } from '@/lib/supabase';
 
+import { Buffer } from 'buffer';
+
 // Manual base64 to ArrayBuffer helper
 function base64ToArrayBuffer(base64: string) {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+    const binary = Buffer.from(base64, 'base64');
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary[i];
     }
     return bytes.buffer;
 }
