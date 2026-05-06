@@ -120,13 +120,18 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                             sender: { id: friendId } 
                         };
 
+                        let decryptedFileUrl = finalMsg.file_url;
+                        if (finalMsg.file_url && finalMsg.file_url.trim().startsWith('{')) {
+                            const { decryptText } = await import('@/utils/chatCrypto');
+                            decryptedFileUrl = await decryptText(finalMsg.file_url, chatKey);
+                        }
+
                         useChatStore.setState((state) => {
                             const exists = state.messages.find(m => m.id === finalMsg.id);
-                            // If exists and already has decrypted text, don't overwrite with raw
                             if (exists && !exists.message?.startsWith('{')) return state;
                             
                             const filtered = state.messages.filter(m => m.id !== finalMsg.id);
-                            return { messages: [...filtered, finalMsg] };
+                            return { messages: [...filtered, { ...finalMsg, file_url: decryptedFileUrl }] };
                         });
                     } catch (e) {
                         console.error("ChatRoom: Realtime decryption failed", e);
@@ -168,13 +173,17 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                 const msg = payload.payload;
                 if (msg.sender_id === currentUser.id) return;
 
-                // Even for broadcast, try to decrypt if it's JSON (safeguard)
-                try {
-                    let finalMsg = msg;
+                    let finalMsg = { ...msg };
+                    const { decryptText } = await import('@/utils/chatCrypto');
+
+                    // 1. Decrypt Message Text
                     if (msg.message && typeof msg.message === 'string' && msg.message.trim().startsWith('{')) {
-                        const { decryptText } = await import('@/utils/chatCrypto');
-                        const decryptedText = await decryptText(msg.message, chatKey);
-                        finalMsg = { ...msg, message: decryptedText };
+                        finalMsg.message = await decryptText(msg.message, chatKey);
+                    }
+
+                    // 2. Decrypt File URL
+                    if (msg.file_url && msg.file_url.trim().startsWith('{')) {
+                        finalMsg.file_url = await decryptText(msg.file_url, chatKey);
                     }
 
                     useChatStore.setState((state) => {

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
 
@@ -63,10 +64,27 @@ export default function StatusViewer() {
             .single();
 
         if (statusData) {
-            // Attach profile to each status for the viewer UI
-            const enrichedData = statusData.map(s => ({
-                ...s,
-                profiles: profile || { username: 'User', avatar_url: null }
+            const { decryptText, getChatKey } = await import('@/utils/encryption');
+            // Use owner's self-key for status decryption
+            const statusKey = await getChatKey(userId as string, userId as string);
+
+            const enrichedData = await Promise.all(statusData.map(async (s) => {
+                let decryptedContent = s.content;
+                let decryptedMediaUrl = s.media_url;
+
+                if (s.content && s.content.trim().startsWith('{')) {
+                    try { decryptedContent = await decryptText(s.content, statusKey); } catch (e) {}
+                }
+                if (s.media_url && s.media_url.trim().startsWith('{')) {
+                    try { decryptedMediaUrl = await decryptText(s.media_url, statusKey); } catch (e) {}
+                }
+
+                return {
+                    ...s,
+                    content: decryptedContent,
+                    media_url: decryptedMediaUrl,
+                    profiles: profile || { username: 'User', avatar_url: null }
+                };
             }));
 
             let filteredData = enrichedData;
@@ -194,25 +212,34 @@ export default function StatusViewer() {
         if (!replyText.trim() || !currentUser || !currentStatusUI) return;
         
         try {
-            // Prepare the message. We send it as a text message to the user who posted the status.
+            // 1. Get/Generate Chat Key for this conversation
+            const { getChatKey, encryptText } = await import('@/utils/encryption');
+            const chatKey = await getChatKey(currentUser.id, userId as string);
+            
+            if (!chatKey) throw new Error("Encryption key not found");
+
+            // 2. Encrypt the reply text
+            const encryptedReply = await encryptText(replyText.trim(), chatKey);
+
+            // 3. Insert as an encrypted message
             const { error } = await supabase.from('messages').insert([{
                 sender_id: currentUser.id,
                 receiver_id: userId,
-                message: replyText,
+                message: encryptedReply, // Now encrypted!
                 message_type: 'text',
                 status: 'sent',
                 is_read: false,
-                // Use status_id column to link the reply to the status
                 status_id: currentStatusUI.id
             }]);
 
             if (error) throw error;
 
             setReplyText('');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert('Sent', 'Your reply has been sent! 🚀');
         } catch (error: any) {
             console.error('Error sending status reply:', error);
-            Alert.alert('Error', 'Failed to send reply');
+            Alert.alert('Error', 'Failed to send encrypted reply');
         }
     };
 

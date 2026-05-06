@@ -156,7 +156,16 @@ export const useChatStore = create<ChatState>((set, get) => {
                                 decryptedReply = { ...msg.reply, message: msg.reply.message };
                             }
                         }
-                        return { ...msg, message: decryptedText, reply: decryptedReply };
+                        let decryptedFileUrl = msg.file_url;
+                        if (msg.file_url && msg.file_url.trim().startsWith('{')) {
+                            try {
+                                decryptedFileUrl = await decryptText(msg.file_url, chatKey);
+                            } catch (e) {
+                                decryptedFileUrl = msg.file_url;
+                            }
+                        }
+
+                        return { ...msg, message: decryptedText, reply: decryptedReply, file_url: decryptedFileUrl };
                     } catch (e) {
                         return { ...msg }; // ✅ Original message as-is
                     }
@@ -269,7 +278,16 @@ export const useChatStore = create<ChatState>((set, get) => {
                                 decryptedReply = { ...msg.reply, message: msg.reply.message };
                             }
                         }
-                        return { ...msg, message: decryptedText, reply: decryptedReply };
+                        let decryptedFileUrl = msg.file_url;
+                        if (msg.file_url && msg.file_url.trim().startsWith('{')) {
+                            try {
+                                decryptedFileUrl = await decryptText(msg.file_url, chatKey);
+                            } catch (e) {
+                                decryptedFileUrl = msg.file_url;
+                            }
+                        }
+
+                        return { ...msg, message: decryptedText, reply: decryptedReply, file_url: decryptedFileUrl };
                     } catch (e) {
                         return { ...msg }; // ✅ Original message as-is
                     }
@@ -360,13 +378,14 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }
 
                 const encryptedText = await encryptText(messageToEncrypt, chatKey);
+                const encryptedFileUrl = fileData?.url ? await encryptText(fileData.url, chatKey) : null;
                 const insertData: any = {
                     sender_id: currentUser.id,
                     message: encryptedText,
                     status: 'sent',
                     is_read: false,
                     reply_to_id: replyToId,
-                    file_url: fileData?.url || null,
+                    file_url: encryptedFileUrl,
                     file_name: fileData?.name || null,
                     file_type: fileData?.type || null,
                     file_size: fileData?.size || null
