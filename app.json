@@ -29,8 +29,7 @@
         "ACCESS_WIFI_STATE",
         "BLUETOOTH",
         "BLUETOOTH_CONNECT"
-      ],
-      "softwareKeyboardLayoutMode": "adjustResize"
+      ]
     },
     "web": {
       "output": "static",
