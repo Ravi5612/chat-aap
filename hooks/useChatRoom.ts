@@ -173,6 +173,7 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                 const msg = payload.payload;
                 if (msg.sender_id === currentUser.id) return;
 
+                try {
                     let finalMsg = { ...msg };
                     const { decryptText } = await import('@/utils/chatCrypto');
 
