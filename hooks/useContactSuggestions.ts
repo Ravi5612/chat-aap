@@ -165,12 +165,26 @@ export const useContactSuggestions = () => {
         if (!currentUser?.id) return;
         
         try {
-            // Optimistic update UI
+            // 1. Verify sender profile exists first (Safety check)
+            const { data: senderProfile, error: profileError } = await supabase
+                .from('profiles')
+                .select('id, username')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (profileError || !senderProfile) {
+                console.error("Sender profile not found in database:", profileError);
+                Alert.alert('Profile Error', 'Your profile details are missing. Please update your profile in settings first.');
+                return;
+            }
+
+            // 2. Optimistic update UI
             setSuggestions(prev => prev.map(p => 
                 p.id === receiverId ? { ...p, requestStatus: 'pending' } : p
             ));
 
-            const { error } = await supabase
+            // 3. Insert friend request
+            const { error: requestError } = await supabase
                 .from('friend_requests')
                 .insert([{
                     sender_id: currentUser.id,
@@ -178,23 +192,30 @@ export const useContactSuggestions = () => {
                     status: 'pending'
                 }]);
 
-            if (error) {
+            if (requestError) {
+                console.error("Friend request insert error:", requestError);
                 // Revert on error
-                loadSuggestions();
-                throw error;
+                setSuggestions(prev => prev.map(p => 
+                    p.id === receiverId ? { ...p, requestStatus: null } : p
+                ));
+                throw new Error(requestError.message);
             }
 
-            // Notification
-            const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', currentUser.id).single();
-            await supabase.from('notifications').insert([{
-                user_id: receiverId,
-                sender_id: currentUser.id,
-                type: 'friend_request',
-                message: `${myProfile?.username || 'A contact'} sent you a friend request.`,
-                is_read: false
-            }]);
+            // 4. Send Notification (ignore errors here to not block the main flow)
+            try {
+                await supabase.from('notifications').insert([{
+                    user_id: receiverId,
+                    sender_id: currentUser.id,
+                    type: 'friend_request',
+                    message: `${senderProfile.username || 'A contact'} sent you a friend request.`,
+                    is_read: false
+                }]);
+            } catch (notifErr) {
+                console.warn("Notification failed to send:", notifErr);
+            }
 
         } catch (error: any) {
+            console.error("Overall sendRequest error:", error);
             Alert.alert('Error', 'Failed to send friend request. ' + error.message);
         }
     };
