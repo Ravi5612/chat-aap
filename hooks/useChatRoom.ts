@@ -106,7 +106,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     : (newMsg.sender_id === friendId && newMsg.receiver_id === currentUser.id);
 
                 if (isRelevant) {
-                    // Try to decrypt in-place to avoid reloading everything
                     try {
                         const { decryptText } = await import('@/utils/chatCrypto');
                         let decryptedText = newMsg.message;
@@ -118,16 +117,19 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                         const finalMsg = { 
                             ...newMsg, 
                             message: decryptedText,
-                            sender: { id: friendId, username: friendName } // Basic sender info
+                            sender: { id: friendId } 
                         };
 
                         useChatStore.setState((state) => {
-                            if (state.messages.some(m => m.id === finalMsg.id)) return state;
-                            return { messages: [...state.messages, finalMsg] };
+                            const exists = state.messages.find(m => m.id === finalMsg.id);
+                            // If exists and already has decrypted text, don't overwrite with raw
+                            if (exists && !exists.message?.startsWith('{')) return state;
+                            
+                            const filtered = state.messages.filter(m => m.id !== finalMsg.id);
+                            return { messages: [...filtered, finalMsg] };
                         });
                     } catch (e) {
                         console.error("ChatRoom: Realtime decryption failed", e);
-                        // Fallback to reload if decryption fails
                         loadMessages(friendId, currentUser, isGroup);
                     }
                 }
@@ -162,17 +164,29 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     messages: state.messages.filter(m => m.id !== deletedMsg.id)
                 }));
             })
-            .on('broadcast', { event: 'new_message' }, (payload) => {
+            .on('broadcast', { event: 'new_message' }, async (payload) => {
                 const msg = payload.payload;
                 if (msg.sender_id === currentUser.id) return;
 
-                // Add to list
-                useChatStore.setState((state) => ({
-                    messages: state.messages.some(m => m.id === msg.id) ? state.messages : [...state.messages, msg]
-                }));
+                // Even for broadcast, try to decrypt if it's JSON (safeguard)
+                try {
+                    let finalMsg = msg;
+                    if (msg.message && typeof msg.message === 'string' && msg.message.trim().startsWith('{')) {
+                        const { decryptText } = await import('@/utils/chatCrypto');
+                        const decryptedText = await decryptText(msg.message, chatKey);
+                        finalMsg = { ...msg, message: decryptedText };
+                    }
 
-                // ✅ Mark as read instantly
-                useChatStore.getState().markAsRead(msg.id, currentUser, friendId, isGroup);
+                    useChatStore.setState((state) => {
+                        if (state.messages.some(m => m.id === finalMsg.id)) return state;
+                        return { messages: [...state.messages, finalMsg] };
+                    });
+
+                    // Mark as read instantly
+                    useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
+                } catch (e) {
+                    console.error("Broadcast decryption failed", e);
+                }
             })
             .on('broadcast', { event: 'typing' }, (payload) => {
                 const data = payload.payload || payload;
