@@ -45,12 +45,24 @@ export const useAgora = ({
         try {
             console.log('[CALL_ACTION] Initializing Agora Engine...');
             
+            if (!APP_ID) {
+                console.error('[CALL_ACTION] AGORA_APP_ID is missing! Check your environment variables.');
+                setConnectionStatus('Error: Missing App ID');
+                return;
+            }
+
             if (Platform.OS === 'android') {
                 const { PermissionsAndroid } = require('react-native');
-                await PermissionsAndroid.requestMultiple([
+                const granted = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
                     PermissionsAndroid.PERMISSIONS.CAMERA,
                 ]);
+                
+                if (granted['android.permission.RECORD_AUDIO'] !== 'granted' || 
+                    granted['android.permission.CAMERA'] !== 'granted') {
+                    setConnectionStatus('Error: Permissions denied');
+                    return;
+                }
             }
 
             const rtcEngine = AgoraRTC.createAgoraRtcEngine();
