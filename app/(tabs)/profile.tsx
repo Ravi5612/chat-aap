@@ -57,7 +57,11 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                <ScrollView 
+                    style={{ flex: 1 }} 
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 60 }}
+                >
                     {/* Avatar & Info */}
                     <View style={styles.profileHeader}>
                         <View style={styles.avatarContainer}>
