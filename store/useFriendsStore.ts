@@ -7,6 +7,7 @@ interface FriendsState {
     combinedItems: any[];
     myStatuses: any;
     onlineUsers: Record<string, any>;
+    globalChannel: any | null;
     blockedUserIds: string[];
     loading: boolean;
     error: string | null;
@@ -25,6 +26,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     combinedItems: [],
     myStatuses: { active: [] },
     onlineUsers: {},
+    globalChannel: null,
     blockedUserIds: [],
     loading: false,
     error: null,
@@ -34,9 +36,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         const { friends, groups } = get();
         if (friends.length === 0 && groups.length === 0) return;
 
+        const currentUserId = (require('./useAuthStore').useAuthStore.getState()).user?.id;
         const friendsWithPresence = friends.map(f => ({
             ...f,
-            isOnline: !!onlineUsers[f.id] || f.db_is_online === true
+            isOnline: !!onlineUsers[f.id] || f.db_is_online === true,
+            isTyping: onlineUsers[f.id]?.typingTo === currentUserId
         }));
 
         const combined = [...friendsWithPresence, ...groups];
@@ -169,7 +173,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
             // Combine and Sort
             const { onlineUsers } = get();
-            const combined = [...formattedFriends.map(f => ({ ...f, isOnline: !!onlineUsers[f.id] || f.db_is_online === true })), ...formattedGroups];
+            const currentUserId = (require('./useAuthStore').useAuthStore.getState()).user?.id;
+            const combined = [...formattedFriends.map(f => ({ 
+                ...f, 
+                isOnline: !!onlineUsers[f.id] || f.db_is_online === true,
+                isTyping: onlineUsers[f.id]?.typingTo === currentUserId
+            })), ...formattedGroups];
             const sortedItems = Array.from(new Map(combined.map(item => [item.id, item])).values())
                 .sort((a, b) => {
                     const tA = new Date(a.lastActivity).getTime() || 0;

@@ -103,11 +103,33 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                 const newMsg = payload.new;
                 const isRelevant = isGroup
                     ? newMsg.group_id === friendId
-                    : (newMsg.sender_id === friendId && newMsg.receiver_id === currentUser.id) ||
-                    (newMsg.sender_id === currentUser.id && newMsg.receiver_id === friendId);
+                    : (newMsg.sender_id === friendId && newMsg.receiver_id === currentUser.id);
 
                 if (isRelevant) {
-                    loadMessages(friendId, currentUser, isGroup);
+                    // Try to decrypt in-place to avoid reloading everything
+                    try {
+                        const { decryptText } = await import('@/utils/chatCrypto');
+                        let decryptedText = newMsg.message;
+                        
+                        if (newMsg.message && typeof newMsg.message === 'string' && newMsg.message.trim().startsWith('{')) {
+                            decryptedText = await decryptText(newMsg.message, chatKey);
+                        }
+
+                        const finalMsg = { 
+                            ...newMsg, 
+                            message: decryptedText,
+                            sender: { id: friendId, username: friendName } // Basic sender info
+                        };
+
+                        useChatStore.setState((state) => {
+                            if (state.messages.some(m => m.id === finalMsg.id)) return state;
+                            return { messages: [...state.messages, finalMsg] };
+                        });
+                    } catch (e) {
+                        console.error("ChatRoom: Realtime decryption failed", e);
+                        // Fallback to reload if decryption fails
+                        loadMessages(friendId, currentUser, isGroup);
+                    }
                 }
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, async (payload) => {

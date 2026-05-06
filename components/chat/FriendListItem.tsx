@@ -118,8 +118,8 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
                     )}
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <Text style={{ fontSize: 14, color: '#4B5563', flex: 1, marginRight: 8 }} numberOfLines={1}>
-                        {friend.lastMessage || friend.email || 'Email hidden'}
+                    <Text style={{ fontSize: 14, color: friend.isTyping ? '#10B981' : '#4B5563', flex: 1, marginRight: 8, fontStyle: friend.isTyping ? 'italic' : 'normal', fontWeight: friend.isTyping ? 'bold' : 'normal' }} numberOfLines={1}>
+                        {friend.isTyping ? 'typing...' : (friend.lastMessage || friend.email || 'Email hidden')}
                     </Text>
                     {friend.unreadCount > 0 && (
                         <View style={{ backgroundColor: '#F68537', borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 }}>

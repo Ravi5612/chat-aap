@@ -510,35 +510,54 @@ export const useChatStore = create<ChatState>((set, get) => {
 
         setTypingStatus: (typing, friendId, currentUser) => {
             const { activeChannel } = get();
-            if (!activeChannel) return;
+            const { globalChannel } = (require('./useFriendsStore').useFriendsStore.getState());
+            
+            const sendPresenceUpdate = (isTyping: boolean) => {
+                if (globalChannel) {
+                    globalChannel.track({
+                        userId: currentUser.id,
+                        online_at: new Date().toISOString(),
+                        typingTo: isTyping ? friendId : null
+                    });
+                }
+            };
 
             if (typing) {
                 const now = Date.now();
                 if (now - lastTypingSent > 3000) {
-                    activeChannel.send({
-                        type: 'broadcast',
-                        event: 'typing',
-                        payload: { user_id: currentUser.id, is_typing: true }
-                    });
+                    sendPresenceUpdate(true);
+                    if (activeChannel) {
+                        activeChannel.send({
+                            type: 'broadcast',
+                            event: 'typing',
+                            payload: { user_id: currentUser.id, is_typing: true }
+                        });
+                    }
                     lastTypingSent = now;
                 }
 
                 if (typingTimeout) clearTimeout(typingTimeout);
                 typingTimeout = setTimeout(() => {
+                    sendPresenceUpdate(false);
+                    if (activeChannel) {
+                        activeChannel.send({
+                            type: 'broadcast',
+                            event: 'typing',
+                            payload: { user_id: currentUser.id, is_typing: false }
+                        });
+                    }
+                    lastTypingSent = 0;
+                }, 3000); // Wait 3 seconds of inactivity to stop typing
+            } else {
+                if (typingTimeout) clearTimeout(typingTimeout);
+                sendPresenceUpdate(false);
+                if (activeChannel) {
                     activeChannel.send({
                         type: 'broadcast',
                         event: 'typing',
                         payload: { user_id: currentUser.id, is_typing: false }
                     });
-                    lastTypingSent = 0;
-                }, 2000);
-            } else {
-                if (typingTimeout) clearTimeout(typingTimeout);
-                activeChannel.send({
-                    type: 'broadcast',
-                    event: 'typing',
-                    payload: { user_id: currentUser.id, is_typing: false }
-                });
+                }
                 lastTypingSent = 0;
             }
         },

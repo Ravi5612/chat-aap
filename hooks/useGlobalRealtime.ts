@@ -12,6 +12,7 @@ export const useGlobalRealtime = (userId: string | null) => {
     const { showLocalNotification } = usePushNotifications(userId);
     const { profile } = useAuthStore();
     const setOnlineUsers = useFriendsStore(state => state.setOnlineUsers);
+    const setGlobalChannel = (channel: any) => useFriendsStore.setState({ globalChannel: channel });
     const lastPresenceSync = useRef<number>(0);
 
     const playMessageSound = async () => {
@@ -35,6 +36,7 @@ export const useGlobalRealtime = (userId: string | null) => {
         console.log('[DEBUG] GlobalRealtime: Initializing channel for:', userId);
 
         const channel = supabase.channel(`global-sync-${userId}`);
+        setGlobalChannel(channel);
 
         // 1. Listen for New Messages
         channel.on(

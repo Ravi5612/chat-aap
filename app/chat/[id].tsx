@@ -315,7 +315,7 @@ export default function ChatScreen() {
                                 textTransform: 'uppercase',
                                 letterSpacing: 0.5
                             }}>
-                                {isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(friendData?.lastSeen))}
+                                {isTyping || friendData?.isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(friendData?.lastSeen))}
                             </Text>
                         </View>
                     </TouchableOpacity>
