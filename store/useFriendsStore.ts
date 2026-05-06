@@ -12,7 +12,7 @@ interface FriendsState {
     loading: boolean;
     error: string | null;
     setOnlineUsers: (users: Record<string, any>) => void;
-    loadFriends: (userId: string) => Promise<void>;
+    loadFriends: (userId: string, force?: boolean) => Promise<void>;
     fetchBlockedUsers: (userId: string) => Promise<void>;
     blockUser: (currentUserId: string, targetId: string) => Promise<void>;
     unblockUser: (currentUserId: string, targetId: string) => Promise<void>;
@@ -57,9 +57,14 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         set({ combinedItems: uniqueItems });
     },
 
-    loadFriends: async (userId) => {
+    loadFriends: async (userId, force = false) => {
         if (!userId || userId === 'null') return;
-        set({ loading: true, error: null });
+        
+        // Silent loading: Only show loader if we have no data yet OR if it's a forced refresh
+        const { combinedItems } = get();
+        const shouldShowLoading = combinedItems.length === 0 || force;
+        
+        set({ loading: shouldShowLoading, error: null });
 
         try {
             // 1. Fetch Blocked Users & Friendships in parallel

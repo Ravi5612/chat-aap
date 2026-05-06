@@ -5,7 +5,7 @@ import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
 import FriendListItem from '@/components/chat/FriendListItem';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useStatusActions } from '@/hooks/useStatusActions';
 import { Ionicons } from '@expo/vector-icons';
@@ -137,6 +137,15 @@ export default function HomeScreen() {
     favourites: combinedItems.filter(i => i.isFavorite && !i.isArchived).length,
     archive: combinedItems.filter(i => i.isArchived).length,
   };
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    if (!currentUser) return;
+    setRefreshing(true);
+    await loadFriends(currentUser.id, true); // Force refresh with loader
+    setRefreshing(false);
+  }, [currentUser, loadFriends]);
 
   if (loading && combinedItems.length === 0) {
     return (
@@ -300,7 +309,7 @@ export default function HomeScreen() {
             </View>
           }
           refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />
           }
         />
 

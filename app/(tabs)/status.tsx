@@ -119,7 +119,16 @@ export default function StatusScreen() {
         </View>
     );
 
-    if (loading && combinedItems.length === 0) {
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = useCallback(async () => {
+        if (!currentUser) return;
+        setRefreshing(true);
+        await loadFriends(currentUser.id, true); // Force refresh with loader
+        setRefreshing(false);
+    }, [currentUser, loadFriends]);
+
+    if (loading && friendsWithStatus.length === 0) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 <View style={styles.skeletonHeader}>
@@ -150,7 +159,7 @@ export default function StatusScreen() {
                     ListHeaderComponent={renderHeader}
                     ListEmptyComponent={renderEmpty}
                     refreshControl={
-                        <RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />
                     }
                     contentContainerStyle={{ paddingBottom: 40 }}
                     initialNumToRender={10}
