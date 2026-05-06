@@ -76,9 +76,11 @@ export const useCallLogger = (currentUser: any, friend: any, callType: string, c
             const { error: msgError } = await supabase.from('messages').insert([{
                 sender_id: userData.id,
                 receiver_id: friendData.id,
-                content: `Call ${status}`,
-                type: 'call_log',
-                metadata: {
+                message: `Call ${status}`,
+                message_type: 'call',
+                status: 'sent',
+                is_read: false,
+                call_details: {
                     call_id: logId,
                     duration: duration,
                     call_type: currentType,

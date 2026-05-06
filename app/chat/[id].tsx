@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,13 +27,24 @@ export default function ChatScreen() {
     const router = useRouter();
     const safeFriendId = (friendId as string) || '';
     const { user: currentUser } = useAuthStore();
-    const { blockedUserIds = [], blockUser, unblockUser, combinedItems = [], onlineUsers = {} } = useFriendsStore();
+    const onlineUsers = useFriendsStore(state => state.onlineUsers);
+    const combinedItems = useFriendsStore(state => state.combinedItems);
+    const blockedUserIds = useFriendsStore(state => state.blockedUserIds);
+    const { blockUser, unblockUser } = useFriendsStore();
     
-    const isBlocked = safeFriendId && blockedUserIds ? blockedUserIds.includes(safeFriendId) : false;
-    const friendData = safeFriendId ? (combinedItems || []).find(f => (f?.id === safeFriendId)) : null;
+    const isBlocked = safeFriendId && blockedUserIds.includes(safeFriendId);
+    const friendData = useMemo(() => (combinedItems || []).find(f => f?.id === safeFriendId), [combinedItems, safeFriendId]);
 
     const chatRoom = useChatRoom(safeFriendId, currentUser, isGroup === 'true');
-    const isUserOnline = safeFriendId ? !!onlineUsers[safeFriendId] : false;
+    
+    // Check both Presence and DB status for maximum reliability
+    const isUserOnline = useMemo(() => {
+        if (!safeFriendId) return false;
+        const isPresent = !!onlineUsers[safeFriendId];
+        const isDbOnline = friendData?.db_is_online === true;
+        console.log(`[DEBUG] ChatScreen Presence: friendId=${safeFriendId}, isPresent=${isPresent}, isDbOnline=${isDbOnline}`);
+        return isPresent || isDbOnline;
+    }, [onlineUsers, safeFriendId, friendData]);
 
     const {
         messages,

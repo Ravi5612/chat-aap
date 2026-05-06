@@ -13,8 +13,8 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
   const tabBarBottomOffset = Platform.OS === 'ios'
-    ? Math.max(insets.bottom, 20)
-    : Math.max(insets.bottom + 10, 20);
+    ? Math.max(insets.bottom, 5)
+    : Math.max(insets.bottom, 5);
 
   return (
     <Tabs

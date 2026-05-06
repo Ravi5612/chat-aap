@@ -152,36 +152,36 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
                     {/* Status Context */}
                     {message.status_context && (
-                        <TouchableOpacity
-                            onPress={() => { }} // Handle opening status viewer if needed
+                        <View
                             style={{
                                 margin: 6,
                                 padding: 8,
                                 borderRadius: 8,
-                                borderLeftWidth: 4,
-                                backgroundColor: 'rgba(0, 0, 0, 0.05)',
-                                borderLeftColor: '#10B981', // Green for status
+                                borderLeftWidth: 3,
+                                backgroundColor: isCurrentUser ? 'rgba(0, 0, 0, 0.1)' : 'rgba(246, 133, 55, 0.05)',
+                                borderLeftColor: '#10B981',
                                 flexDirection: 'row',
-                                alignItems: 'center'
+                                alignItems: 'center',
+                                gap: 10,
+                                minWidth: 200
                             }}
                         >
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontWeight: 'bold', fontSize: 11, color: '#10B981', marginBottom: 2 }}>
+                                <Text style={{ fontWeight: '900', fontSize: 10, color: '#10B981', marginBottom: 2, textTransform: 'uppercase' }}>
                                     Status
                                 </Text>
-                                <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={1}>
-                                    {message.status_context.media_type === 'text' ? message.status_context.content : 'Media Status'}
+                                <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255, 255, 255, 0.9)' : '#4B5563' }} numberOfLines={2}>
+                                    {message.status_context.media_type === 'text' ? message.status_context.content : (message.status_context.caption || 'Media Status')}
                                 </Text>
                             </View>
                             {message.status_context.media_type !== 'text' && (
                                 <Image
                                     source={{ uri: message.status_context.media_url }}
-                                    style={{ width: 40, height: 40, borderRadius: 4, backgroundColor: '#E5E7EB' }}
+                                    style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.1)' }}
                                     contentFit="cover"
-                                    transition={200}
                                 />
                             )}
-                        </TouchableOpacity>
+                        </View>
                     )}
 
                     {/* Reply Context */}

@@ -36,7 +36,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
         const friendsWithPresence = friends.map(f => ({
             ...f,
-            isOnline: f.db_is_online !== false && !!onlineUsers[f.id]
+            isOnline: !!onlineUsers[f.id] || f.db_is_online === true
         }));
 
         const combined = [...friendsWithPresence, ...groups];
@@ -54,213 +54,127 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     },
 
     loadFriends: async (userId) => {
-        if (!userId) return;
+        if (!userId || userId === 'null') return;
         set({ loading: true, error: null });
 
         try {
-            // Fetch blocked users (non-blocking)
-            get().fetchBlockedUsers(userId).catch(err => console.error('fetchBlockedUsers error:', err));
-            const blockedIds = get().blockedUserIds;
-
-            // 1. Fetch Friends (Bi-directional) - Split into two queries for reliability
-            const [sentRes, recdRes] = await Promise.all([
-                supabase
-                    .from('friendships')
-                    .select(`
-                        is_favorite,
-                        is_archived,
-                        friend_id,
-                        friend:profiles!friendships_friend_id_fkey(
-                            id, username, email, avatar_url, is_online
-                        )
-                    `)
-                    .eq('user_id', userId),
-                supabase
-                    .from('friendships')
-                    .select(`
-                        is_favorite,
-                        is_archived,
-                        user_id,
-                        user:profiles!friendships_user_id_fkey(
-                            id, username, email, avatar_url, is_online
-                        )
-                    `)
-                    .eq('friend_id', userId)
+            // 1. Fetch Blocked Users & Friendships in parallel
+            const [blockedRes, friendshipsSent, friendshipsRecd] = await Promise.all([
+                supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId),
+                supabase.from('friendships').select(`is_favorite, is_archived, friend_id, friend:profiles!friendships_friend_id_fkey(id, username, email, avatar_url, is_online)`).eq('user_id', userId),
+                supabase.from('friendships').select(`is_favorite, is_archived, user_id, user:profiles!friendships_user_id_fkey(id, username, email, avatar_url, is_online)`).eq('friend_id', userId)
             ]);
 
-            if (sentRes.error) throw sentRes.error;
-            // Note: pregnancies_user_id_fkey might not exist or might be named differently, 
-            // but let's assume it follows the same pattern. If this fails, we catch it.
+            const blockedIds = blockedRes.data?.map(b => b.blocked_id) || [];
+            set({ blockedUserIds: blockedIds });
 
             const friendships = [
-                ...(sentRes.data || []).map(f => ({ ...f, type: 'sent' })),
-                ...(recdRes.data || []).map(f => ({ ...f, type: 'recd' }))
+                ...(friendshipsSent.data || []).map(f => ({ ...f, type: 'sent' })),
+                ...(friendshipsRecd.data || []).map(f => ({ ...f, type: 'recd' }))
             ];
 
-            // 2. Fetch Groups
-            // ... (rest of loadFriends is same, but I'll filter out blocked in combined items if needed, 
-            // but usually you want to see them just marked as blocked)
-            // ...
-            const { data: groupMemberships, error: groupError } = await supabase
-                .from('group_members')
-                .select(`
-          group_id,
-          groups (
-            id, name, avatar_url
-          )
-        `)
-                .eq('user_id', userId);
+            const friendIds = friendships.map(f => f.type === 'sent' ? f.friend_id : f.user_id);
+            const allRelevantIds = [userId, ...friendIds];
 
-            if (groupError) throw groupError;
-
-            // 3. Status Info
+            // 2. Fetch Groups, Statuses (for friends only), and Unread Counts in parallel
             const nowIso = new Date().toISOString();
-            const { data: allActiveStatuses } = await supabase
-                .from('statuses')
-                .select('id, user_id, expires_at, is_deleted')
-                .gt('expires_at', nowIso)
-                .eq('is_deleted', false);
+            const [groupRes, statusRes, viewsRes, unreadRes, recentMsgsRes] = await Promise.all([
+                supabase.from('group_members').select('group_id, groups (id, name, avatar_url)').eq('user_id', userId),
+                supabase.from('statuses').select('id, user_id, expires_at, is_deleted').in('user_id', allRelevantIds).gt('expires_at', nowIso).eq('is_deleted', false),
+                supabase.from('status_views').select('status_id').eq('viewer_id', userId),
+                supabase.from('messages').select('sender_id, group_id').or(`receiver_id.eq.${userId}, group_id.not.is.null`).eq('is_read', false),
+                supabase.from('messages').select('created_at, sender_id, receiver_id, group_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(200)
+            ]);
 
-            const { data: myViews } = await supabase
-                .from('status_views')
-                .select('status_id')
-                .eq('viewer_id', userId);
+            if (groupRes.error) throw groupRes.error;
 
-            const viewedStatusIds = new Set(myViews?.map(v => v.status_id) || []);
-            const friendStatusInfo = (allActiveStatuses || []).reduce((acc: any, s: any) => {
+            // Process Status Info
+            const viewedStatusIds = new Set(viewsRes.data?.map(v => v.status_id) || []);
+            const statusInfoMap = (statusRes.data || []).reduce((acc: any, s: any) => {
                 if (!acc[s.user_id]) acc[s.user_id] = { count: 0, viewedCount: 0 };
                 acc[s.user_id].count++;
                 if (viewedStatusIds.has(s.id)) acc[s.user_id].viewedCount++;
                 return acc;
             }, {});
 
-            // 4. Unread Counts
-            let unreadCountsMap: any = {};
-            const { data: pUnread } = await supabase
-                .from('messages')
-                .select('sender_id')
-                .eq('receiver_id', userId)
-                .eq('is_read', false);
-
-            (pUnread || []).forEach(m => {
-                unreadCountsMap[m.sender_id] = (unreadCountsMap[m.sender_id] || 0) + 1;
-            });
-
-            const gIds = (groupMemberships || []).map(m => m.group_id);
-            if (gIds.length > 0) {
-                const { data: gUnread } = await supabase
-                    .from('messages')
-                    .select('group_id')
-                    .in('group_id', gIds)
-                    .eq('is_read', false)
-                    .neq('sender_id', userId);
-
-                (gUnread || []).forEach(m => {
-                    unreadCountsMap[m.group_id] = (unreadCountsMap[m.group_id] || 0) + 1;
-                });
-            }
-
-            // 5. Fetch Last Message Timestamps for Sorting (WhatsApp Style)
-            let lastActivityMap: Record<string, string> = {};
-            const { data: recentMsgs } = await supabase
-                .from('messages')
-                .select('created_at, sender_id, receiver_id, group_id')
-                .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-                .order('created_at', { ascending: false })
-                .limit(500);
-
-            (recentMsgs || []).forEach(m => {
-                const chatId = m.group_id || (m.sender_id === userId ? m.receiver_id : m.sender_id);
-                if (chatId && !lastActivityMap[chatId]) {
-                    lastActivityMap[chatId] = m.created_at;
+            // Process Unread Counts (filtered for groups user is in)
+            const userGroupIds = new Set(groupRes.data?.map(m => m.group_id) || []);
+            const unreadCountsMap: any = {};
+            (unreadRes.data || []).forEach(m => {
+                if (m.group_id) {
+                    if (userGroupIds.has(m.group_id)) unreadCountsMap[m.group_id] = (unreadCountsMap[m.group_id] || 0) + 1;
+                } else {
+                    unreadCountsMap[m.sender_id] = (unreadCountsMap[m.sender_id] || 0) + 1;
                 }
             });
 
-            // Formatting
-            const formattedFriends = friendships
-                .map((f: any) => {
-                    const otherProfile = f.type === 'sent' ? f.friend : f.user;
-                    if (!otherProfile) return null;
+            // Process Last Activity
+            const lastActivityMap: Record<string, string> = {};
+            (recentMsgsRes.data || []).forEach(m => {
+                const chatId = m.group_id || (m.sender_id === userId ? m.receiver_id : m.sender_id);
+                if (chatId && !lastActivityMap[chatId]) lastActivityMap[chatId] = m.created_at;
+            });
 
-                    const sInfo = friendStatusInfo[otherProfile.id] || { count: 0, viewedCount: 0 };
-                    return {
-                        id: otherProfile.id,
-                        name: otherProfile.username || 'Unknown',
-                        email: otherProfile.email,
-                        img: otherProfile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(otherProfile.username || 'User')}&backgroundColor=F68537`,
-                        unreadCount: unreadCountsMap[otherProfile.id] || 0,
-                        statusCount: sInfo.count,
-                        allStatusesViewed: sInfo.count > 0 && sInfo.count === sInfo.viewedCount,
-                        db_is_online: otherProfile.is_online,
-                        lastSeen: otherProfile.last_seen,
-                        isFavorite: f.is_favorite,
-                        isArchived: f.is_archived,
-                        lastActivity: lastActivityMap[otherProfile.id] || '0',
-                        isGroup: false
-                    };
-                })
-                .filter(f => f !== null);
+            // Format Friends
+            const formattedFriends = friendships.map((f: any) => {
+                const otherProfile = f.type === 'sent' ? f.friend : f.user;
+                if (!otherProfile) return null;
+                const sInfo = statusInfoMap[otherProfile.id] || { count: 0, viewedCount: 0 };
+                return {
+                    id: otherProfile.id,
+                    name: otherProfile.username || 'Unknown',
+                    email: otherProfile.email,
+                    img: otherProfile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(otherProfile.username || 'User')}&backgroundColor=F68537`,
+                    unreadCount: unreadCountsMap[otherProfile.id] || 0,
+                    statusCount: sInfo.count,
+                    allStatusesViewed: sInfo.count > 0 && sInfo.count === sInfo.viewedCount,
+                    db_is_online: otherProfile.is_online,
+                    lastActivity: lastActivityMap[otherProfile.id] || '0',
+                    isGroup: false,
+                    isFavorite: f.is_favorite,
+                    isArchived: f.is_archived
+                };
+            }).filter(Boolean);
 
-            const formattedGroups = (groupMemberships || [])
-                .filter((m: any) => m.groups)
-                .map((m: any) => {
-                    const g = m.groups;
-                    return {
-                        id: g.id,
-                        name: g.name,
-                        img: g.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(g.name)}&backgroundColor=F68537`,
-                        unreadCount: unreadCountsMap[g.id] || 0,
-                        isGroup: true,
-                        lastActivity: lastActivityMap[g.id] || '0',
-                        statusCount: 0
-                    };
-                });
+            // Format Groups
+            const formattedGroups = (groupRes.data || []).filter(m => m.groups).map((m: any) => ({
+                id: m.groups.id,
+                name: m.groups.name,
+                img: m.groups.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.groups.name)}&backgroundColor=F68537`,
+                unreadCount: unreadCountsMap[m.groups.id] || 0,
+                isGroup: true,
+                lastActivity: lastActivityMap[m.groups.id] || '0',
+                statusCount: 0
+            }));
 
-            // My Statuses Logic
+            // My Statuses (Optimization: use already fetched statusRes.data if it contains my statuses)
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            const { data: myAllStatuses } = await supabase
-                .from('statuses')
-                .select('*')
-                .eq('user_id', userId)
-                .gt('created_at', sevenDaysAgo.toISOString())
-                .order('created_at', { ascending: false });
+            const { data: myAllStatuses } = await supabase.from('statuses').select('*').eq('user_id', userId).gt('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false });
 
-            const now = new Date();
             const groupedMyStatus: any = { active: [] };
+            const now = new Date();
             (myAllStatuses || []).forEach(status => {
                 const expiresAt = new Date(status.expires_at);
-                const isStatusActive = expiresAt > now && (status.is_deleted === false || status.is_deleted === null);
-                if (isStatusActive) {
+                if (expiresAt > now && !status.is_deleted) {
                     groupedMyStatus.active.push(status);
                 } else {
                     const sDate = new Date(status.created_at);
                     const diffDays = Math.floor((now.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
-                    let dateKey = '';
-                    if (diffDays === 0) dateKey = 'Today';
-                    else if (diffDays === 1) dateKey = 'Yesterday';
-                    else dateKey = sDate.toLocaleDateString('en-US', { weekday: 'long' });
+                    let dateKey = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : sDate.toLocaleDateString('en-US', { weekday: 'long' });
                     if (!groupedMyStatus[dateKey]) groupedMyStatus[dateKey] = [];
                     groupedMyStatus[dateKey].push(status);
                 }
             });
 
+            // Combine and Sort
             const { onlineUsers } = get();
-            const friendsWithPresence = formattedFriends.map(f => ({
-                ...f,
-                isOnline: f.db_is_online !== false && !!onlineUsers[f.id]
-            }));
-            const combined = [...friendsWithPresence, ...formattedGroups];
-
-            // ✅ Sort by Last Activity Descending (WhatsApp Style)
+            const combined = [...formattedFriends.map(f => ({ ...f, isOnline: !!onlineUsers[f.id] || f.db_is_online === true })), ...formattedGroups];
             const sortedItems = Array.from(new Map(combined.map(item => [item.id, item])).values())
                 .sort((a, b) => {
-                    const parseDate = (d: any) => {
-                        if (!d || d === '0') return 0;
-                        const t = new Date(d).getTime();
-                        return isNaN(t) ? 0 : t;
-                    };
-                    return parseDate(b.lastActivity) - parseDate(a.lastActivity);
+                    const tA = new Date(a.lastActivity).getTime() || 0;
+                    const tB = new Date(b.lastActivity).getTime() || 0;
+                    return tB - tA;
                 });
 
             set({
@@ -270,7 +184,6 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                 combinedItems: sortedItems,
                 loading: false
             });
-            console.log(`loadFriends: Successfully loaded ${formattedFriends.length} friends and ${formattedGroups.length} groups.`);
         } catch (e: any) {
             console.error('loadFriends ERROR:', e);
             set({ error: e.message, loading: false });
@@ -279,84 +192,35 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
     fetchBlockedUsers: async (userId) => {
         if (!userId) return;
-        const { data, error } = await supabase
-            .from('blocked_users')
-            .select('blocked_id')
-            .eq('blocker_id', userId);
-
-        if (!error && data) {
-            set({ blockedUserIds: data.map(b => b.blocked_id) });
-        }
+        const { data, error } = await supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId);
+        if (!error && data) set({ blockedUserIds: data.map(b => b.blocked_id) });
     },
 
     blockUser: async (currentUserId, targetId) => {
-        const { error } = await supabase
-            .from('blocked_users')
-            .insert({ blocker_id: currentUserId, blocked_id: targetId });
-
+        const { error } = await supabase.from('blocked_users').insert({ blocker_id: currentUserId, blocked_id: targetId });
         if (!error) {
-            const { blockedUserIds } = get();
-            set({ blockedUserIds: [...blockedUserIds, targetId] });
-            // Also optionally reload friends to update state
+            set({ blockedUserIds: [...get().blockedUserIds, targetId] });
             get().loadFriends(currentUserId);
         }
     },
 
     unblockUser: async (currentUserId, targetId) => {
-        const { error } = await supabase
-            .from('blocked_users')
-            .delete()
-            .eq('blocker_id', currentUserId)
-            .eq('blocked_id', targetId);
-
+        const { error } = await supabase.from('blocked_users').delete().eq('blocker_id', currentUserId).eq('blocked_id', targetId);
         if (!error) {
-            const { blockedUserIds } = get();
-            set({ blockedUserIds: blockedUserIds.filter(id => id !== targetId) });
+            set({ blockedUserIds: get().blockedUserIds.filter(id => id !== targetId) });
             get().loadFriends(currentUserId);
         }
     },
 
     leaveGroup: async (userId, groupId) => {
         try {
-            let activeUserId = userId;
-            if (!activeUserId) {
-                const { data: { user } } = await supabase.auth.getUser();
-                activeUserId = user?.id || '';
-            }
-
+            let activeUserId = userId || (await supabase.auth.getUser()).data.user?.id || '';
             if (!activeUserId) throw new Error('User not authenticated');
 
-            // Fetch username for the message
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('username')
-                .eq('id', activeUserId)
-                .single();
-
-            const username = profile?.username || 'A user';
-
-            // 1. Send System Message
-            await supabase.from('messages').insert([{
-                group_id: groupId,
-                sender_id: activeUserId,
-                message: `SYSTEM_MSG: ${username} has left the group`,
-                status: 'sent',
-                is_read: false
-            }]);
-
-            // 2. Delete Membership
-            console.log(`Attempting to remove user ${activeUserId} from group ${groupId}`);
-            const { error, count } = await supabase
-                .from('group_members')
-                .delete({ count: 'exact' })
-                .eq('group_id', groupId)
-                .eq('user_id', activeUserId);
-
-            if (error) {
-                console.error("Leave Group Error:", error);
-                throw error;
-            }
-            console.log(`Leave Group Success. Removed ${count} rows.`);
+            const { data: profile } = await supabase.from('profiles').select('username').eq('id', activeUserId).single();
+            await supabase.from('messages').insert([{ group_id: groupId, sender_id: activeUserId, message: `SYSTEM_MSG: ${profile?.username || 'A user'} has left the group`, status: 'sent', is_read: false }]);
+            const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', activeUserId);
+            if (error) throw error;
 
             await get().loadFriends(activeUserId);
             return true;

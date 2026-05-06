@@ -1,218 +1,191 @@
-import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, StyleSheet, TextInput } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriends } from '@/hooks/useFriends';
 import { useStatusActions } from '@/hooks/useStatusActions';
 import { supabase } from '@/lib/supabase';
-import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import StatusBar from '@/components/chat/StatusBar';
 
+// Memoized Status Item for performance
+const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: any) => void }) => {
+    const latestStatus = item.statuses?.[0] || {};
+    
+    return (
+        <TouchableOpacity
+            onPress={() => onPress(item)}
+            activeOpacity={0.7}
+            style={styles.statusItem}
+        >
+            <View style={{ position: 'relative' }}>
+                <View style={[
+                    styles.avatarRing,
+                    { borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537' }
+                ]}>
+                    <Image
+                        source={{ uri: item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
+                        style={styles.avatar}
+                    />
+                </View>
+                <View style={styles.statusCountBadge}>
+                    <Text style={styles.statusCountText}>{item.statusCount}</Text>
+                </View>
+            </View>
+
+            <View style={{ marginLeft: 16, flex: 1 }}>
+                <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
+                <View style={styles.timeContainer}>
+                    <Ionicons name="time-outline" size={12} color="#94A3B8" />
+                    <Text style={styles.timeText}>Recently updated</Text>
+                </View>
+            </View>
+
+            <View style={[
+                styles.thumbnail,
+                { backgroundColor: (latestStatus.background_color && latestStatus.media_type === 'text') ? latestStatus.background_color : '#FDBA74' }
+            ]}>
+                {latestStatus.media_type === 'text' ? (
+                    <Text style={styles.thumbnailText}>{latestStatus.content?.substring(0, 2).toUpperCase()}</Text>
+                ) : (
+                    <Image
+                        source={{ uri: latestStatus.media_url || item.img }}
+                        style={{ width: '100%', height: '100%' }}
+                    />
+                )}
+            </View>
+        </TouchableOpacity>
+    );
+});
+
 export default function StatusScreen() {
-    console.log('[DEBUG] StatusScreen: Rendering component...');
     const router = useRouter();
     const swipeHandlers = useSwipeNavigation();
-    
-    console.log('[DEBUG] StatusScreen: Calling useFriends hook...');
+    const insets = useSafeAreaInsets();
     const { combinedItems, myStatuses, loading, loadFriends } = useFriends();
-    
     const [currentUser, setCurrentUser] = useState<any>(null);
 
     useEffect(() => {
-        console.log('[DEBUG] StatusScreen: Fetching currentUser...');
         supabase.auth.getUser().then(({ data }) => {
-            console.log('[DEBUG] StatusScreen: CurrentUser fetched:', data.user?.id);
             setCurrentUser(data.user);
         });
     }, []);
 
-    console.log('[DEBUG] StatusScreen: Calling useStatusActions hook...');
     const {
-        viewingStatus,
         setShowAddStatus,
         handleViewUserStatus,
         handleViewMyStatus,
     } = useStatusActions(currentUser, loadFriends);
 
-    const friendsWithStatus = combinedItems.filter(item => item.statusCount > 0);
+    const friendsWithStatus = useMemo(() => {
+        return combinedItems.filter(item => item.statusCount > 0);
+    }, [combinedItems]);
+
+    const renderHeader = () => (
+        <>
+            {/* Header */}
+            <View style={styles.header}>
+                <View>
+                    <Text style={styles.headerTitle}>Status</Text>
+                    <Text style={styles.headerSubtitle}>Recent Updates</Text>
+                </View>
+                <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+                    <Ionicons name="close" size={24} color="#64748B" />
+                </TouchableOpacity>
+            </View>
+
+            {/* Horizontal Status Bar */}
+            <StatusBar
+                myStatuses={myStatuses}
+                friendsWithStatus={combinedItems.filter(i => !i.isGroup && i.statusCount > 0)}
+                onAddClick={() => setShowAddStatus(true)}
+                onViewStatus={handleViewUserStatus}
+                onViewMyStatus={handleViewMyStatus}
+            />
+
+            <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+                <Text style={styles.sectionTitle}>Recent Updates</Text>
+            </View>
+        </>
+    );
+
+    const renderEmpty = () => (
+        <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+                <Ionicons name="images-outline" size={48} color="#64748B" />
+            </View>
+            <Text style={styles.emptyText}>No status updates found</Text>
+        </View>
+    );
 
     if (loading && combinedItems.length === 0) {
         return (
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
-                <View style={{ paddingHorizontal: 20, paddingVertical: 12 }}>
-                    <View style={{ width: 100, height: 28, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 8, marginBottom: 4 }} />
-                    <View style={{ width: 80, height: 12, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 4 }} />
+            <View style={[styles.container, { paddingTop: insets.top }]}>
+                <View style={styles.skeletonHeader}>
+                    <View style={styles.skeletonTitle} />
+                    <View style={styles.skeletonSubTitle} />
                 </View>
-
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10 }}>
-                    {/* Skeleton for My Status */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', padding: 14, borderRadius: 24, marginBottom: 20, opacity: 0.6 }}>
-                        <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#E2E8F0' }} />
-                        <View style={{ marginLeft: 16 }}>
-                            <View style={{ width: 120, height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 6 }} />
-                            <View style={{ width: 80, height: 12, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
-                        </View>
-                    </View>
-
-                    <View style={{ width: 150, height: 20, backgroundColor: 'rgba(255,255,255,0.4)', borderRadius: 6, marginBottom: 16 }} />
-
-                    {[1, 2, 3, 4, 5].map((i) => (
-                        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', padding: 14, borderRadius: 24, marginBottom: 12, opacity: 0.6 }}>
-                            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#E2E8F0' }} />
-                            <View style={{ marginLeft: 16, flex: 1 }}>
-                                <View style={{ width: '60%', height: 16, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 6 }} />
-                                <View style={{ width: '40%', height: 12, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
-                            </View>
-                            <View style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: '#E2E8F0' }} />
-                        </View>
+                <View style={{ paddingHorizontal: 20 }}>
+                    <View style={styles.skeletonMyStatus} />
+                    {[1, 2, 3].map((i) => (
+                        <View key={i} style={styles.skeletonItem} />
                     ))}
-                </ScrollView>
-            </SafeAreaView>
+                </View>
+            </View>
         );
     }
 
     return (
         <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
-                {/* 1. Header with Close Button */}
-                <View style={{ paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View>
-                        <Text style={{ fontSize: 22, fontWeight: '900', color: '#1E293B', letterSpacing: -0.5 }}>Status</Text>
-                        <Text style={{ fontSize: 10, fontWeight: '900', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 }}>Recent Updates</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-                        <Ionicons name="close" size={24} color="#64748B" />
-                    </TouchableOpacity>
-                </View>
-
-                <ScrollView
-                    style={{ flex: 1 }}
+            <View style={[styles.container, { paddingTop: insets.top }]}>
+                <FlatList
+                    data={friendsWithStatus}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                        <View style={{ paddingHorizontal: 20 }}>
+                            <StatusItem item={item} onPress={handleViewUserStatus} />
+                        </View>
+                    )}
+                    ListHeaderComponent={renderHeader}
+                    ListEmptyComponent={renderEmpty}
+                    refreshControl={
+                        <RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />
+                    }
                     contentContainerStyle={{ paddingBottom: 40 }}
-                    refreshControl={<RefreshControl refreshing={loading} onRefresh={loadFriends} tintColor="#F68537" />}
-                >
-                    {/* 2. Unified Status Bar Card */}
-                    <StatusBar
-                        myStatuses={myStatuses}
-                        friendsWithStatus={combinedItems.filter(i => !i.isGroup && i.statusCount > 0)}
-                        onAddClick={() => setShowAddStatus(true)}
-                        onViewStatus={handleViewUserStatus}
-                        onViewMyStatus={handleViewMyStatus}
-                    />
-
-                    {/* 3. Recent Updates Vertical Section */}
-                    <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
-                        <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B', marginBottom: 16 }}>Recent Updates</Text>
-
-                        {friendsWithStatus.length > 0 ? (
-                            friendsWithStatus.map((item) => {
-                                // Find the latest status to show preview
-                                const latestStatus = item.statuses?.[0] || {};
-                                return (
-                                    <TouchableOpacity
-                                        key={item.id}
-                                        onPress={() => handleViewUserStatus(item)}
-                                        activeOpacity={0.9}
-                                        style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            backgroundColor: 'white',
-                                            padding: 14,
-                                            borderRadius: 24,
-                                            marginBottom: 12,
-                                            shadowColor: '#000',
-                                            shadowOffset: { width: 0, height: 4 },
-                                            shadowOpacity: 0.04,
-                                            shadowRadius: 10,
-                                            elevation: 1
-                                        }}
-                                    >
-                                        {/* Profile with Ring */}
-                                        <View style={{ position: 'relative' }}>
-                                            <View style={{
-                                                width: 60,
-                                                height: 60,
-                                                borderRadius: 30,
-                                                padding: 2,
-                                                borderWidth: 2,
-                                                borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537'
-                                            }}>
-                                                <Image
-                                                    source={{ uri: item.img || 'https://via.placeholder.com/150' }}
-                                                    style={{ width: '100%', height: '100%', borderRadius: 30 }}
-                                                />
-                                            </View>
-                                            <View style={{
-                                                position: 'absolute',
-                                                bottom: 2,
-                                                right: 2,
-                                                width: 14,
-                                                height: 14,
-                                                backgroundColor: '#10B981',
-                                                borderRadius: 7,
-                                                borderWidth: 2,
-                                                borderColor: 'white'
-                                            }} />
-                                            {/* Count Badge on Avatar parity */}
-                                            <View style={{
-                                                position: 'absolute',
-                                                bottom: -4,
-                                                right: -4,
-                                                backgroundColor: '#F68537',
-                                                width: 20,
-                                                height: 20,
-                                                borderRadius: 10,
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                borderWidth: 2,
-                                                borderColor: 'white'
-                                            }}>
-                                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{item.statusCount}</Text>
-                                            </View>
-                                        </View>
-
-                                        {/* Info */}
-                                        <View style={{ marginLeft: 16, flex: 1 }}>
-                                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#1E293B' }} numberOfLines={1}>{item.name}</Text>
-                                            <Text style={{ fontSize: 12, color: '#F68537', marginTop: 2 }} numberOfLines={1}>{item.email || 'friend@chat.com'}</Text>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
-                                                <Ionicons name="time-outline" size={12} color="#94A3B8" />
-                                                <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: '600' }}>4 minutes ago</Text>
-                                            </View>
-                                        </View>
-
-                                        {/* Status Preview Thumbnail */}
-                                        <View style={{
-                                            width: 50,
-                                            height: 50,
-                                            borderRadius: 12,
-                                            overflow: 'hidden',
-                                            backgroundColor: '#FDBA74', // Saffron light
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            backgroundColor: (latestStatus.background_color && latestStatus.media_type === 'text') ? latestStatus.background_color : '#FDBA74'
-                                        }}>
-                                            {latestStatus.media_type === 'text' ? (
-                                                <Text style={{ color: 'white', fontWeight: '900', fontSize: 10 }}>{latestStatus.content?.substring(0, 3).toUpperCase()}</Text>
-                                            ) : (
-                                                <Image
-                                                    source={{ uri: latestStatus.media_url || item.img }}
-                                                    style={{ width: '100%', height: '100%' }}
-                                                />
-                                            )}
-                                        </View>
-                                    </TouchableOpacity>
-                                );
-                            })
-                        ) : (
-                            <View style={{ alignItems: 'center', justifyContent: 'center', padding: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 32 }}>
-                                <Ionicons name="images-outline" size={64} color="#64748B" />
-                                <Text style={{ color: '#64748B', marginTop: 16, textAlign: 'center', fontWeight: '900', fontSize: 12, textTransform: 'uppercase' }}>No status updates yet.</Text>
-                            </View>
-                        )}
-                    </View>
-                </ScrollView>
-            </SafeAreaView>
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={5}
+                    removeClippedSubviews={true}
+                />
+            </View>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#EBD8B7' },
+    header: { paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    headerTitle: { fontSize: 22, fontWeight: '900', color: '#1E293B', letterSpacing: -0.5 },
+    headerSubtitle: { fontSize: 10, fontWeight: '900', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1, marginTop: 2 },
+    closeBtn: { padding: 4 },
+    sectionTitle: { fontSize: 18, fontWeight: '900', color: '#1E293B', marginBottom: 16 },
+    statusItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', padding: 14, borderRadius: 24, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 1 },
+    avatarRing: { width: 60, height: 60, borderRadius: 30, padding: 2, borderWidth: 2 },
+    avatar: { width: '100%', height: '100%', borderRadius: 30 },
+    statusCountBadge: { position: 'absolute', bottom: -4, right: -4, backgroundColor: '#F68537', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'white' },
+    statusCountText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
+    friendName: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
+    timeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
+    timeText: { color: '#94A3B8', fontSize: 11, fontWeight: '600' },
+    thumbnail: { width: 50, height: 50, borderRadius: 12, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+    thumbnailText: { color: 'white', fontWeight: '900', fontSize: 10 },
+    emptyContainer: { alignItems: 'center', justifyContent: 'center', padding: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 32, marginTop: 10, marginHorizontal: 20 },
+    emptyIconCircle: { marginBottom: 16 },
+    emptyText: { color: '#64748B', fontWeight: '900', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center' },
+    skeletonHeader: { paddingHorizontal: 20, paddingVertical: 12 },
+    skeletonTitle: { width: 100, height: 28, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 8, marginBottom: 4 },
+    skeletonSubTitle: { width: 80, height: 12, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 4 },
+    skeletonMyStatus: { height: 120, backgroundColor: 'white', borderRadius: 24, marginBottom: 20, marginTop: 10, opacity: 0.6 },
+    skeletonItem: { height: 80, backgroundColor: 'white', borderRadius: 24, marginBottom: 12, opacity: 0.6 }
+});

@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, Alert, Modal, StyleSheet, Pressable } from 'react-native';
+import { supabase } from '@/lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 // Adjust import paths as needed based on your project structure
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
@@ -21,25 +22,85 @@ const simpleFormatDistance = (dateString: string) => {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
 };
 
+// Simple duration formatter
+const formatDuration = (seconds: number) => {
+    if (!seconds || seconds <= 0) return '';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins === 0) return `${secs}s`;
+    return `${mins}m ${secs}s`;
+};
+
 export default function CallsScreen() {
     const swipeHandlers = useSwipeNavigation();
+    const router = useRouter();
     const { logs, loading, loadingMore, hasMore, refreshLogs, loadMoreLogs, currentUser } = useCallLogs();
     const [refreshing, setRefreshing] = useState(false);
 
+    // Multi-selection state
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        // Assuming refreshLogs returns a promise. If not, we can just await a small timeout or modify the hook.
-        // In the hook implementation, it calls loadLogs which is async but wrapper might not be.
-        // Let's assume it works or just call it.
         await refreshLogs();
         setRefreshing(false);
     }, [refreshLogs]);
+
+    const handleChatPress = (userId: string, userName: string, userImg?: string) => {
+        if (isSelectionMode) return;
+        router.push({
+            pathname: `/chat/${userId}`,
+            params: { name: userName, image: userImg }
+        });
+    };
+
+    const toggleSelection = (id: string) => {
+        const newSelected = new Set(selectedIds);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+            if (newSelected.size === 0) setIsSelectionMode(false);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedIds(newSelected);
+    };
+
+    const handleLongPress = (id: string) => {
+        if (!isSelectionMode) {
+            setIsSelectionMode(true);
+            const newSelected = new Set(selectedIds);
+            newSelected.add(id);
+            setSelectedIds(newSelected);
+        }
+    };
+
+    const handleDeleteSelected = async () => {
+        const idsToDelete = Array.from(selectedIds);
+        const { error } = await supabase.from('call_logs').delete().in('id', idsToDelete);
+        if (!error) {
+            refreshLogs();
+            setSelectedIds(new Set());
+            setIsSelectionMode(false);
+            setIsDeleteModalVisible(false);
+        } else {
+            Alert.alert("Error", "Failed to delete logs");
+            setIsDeleteModalVisible(false);
+        }
+    };
+
+    const cancelSelection = () => {
+        setIsSelectionMode(false);
+        setSelectedIds(new Set());
+    };
 
     const renderItem = ({ item }: { item: CallLog }) => {
         const isOutgoing = item.caller_id === currentUser?.id;
         const otherUser = isOutgoing ? item.receiver : item.caller;
         const displayName = otherUser?.username || 'Unknown User';
         const displayImg = otherUser?.avatar_url;
+        const isSelected = selectedIds.has(item.id);
 
         // Determine icon and color based on call status
         let statusIconName: keyof typeof Ionicons.glyphMap = 'call';
@@ -56,20 +117,33 @@ export default function CallsScreen() {
             statusColor = '#10B981'; // green
         }
 
-        // Icon for call type (video vs audio)
         const typeIconName = item.call_type === 'video' ? 'videocam' : 'call';
+        const durationStr = item.status !== 'missed' && item.duration > 0 ? ` (${formatDuration(item.duration)})` : '';
 
         return (
             <TouchableOpacity
+                onPress={() => isSelectionMode ? toggleSelection(item.id) : otherUser && handleChatPress(otherUser.id, displayName, displayImg)}
+                onLongPress={() => handleLongPress(item.id)}
+                delayLongPress={400}
                 style={{
                     flexDirection: 'row',
                     alignItems: 'center',
                     padding: 16,
-                    backgroundColor: 'white',
+                    backgroundColor: isSelected ? '#FFF7ED' : 'white',
                     borderBottomWidth: 1,
                     borderBottomColor: '#F3F4F6'
                 }}
             >
+                {isSelectionMode && (
+                    <View style={{ marginRight: 12 }}>
+                        <Ionicons 
+                            name={isSelected ? "checkbox" : "square-outline"} 
+                            size={24} 
+                            color={isSelected ? "#F68537" : "#D1D5DB"} 
+                        />
+                    </View>
+                )}
+                
                 <View style={{ marginRight: 16 }}>
                     <Image
                         source={{ uri: displayImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random` }}
@@ -92,14 +166,19 @@ export default function CallsScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                         <Ionicons name={statusIconName} size={14} color={statusColor} style={{ marginRight: 4 }} />
                         <Text style={{ fontSize: 13, color: '#6B7280' }}>
-                            {item.status === 'missed' ? 'Missed' : isOutgoing ? 'Outgoing' : 'Incoming'} • {simpleFormatDistance(item.created_at)}
+                            {item.status === 'missed' ? 'Missed' : isOutgoing ? 'Outgoing' : 'Incoming'}{durationStr} • {simpleFormatDistance(item.created_at)}
                         </Text>
                     </View>
                 </View>
 
-                <TouchableOpacity style={{ padding: 8 }}>
-                    <Ionicons name="information-circle-outline" size={24} color="#F68537" />
-                </TouchableOpacity>
+                {!isSelectionMode && (
+                    <TouchableOpacity 
+                        onPress={() => otherUser && handleChatPress(otherUser.id, displayName, displayImg)}
+                        style={{ padding: 8 }}
+                    >
+                        <Ionicons name="chatbubble-ellipses-outline" size={24} color="#F68537" />
+                    </TouchableOpacity>
+                )}
             </TouchableOpacity>
         );
     };
@@ -107,11 +186,34 @@ export default function CallsScreen() {
     return (
         <View style={{ flex: 1, backgroundColor: 'white' }} {...swipeHandlers} collapsable={false}>
             <SafeAreaView style={{ flex: 1 }}>
-                <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#F68537' }}>Calls</Text>
-                    <TouchableOpacity style={{ backgroundColor: '#FFF7ED', padding: 8, borderRadius: 9999 }}>
-                        <Ionicons name="call-outline" size={24} color="#F68537" />
-                    </TouchableOpacity>
+                {/* Custom Header */}
+                <View style={{ 
+                    padding: 16, 
+                    borderBottomWidth: 1, 
+                    borderBottomColor: '#F3F4F6', 
+                    flexDirection: 'row', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    backgroundColor: isSelectionMode ? '#F68537' : 'white'
+                }}>
+                    {isSelectionMode ? (
+                        <>
+                            <TouchableOpacity onPress={cancelSelection}>
+                                <Ionicons name="close" size={28} color="white" />
+                            </TouchableOpacity>
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'white' }}>{selectedIds.size} Selected</Text>
+                            <TouchableOpacity onPress={() => setIsDeleteModalVisible(true)}>
+                                <Ionicons name="trash-outline" size={24} color="white" />
+                            </TouchableOpacity>
+                        </>
+                    ) : (
+                        <>
+                            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#F68537' }}>Calls</Text>
+                            <TouchableOpacity style={{ backgroundColor: '#FFF7ED', padding: 8, borderRadius: 9999 }}>
+                                <Ionicons name="call-outline" size={24} color="#F68537" />
+                            </TouchableOpacity>
+                        </>
+                    )}
                 </View>
 
                 {loading && !refreshing && logs.length === 0 ? (
@@ -168,7 +270,113 @@ export default function CallsScreen() {
                         }}
                     />
                 )}
+
+                {/* Premium Delete Modal */}
+                <Modal
+                    visible={isDeleteModalVisible}
+                    transparent={true}
+                    animationType="fade"
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContainer}>
+                            <View style={styles.iconContainer}>
+                                <Ionicons name="trash" size={40} color="#EF4444" />
+                            </View>
+                            <Text style={styles.modalTitle}>Delete Call Logs?</Text>
+                            <Text style={styles.modalMessage}>
+                                Are you sure you want to delete {selectedIds.size} selected call log record{selectedIds.size > 1 ? 's' : ''}? This action cannot be undone.
+                            </Text>
+                            
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity 
+                                    style={[styles.modalButton, styles.cancelButton]} 
+                                    onPress={() => setIsDeleteModalVisible(false)}
+                                >
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.modalButton, styles.deleteButton]} 
+                                    onPress={handleDeleteSelected}
+                                >
+                                    <Text style={styles.deleteButtonText}>Delete</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
             </SafeAreaView>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24
+    },
+    modalContainer: {
+        width: '100%',
+        backgroundColor: 'white',
+        borderRadius: 24,
+        padding: 24,
+        alignItems: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+    },
+    iconContainer: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#FEF2F2',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#1F2937',
+        marginBottom: 8
+    },
+    modalMessage: {
+        fontSize: 14,
+        color: '#6B7280',
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 20
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%'
+    },
+    modalButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    cancelButton: {
+        backgroundColor: '#F3F4F6'
+    },
+    cancelButtonText: {
+        color: '#4B5563',
+        fontWeight: '600',
+        fontSize: 16
+    },
+    deleteButton: {
+        backgroundColor: '#EF4444'
+    },
+    deleteButtonText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 16
+    }
+});

@@ -1,96 +1,252 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Platform, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, Image, ActivityIndicator, StyleSheet, LayoutAnimation, Platform, UIManager, ScrollView } from 'react-native';
 import { useContactSuggestions } from '@/hooks/useContactSuggestions';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 export default function ContactSuggestions() {
     const { suggestions, loading, permissionGranted, loadSuggestions, sendRequest } = useContactSuggestions();
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const toggleExpand = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setIsExpanded(!isExpanded);
+    };
 
     if (permissionGranted === false) {
-        return null; // Don't show anything if permission denied, or show a prompt to enable.
+        return null;
     }
 
     if (loading && suggestions.length === 0) {
         return (
             <View style={{ padding: 16 }}>
-                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 12 }}>Suggested from Contacts</Text>
-                <ActivityIndicator color="#F68537" style={{ alignSelf: 'flex-start', marginLeft: 20 }} />
+                <Text style={styles.headerText}>Suggested from Contacts</Text>
+                <ActivityIndicator color="#F68537" style={{ alignSelf: 'flex-start', marginLeft: 20, marginTop: 10 }} />
             </View>
         );
     }
 
     if (suggestions.length === 0) {
-        return null; // Hide section if no suggestions
+        return null;
     }
 
     return (
-        <View style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12 }}>
-                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>Suggested from Contacts</Text>
-                <TouchableOpacity onPress={() => loadSuggestions(true)}>
-                    <Ionicons name="refresh" size={16} color="#9CA3AF" />
-                </TouchableOpacity>
-            </View>
-
-            <View style={{ paddingBottom: 8 }}>
-                {suggestions.map((user) => (
-                    <View 
-                        key={user.id} 
-                        style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, width: '100%' }}
-                    >
-                        {user.avatar_url ? (
-                            <Image 
-                                source={{ uri: user.avatar_url }} 
-                                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#E5E7EB' }}
-                            />
-                        ) : (
-                            <View style={{
-                                width: 48,
-                                height: 48,
-                                backgroundColor: '#F68537',
-                                borderRadius: 24,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                            }}>
-                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
-                                    {user.username?.substring(0, 2).toUpperCase() || 'UN'}
-                                </Text>
-                            </View>
-                        )}
-
-                        <View style={{ flex: 1, marginLeft: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0, 0, 0, 0.05)', paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <View style={{ flex: 1, marginRight: 12 }}>
-                                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#111827' }}>{user.username}</Text>
-                                <Text style={{ fontSize: 14, color: '#4B5563', marginTop: 2 }} numberOfLines={1}>
-                                    From your contacts
-                                </Text>
-                            </View>
-
-                            {user.requestStatus === 'pending' ? (
-                                <View style={{ paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#E5E7EB' }}>
-                                    <Text style={{ color: '#6B7280', fontSize: 12, fontWeight: 'bold' }}>Pending</Text>
-                                </View>
-                            ) : (
-                                <TouchableOpacity 
-                                    onPress={() => {
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                        sendRequest(user.id);
-                                    }}
-                                    style={{ 
-                                        backgroundColor: '#F68537', 
-                                        paddingVertical: 6, 
-                                        paddingHorizontal: 16, 
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>Add</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
+        <View style={styles.container}>
+            <TouchableOpacity 
+                onPress={toggleExpand}
+                activeOpacity={0.7}
+                style={styles.header}
+            >
+                <View style={styles.headerLeft}>
+                    <View style={styles.iconCircle}>
+                        <Ionicons name="people" size={16} color="#F68537" />
                     </View>
-                ))}
-            </View>
+                    <Text style={styles.headerText}>Suggested from Contacts</Text>
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{suggestions.length}</Text>
+                    </View>
+                </View>
+                <View style={styles.headerRight}>
+                    <TouchableOpacity onPress={() => loadSuggestions(true)} style={{ marginRight: 15 }}>
+                        <Ionicons name="refresh" size={18} color="#94A3B8" />
+                    </TouchableOpacity>
+                    <Ionicons 
+                        name={isExpanded ? "chevron-up" : "chevron-down"} 
+                        size={20} 
+                        color="#6B7280" 
+                    />
+                </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+                <View style={styles.listWrapper}>
+                    <ScrollView 
+                        style={styles.scrollView}
+                        nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                    >
+                        {suggestions.map((user) => (
+                            <View 
+                                key={user.id} 
+                                style={styles.userRow}
+                            >
+                                {user.avatar_url ? (
+                                    <Image 
+                                        source={{ uri: user.avatar_url }} 
+                                        style={styles.avatar}
+                                    />
+                                ) : (
+                                    <View style={styles.initialsAvatar}>
+                                        <Text style={styles.initialsText}>
+                                            {user.username?.substring(0, 2).toUpperCase() || 'UN'}
+                                        </Text>
+                                    </View>
+                                )}
+
+                                <View style={styles.userInfo}>
+                                    <View style={styles.userDetails}>
+                                        <Text style={styles.userName}>{user.username}</Text>
+                                        <Text style={styles.userSubtitle} numberOfLines={1}>
+                                            From your contacts
+                                        </Text>
+                                    </View>
+
+                                    {user.requestStatus === 'pending' ? (
+                                        <View style={styles.pendingBadge}>
+                                            <Text style={styles.pendingText}>Pending</Text>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity 
+                                            onPress={() => {
+                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                sendRequest(user.id);
+                                            }}
+                                            style={styles.addButton}
+                                        >
+                                            <Text style={styles.addButtonText}>Add</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        backgroundColor: 'rgba(255, 255, 255, 0.4)',
+        marginHorizontal: 16,
+        marginTop: 10,
+        borderRadius: 20,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.5)'
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+    },
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10
+    },
+    iconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#FFF7ED',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    headerText: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: '#1E293B',
+        letterSpacing: 0.2
+    },
+    badge: {
+        backgroundColor: '#F68537',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+    },
+    badgeText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold'
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    listWrapper: {
+        backgroundColor: 'white',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.05)'
+    },
+    scrollView: {
+        maxHeight: 280, // Shows about 4-5 items before scrolling
+    },
+    userRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    avatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#F3F4F6'
+    },
+    initialsAvatar: {
+        width: 48,
+        height: 48,
+        backgroundColor: '#F68537',
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    initialsText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 18
+    },
+    userInfo: {
+        flex: 1,
+        marginLeft: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+    },
+    userDetails: {
+        flex: 1,
+        marginRight: 10
+    },
+    userName: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1E293B'
+    },
+    userSubtitle: {
+        fontSize: 12,
+        color: '#64748B',
+        marginTop: 2
+    },
+    addButton: {
+        backgroundColor: '#F68537',
+        paddingVertical: 6,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+    },
+    addButtonText: {
+        color: 'white',
+        fontSize: 13,
+        fontWeight: 'bold'
+    },
+    pendingBadge: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        backgroundColor: '#F1F5F9'
+    },
+    pendingText: {
+        color: '#94A3B8',
+        fontSize: 12,
+        fontWeight: 'bold'
+    }
+});

@@ -41,11 +41,13 @@ export const useCallLogs = () => {
                 setCurrentUser(user);
             }
 
-            if (!user) {
+            if (!user || !user.id || String(user.id) === 'null' || String(user.id) === 'undefined') {
+                console.log('[DEBUG] useCallLogs: Invalid User ID detected, skipping query.', { id: user?.id });
                 setLoading(false);
                 return;
             }
 
+            console.log(`[DEBUG] useCallLogs: Querying logs for UUID: "${user.id}"`);
             const { data: basicLogs, error: logError } = await supabase
                 .from('call_logs')
                 .select('*')
@@ -56,7 +58,7 @@ export const useCallLogs = () => {
             if (logError) throw logError;
 
             if (basicLogs && basicLogs.length > 0) {
-                const userIds = [...new Set(basicLogs.flatMap((log: CallLog) => [log.caller_id, log.receiver_id]))];
+                const userIds = [...new Set(basicLogs.flatMap((log: CallLog) => [log.caller_id, log.receiver_id]))].filter(id => id && id !== 'null');
 
                 const { data: profiles, error: profileError } = await supabase
                     .from('profiles')
@@ -76,7 +78,12 @@ export const useCallLogs = () => {
                 if (isRefresh || offset === 0) {
                     setLogs(enrichedLogs);
                 } else {
-                    setLogs(prev => [...prev, ...enrichedLogs]);
+                    setLogs(prev => {
+                        const all = [...prev, ...enrichedLogs];
+                        return all.filter((item, index, self) =>
+                            index === self.findIndex((t) => t.id === item.id)
+                        );
+                    });
                 }
 
                 if (basicLogs.length < PAGE_SIZE) {

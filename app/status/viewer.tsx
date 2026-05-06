@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Image, TouchableOpacity, Dimensions, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Dimensions, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -9,6 +10,7 @@ const { width, height } = Dimensions.get('window');
 export default function StatusViewer() {
     const { userId, initialIndex, isArchive, date } = useLocalSearchParams();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [statuses, setStatuses] = useState<any[]>([]);
     const [currentIndex, setCurrentIndex] = useState(parseInt(initialIndex as string || '0'));
     const [loading, setLoading] = useState(true);
@@ -188,6 +190,32 @@ export default function StatusViewer() {
         }
     };
 
+    const handleSendReply = async () => {
+        if (!replyText.trim() || !currentUser || !currentStatusUI) return;
+        
+        try {
+            // Prepare the message. We send it as a text message to the user who posted the status.
+            const { error } = await supabase.from('messages').insert([{
+                sender_id: currentUser.id,
+                receiver_id: userId,
+                message: replyText,
+                message_type: 'text',
+                status: 'sent',
+                is_read: false,
+                // Use status_id column to link the reply to the status
+                status_id: currentStatusUI.id
+            }]);
+
+            if (error) throw error;
+
+            setReplyText('');
+            Alert.alert('Sent', 'Your reply has been sent! 🚀');
+        } catch (error: any) {
+            console.error('Error sending status reply:', error);
+            Alert.alert('Error', 'Failed to send reply');
+        }
+    };
+
     if (loading) {
         return (
             <View style={{ flex: 1, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center' }}>
@@ -224,12 +252,19 @@ export default function StatusViewer() {
                 }}
                 style={{ flex: 1 }}
             >
-                {currentStatusUI.media_type === 'image' ? (
-                    <Image
-                        source={{ uri: currentStatusUI.media_url }}
-                        style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-                    />
-                ) : currentStatusUI.media_type === 'text' ? (
+                {currentStatusUI.media_type !== 'text' ? (
+                    <View style={{ flex: 1 }}>
+                        <Image
+                            source={{ uri: currentStatusUI.media_url }}
+                            style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                        />
+                        {currentStatusUI.content && (
+                            <View style={{ position: 'absolute', bottom: 120, left: 0, right: 0, padding: 20, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                                <Text style={{ color: 'white', fontSize: 16, textAlign: 'center', fontWeight: '500' }}>{currentStatusUI.content}</Text>
+                            </View>
+                        )}
+                    </View>
+                ) : (
                     <View
                         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: currentStatusUI.background_color || '#F68537' }}
                     >
@@ -237,11 +272,11 @@ export default function StatusViewer() {
                             {currentStatusUI.content}
                         </Text>
                     </View>
-                ) : null}
+                )}
             </TouchableOpacity>
 
             {/* Header / Progress Bars */}
-            <SafeAreaView style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: 16 }}>
+            <View style={{ position: 'absolute', top: insets.top + 10, left: 0, right: 0, paddingHorizontal: 16, zIndex: 10 }}>
                 <View style={{ flexDirection: 'row', gap: 4, marginBottom: 16 }}>
                     {statuses.map((_, index) => (
                         <View
@@ -273,10 +308,10 @@ export default function StatusViewer() {
                         <Ionicons name="close" size={32} color="white" />
                     </TouchableOpacity>
                 </View>
-            </SafeAreaView>
+            </View>
 
             {/* Footer / Reply or Views Pill */}
-            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Platform.OS === 'ios' ? 40 : 20 }}>
+            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Math.max(insets.bottom, 20) }}>
                 {isOwner ? (
                     <View style={{ alignItems: 'center' }}>
                         <TouchableOpacity
@@ -305,8 +340,12 @@ export default function StatusViewer() {
                                 value={replyText}
                                 onChangeText={setReplyText}
                             />
-                            <TouchableOpacity style={{ marginLeft: 12 }}>
-                                <Ionicons name="send" size={24} color="#F68537" />
+                            <TouchableOpacity 
+                                style={{ marginLeft: 12 }}
+                                onPress={handleSendReply}
+                                disabled={!replyText.trim()}
+                            >
+                                <Ionicons name="send" size={24} color={replyText.trim() ? "#F68537" : "rgba(255, 255, 255, 0.3)"} />
                             </TouchableOpacity>
                         </View>
                     </KeyboardAvoidingView>
