@@ -142,7 +142,7 @@ export default function ProfileScreen() {
                         </TouchableOpacity>
 
                         <TouchableOpacity 
-                            onPress={() => router.push('/notifications' as any)}
+                            onPress={() => router.push('/notification-settings' as any)}
                             style={styles.settingsItem}
                         >
                             <View style={[styles.settingsIconBg, { backgroundColor: '#FFF7ED' }]}>

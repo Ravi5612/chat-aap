@@ -1,150 +1,65 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Audio } from 'expo-av';
-import { useAuthStore } from '@/store/useAuthStore';
-import { LinearGradient } from 'expo-linear-gradient';
-
-import * as DocumentPicker from 'expo-document-picker';
-import { supabase } from '@/lib/supabase';
-
-// Manual base64 to ArrayBuffer helper
-function base64ToArrayBuffer(base64: string) {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-const MESSAGE_TONES = [
-    { id: 'default', name: 'Standard Ping', url: 'https://raw.githubusercontent.com/Anshuman71/chat-app/master/client/src/assets/notification.mp3' },
-    { id: 'soft', name: 'Bubble Pop', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' }, // Placeholder test
-    { id: 'alert', name: 'Modern Alert', url: 'https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg' },
-];
-
-const CALL_TONES = [
-    { id: 'default', name: 'Classic Ring', url: 'https://www.w3schools.com/html/horse.mp3' }, // Just for testing connectivity
-    { id: 'spiritual', name: 'Digital Phone', url: 'https://actions.google.com/sounds/v1/foley/phone_ringing.ogg' },
-    { id: 'energetic', name: 'High Pulse', url: 'https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg' },
-];
+import { useReceivedRequests } from '@/hooks/useReceivedRequests';
+import { Image } from 'expo-image';
+import { format } from 'date-fns';
+import * as Haptics from 'expo-haptics';
 
 export default function NotificationsScreen() {
     const router = useRouter();
-    const { user, profile, updateProfile } = useAuthStore();
-    const [playingId, setPlayingId] = useState<string | null>(null);
-    const [sound, setSound] = useState<Audio.Sound | null>(null);
-    const [saving, setSaving] = useState(false);
+    const { receivedRequests, loading, loadRequests } = useReceivedRequests();
+    const [refreshing, setRefreshing] = useState(false);
 
-    const playSound = async (id: string, url: string) => {
-        try {
-            if (sound) {
-                await sound.unloadAsync();
-            }
-            setPlayingId(id);
-            const { sound: newSound } = await Audio.Sound.createAsync(
-                { uri: url },
-                { shouldPlay: true }
-            );
-            setSound(newSound);
-            newSound.setOnPlaybackStatusUpdate((status: any) => {
-                if (status.didJustFinish) setPlayingId(null);
-            });
-        } catch (error) {
-            console.error('Error playing sound', error);
-            setPlayingId(null);
-        }
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await loadRequests();
+        setRefreshing(false);
     };
 
-    const handleSave = async (type: 'message' | 'call', url: string) => {
-        setSaving(true);
-        const updates = type === 'message' ? { message_tone: url } : { call_tone: url };
-        await updateProfile(updates);
-        setSaving(false);
-    };
-
-    const pickAndUploadTone = async (type: 'message' | 'call') => {
-        try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: 'audio/*',
-                copyToCacheDirectory: true
-            });
-
-            if (result.canceled) return;
-
-            setSaving(true);
-            const asset = result.assets[0];
-            
-            // Read file as base64
-            const response = await fetch(asset.uri);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            
-            const fileData: any = await new Promise((resolve, reject) => {
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-
-            const base64 = fileData.split(',')[1];
-            const fileName = `${user.id}/${Date.now()}_${asset.name}`;
-            const filePath = `tones/${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('media')
-                .upload(filePath, base64ToArrayBuffer(base64), {
-                    contentType: asset.mimeType || 'audio/mpeg',
-                    upsert: true
-                });
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('media')
-                .getPublicUrl(filePath);
-
-            await handleSave(type, publicUrl);
-        } catch (error) {
-            console.error('Error uploading custom tone:', error);
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const renderToneItem = (item: any, type: 'message' | 'call') => {
-        const isSelected = type === 'message' ? profile?.message_tone === item.url : profile?.call_tone === item.url;
-        const isPlaying = playingId === item.id;
-
+    const renderNotification = ({ item }: { item: any }) => {
+        const isRequest = item.status === 'pending';
+        
         return (
-            <View 
-                key={item.id} 
-                style={[styles.toneItem, isSelected && styles.selectedTone]}
+            <TouchableOpacity 
+                style={styles.notificationItem}
+                onPress={() => {
+                    Haptics.selectionAsync();
+                    if (isRequest) {
+                        router.push('/friend-requests');
+                    }
+                }}
             >
-                <TouchableOpacity 
-                    onPress={() => isPlaying ? sound?.stopAsync() : playSound(item.id, item.url)}
-                    style={[styles.playButtonWrapper, isSelected && { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                >
-                    <Ionicons name={isPlaying ? "stop" : "play"} size={20} color={isSelected ? "white" : "#F68537"} />
-                </TouchableOpacity>
-
-                <View style={styles.toneInfo}>
-                    <Text style={[styles.toneName, isSelected && styles.selectedText]}>{item.name}</Text>
-                    {isSelected && <Text style={styles.currentLabel}>Active Tone</Text>}
+                <View style={styles.avatarContainer}>
+                    <Image
+                        source={{ uri: item.sender?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.sender?.username || 'User')}&backgroundColor=F68537` }}
+                        style={styles.avatar}
+                    />
+                    <View style={styles.iconBadge}>
+                        <Ionicons 
+                            name={isRequest ? "person-add" : "notifications"} 
+                            size={10} 
+                            color="white" 
+                        />
+                    </View>
                 </View>
-                
-                <TouchableOpacity 
-                    onPress={() => handleSave(type, item.url)}
-                    style={[styles.setButton, isSelected ? styles.selectedSetButton : styles.unselectedSetButton]}
-                >
-                    <Text style={[styles.setButtonText, isSelected && { color: '#F68537' }]}>
-                        {isSelected ? 'SET' : 'USE'}
+
+                <View style={styles.content}>
+                    <Text style={styles.message}>
+                        <Text style={styles.username}>{item.sender?.username || 'Someone'}</Text>
+                        {isRequest ? ' sent you a friend request.' : ' sent you a notification.'}
                     </Text>
-                    {isSelected && <Ionicons name="checkmark-circle" size={14} color="#F68537" />}
-                </TouchableOpacity>
-            </View>
+                    <Text style={styles.time}>
+                        {item.created_at ? format(new Date(item.created_at), 'MMM d, h:mm a') : 'Recently'}
+                    </Text>
+                </View>
+
+                {isRequest && (
+                    <View style={styles.unreadDot} />
+                )}
+            </TouchableOpacity>
         );
     };
 
@@ -156,45 +71,32 @@ export default function NotificationsScreen() {
                         <Ionicons name="arrow-back" size={24} color="#1F2937" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Notifications</Text>
-                    <View style={{ width: 40 }} />
+                    <TouchableOpacity 
+                        onPress={() => router.push('/notification-settings')}
+                        style={styles.settingsButton}
+                    >
+                        <Ionicons name="settings-outline" size={24} color="#F68537" />
+                    </TouchableOpacity>
                 </View>
 
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24 }}>
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>MESSAGE TONES</Text>
-                        <Text style={styles.sectionDesc}>Choose the sound you hear for new messages</Text>
-                        {MESSAGE_TONES.map(tone => renderToneItem(tone, 'message'))}
-                        
-                        <TouchableOpacity 
-                            style={styles.customUploadButton}
-                            onPress={() => pickAndUploadTone('message')}
-                        >
-                            <Ionicons name="cloud-upload-outline" size={20} color="#F68537" />
-                            <Text style={styles.customUploadText}>Choose from Device</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={[styles.section, { marginTop: 32 }]}>
-                        <Text style={styles.sectionTitle}>CALL RINGTONES</Text>
-                        <Text style={styles.sectionDesc}>Choose the ringtone for audio and video calls</Text>
-                        {CALL_TONES.map(tone => renderToneItem(tone, 'call'))}
-
-                        <TouchableOpacity 
-                            style={styles.customUploadButton}
-                            onPress={() => pickAndUploadTone('call')}
-                        >
-                            <Ionicons name="cloud-upload-outline" size={20} color="#F68537" />
-                            <Text style={styles.customUploadText}>Choose from Device</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {saving && (
-                        <View style={styles.savingOverlay}>
-                            <ActivityIndicator color="#F68537" />
-                            <Text style={styles.savingText}>Updating Tones...</Text>
+                <FlatList
+                    data={receivedRequests}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderNotification}
+                    contentContainerStyle={{ paddingBottom: 20 }}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <View style={styles.emptyIconBg}>
+                                <Ionicons name="notifications-off-outline" size={48} color="#D1D5DB" />
+                            </View>
+                            <Text style={styles.emptyTitle}>No Notifications Yet</Text>
+                            <Text style={styles.emptySubtitle}>We'll notify you when something important happens.</Text>
                         </View>
-                    )}
-                </ScrollView>
+                    }
+                />
             </SafeAreaView>
         </View>
     );
@@ -211,6 +113,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
     },
     backButton: {
         padding: 8,
@@ -220,114 +124,89 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#1F2937',
     },
-    section: {
-        marginBottom: 16,
+    settingsButton: {
+        padding: 8,
     },
-    sectionTitle: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#F68537',
-        letterSpacing: 1.2,
-        marginBottom: 4,
-    },
-    sectionDesc: {
-        fontSize: 14,
-        color: '#9CA3AF',
-        marginBottom: 16,
-    },
-    toneItem: {
+    notificationItem: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
         backgroundColor: 'white',
-        borderRadius: 16,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#F3F4F6',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
     },
-    selectedTone: {
-        backgroundColor: '#F68537',
-        borderColor: '#F68537',
-    },
-    toneInfo: {
-        flex: 1,
-    },
-    toneName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-    },
-    selectedText: {
-        color: 'white',
-    },
-    currentLabel: {
-        fontSize: 10,
-        color: 'rgba(255,255,255,0.8)',
-        fontWeight: 'bold',
-        marginTop: 2,
-    },
-    playButtonWrapper: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#FFF9F1',
-        alignItems: 'center',
-        justifyContent: 'center',
+    avatarContainer: {
+        position: 'relative',
         marginRight: 12,
     },
-    setButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        gap: 4,
+    avatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
     },
-    selectedSetButton: {
-        backgroundColor: 'white',
-    },
-    unselectedSetButton: {
-        backgroundColor: '#FFF9F1',
-        borderWidth: 1,
-        borderColor: '#F68537',
-    },
-    setButtonText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#F68537',
-    },
-    savingOverlay: {
-        flexDirection: 'row',
+    iconBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        backgroundColor: '#F68537',
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        borderWidth: 2,
+        borderColor: 'white',
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: 20,
-        gap: 8,
     },
-    savingText: {
-        color: '#F68537',
-        fontWeight: '600',
+    content: {
+        flex: 1,
     },
-    customUploadButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        backgroundColor: '#FFF9F1',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: '#F68537',
-        marginTop: 8,
-        gap: 10,
-    },
-    customUploadText: {
-        color: '#F68537',
-        fontWeight: 'bold',
+    message: {
         fontSize: 14,
+        color: '#374151',
+        lineHeight: 20,
+    },
+    username: {
+        fontWeight: 'bold',
+        color: '#1F2937',
+    },
+    time: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginTop: 4,
+    },
+    unreadDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#F68537',
+        marginLeft: 12,
+    },
+    emptyContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 100,
+        paddingHorizontal: 40,
+    },
+    emptyIconBg: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#F9FAFB',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#374151',
+        marginBottom: 8,
+    },
+    emptySubtitle: {
+        fontSize: 14,
+        color: '#9CA3AF',
+        textAlign: 'center',
+        lineHeight: 20,
     }
 });
