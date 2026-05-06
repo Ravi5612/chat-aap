@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     },
     actionButton: {
         width: '100%',
-        backgroundColor: '#FF69B4',
+        backgroundColor: '#F68537',
         paddingVertical: 18,
         borderRadius: 16,
         alignItems: 'center',
