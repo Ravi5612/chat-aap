@@ -6,49 +6,25 @@ import 'react-native-reanimated';
 import "../global.css";
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
-import { useInitialPermissions } from '@/hooks/useInitialPermissions';
-
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
-
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { SplashScreen } from '@/components/SplashScreen';
-import { useCallManager } from '@/hooks/useCallManager';
-import CallScreen from '@/components/chat/CallScreen';
+import { BackgroundServices } from '@/components/BackgroundServices';
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
-  
-  // Request all permissions on mount
-  useInitialPermissions();
-
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
   const [isMounted, setIsMounted] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
-
-  // Initialize notifications & global listeners
-  usePushNotifications(session?.user?.id || null);
-  useGlobalRealtime(session?.user?.id || null);
-
-  const { combinedItems = [] } = useFriendsStore();
-  const memoizedFriends = React.useMemo(() => combinedItems, [combinedItems.length]);
-
-  const { 
-    callSession, 
-    handleStartCall, 
-    setCallActive, 
-    endCall 
-  } = useCallManager(session?.user, memoizedFriends);
 
   useEffect(() => {
     // 1. Setup Auth Listener & Initial Session
@@ -69,19 +45,39 @@ export default function RootLayout() {
 
     setupAuth();
 
+    const lastAppStateTime = { current: 0 };
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      const now = Date.now();
+      if (now - lastAppStateTime.current < 2000) return;
+      lastAppStateTime.current = now;
+
+      console.log(`[DEBUG] RootLayout: AppState -> ${nextAppState}`);
+      
+      const { session, syncOnlineStatus } = useAuthStore.getState();
+      if (session?.user?.id) {
+        if (nextAppState === 'active') {
+          syncOnlineStatus(true);
+        } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+          syncOnlineStatus(false);
+        }
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    const appStateSub = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.unsubscribe();
+      appStateSub.remove();
+    };
   }, []);
 
   useEffect(() => {
     if (initializing || !isMounted || showSplash) return;
-
-    if (session?.user?.id) {
-      syncOnlineStatus(true);
-    }
 
     const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup') || (segments as string[]).includes('forgot-password') || (segments as string[]).includes('reset-password');
     const isRoot = (segments as string[]).length === 0;
@@ -116,16 +112,7 @@ export default function RootLayout() {
           <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
-        <CallScreen
-          visible={!!callSession}
-          callState={callSession?.status}
-          onEndCall={endCall}
-          onAcceptCall={setCallActive}
-          currentUser={session?.user}
-          callType={callSession?.type || 'video'}
-          friend={callSession?.friend || {}}
-          offer={callSession?.offer}
-        />
+        <BackgroundServices />
         <StatusBar style="auto" />
       </ThemeProvider>
     </GestureHandlerRootView>

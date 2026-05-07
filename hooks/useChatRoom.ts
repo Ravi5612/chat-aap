@@ -107,33 +107,41 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     : (newMsg.sender_id === friendId && newMsg.receiver_id === currentUser.id);
 
                 if (isRelevant) {
+                    // Small delay to ensure DB and Local State are in sync
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                    
+                    const currentKey = useChatStore.getState().chatKey;
+                    if (!currentKey) {
+                        console.warn('[DEBUG] ChatRoom: No key for realtime message, reloading...');
+                        loadMessages(friendId, currentUser, isGroup);
+                        return;
+                    }
+
                     try {
                         let decryptedText = newMsg.message;
-                        
                         if (newMsg.message && typeof newMsg.message === 'string' && newMsg.message.trim().startsWith('{')) {
-                            decryptedText = await decryptText(newMsg.message, chatKey);
+                            decryptedText = await decryptText(newMsg.message, currentKey);
+                        }
+
+                        let decryptedFileUrl = newMsg.file_url;
+                        if (newMsg.file_url && newMsg.file_url.trim().startsWith('{')) {
+                            decryptedFileUrl = await decryptText(newMsg.file_url, currentKey);
                         }
 
                         const finalMsg = { 
                             ...newMsg, 
                             message: decryptedText,
-                            sender: { id: friendId } 
+                            file_url: decryptedFileUrl,
+                            sender: { id: newMsg.sender_id } 
                         };
 
-                        let decryptedFileUrl = finalMsg.file_url;
-                        if (finalMsg.file_url && finalMsg.file_url.trim().startsWith('{')) {
-                            decryptedFileUrl = await decryptText(finalMsg.file_url, chatKey);
-                        }
-
                         useChatStore.setState((state) => {
-                            const exists = state.messages.find(m => m.id === finalMsg.id);
-                            if (exists && !exists.message?.startsWith('{')) return state;
-                            
-                            const filtered = state.messages.filter(m => m.id !== finalMsg.id);
-                            return { messages: [...filtered, { ...finalMsg, file_url: decryptedFileUrl }] };
+                            if (state.messages.some(m => m.id === finalMsg.id)) return state;
+                            return { messages: [...state.messages, finalMsg] };
                         });
                     } catch (e) {
                         console.error("ChatRoom: Realtime decryption failed", e);
+                        // Silently reload messages to fix the UI
                         loadMessages(friendId, currentUser, isGroup);
                     }
                 }
