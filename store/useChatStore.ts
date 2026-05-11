@@ -4,6 +4,8 @@ import { Alert } from 'react-native';
 import { getChatKey, decryptText, encryptText } from '@/utils/chatCrypto';
 import { uploadChatMessageMedia } from '../utils/uploadHelper';
 import { logErrorToDB } from '@/utils/errorLogger';
+import { useDbStore } from './useDbStore';
+import { saveLocalMessage, getLocalMessages } from '@/lib/localDb';
 
 interface ChatState {
     messages: any[];
@@ -86,6 +88,20 @@ export const useChatStore = create<ChatState>((set, get) => {
             const PAGE_SIZE = 50;
             const isFirstLoad = !cache[friendId] || cache[friendId].messages.length === 0;
             if (isFirstLoad) set({ loading: true });
+
+            // 1. Try loading from Local DB first for instant UI
+            const { db } = useDbStore.getState();
+            if (db) {
+                const localMsgs = await getLocalMessages(db, friendId, isGroup);
+                if (localMsgs.length > 0) {
+                    console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB`);
+                    set({ 
+                        messages: localMsgs, 
+                        loading: false,
+                        cache: { ...get().cache, [friendId]: { messages: localMsgs, key: chatKey } }
+                    });
+                }
+            }
 
             try {
                 // ✅ Pehle total count lo
@@ -182,6 +198,11 @@ export const useChatStore = create<ChatState>((set, get) => {
                         pageOffset: startOffset,
                         hasMore: startOffset > 0,
                     });
+
+                    // 2. Save fetched messages to Local DB for next time
+                    if (db) {
+                        decryptedMessages.forEach(msg => saveLocalMessage(db, msg));
+                    }
                 }
 
                 // Update cache with deduplicated messages
@@ -404,6 +425,12 @@ export const useChatStore = create<ChatState>((set, get) => {
                         cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
                     };
                 });
+
+                // Save to Local DB
+                const { db } = useDbStore.getState();
+                if (db) {
+                    saveLocalMessage(db, finalMsg);
+                }
 
                 if (activeChannel) {
                     activeChannel.send({

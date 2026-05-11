@@ -24,10 +24,16 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                     styles.avatarRing,
                     { borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537' }
                 ]}>
-                    <Image
-                        source={{ uri: item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
-                        style={styles.avatar}
-                    />
+                    {latestStatus.media_type === 'text' ? (
+                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: latestStatus.background_color || '#F68537', borderRadius: 30 }}>
+                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>{latestStatus.content?.charAt(0)}</Text>
+                        </View>
+                    ) : (
+                        <Image
+                            source={{ uri: latestStatus.media_url || item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
+                            style={styles.avatar}
+                        />
+                    )}
                 </View>
                 <View style={styles.statusCountBadge}>
                     <Text style={styles.statusCountText}>{item.statusCount}</Text>

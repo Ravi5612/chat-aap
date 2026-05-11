@@ -9,7 +9,7 @@ import { logErrorToDB } from '@/utils/errorLogger';
 
 export default function LoginPage() {
     const router = useRouter();
-    
+
     // UI State
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -84,14 +84,14 @@ export default function LoginPage() {
 
                 if (data.session) {
                     // 2. Account created and logged in! Now update the profile with the phone number
-                    await supabase.from('profiles').update({ 
+                    await supabase.from('profiles').update({
                         phone: formattedPhone,
-                        current_session_id: data.session.user.id 
+                        current_session_id: data.session.user.id
                     }).eq('id', data.session.user.id);
 
                     // Check username
                     const { data: profile } = await supabase.from('profiles').select('username').eq('id', data.session.user.id).single();
-                    
+
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     if (!profile?.username) {
                         router.replace('/setup-profile');
@@ -126,7 +126,7 @@ export default function LoginPage() {
                 // If user entered a phone number (doesn't contain '@'), find their email first
                 if (!loginEmail.includes('@')) {
                     const searchPhone = loginEmail.startsWith('+') ? loginEmail : `+91${loginEmail}`;
-                    
+
                     // Supabase trick: find email from profiles table
                     const { data: profileMatch, error: searchError } = await supabase
                         .from('profiles')
@@ -135,7 +135,7 @@ export default function LoginPage() {
                         .maybeSingle();
 
                     if (searchError) throw searchError;
-                    
+
                     if (profileMatch?.email) {
                         loginEmail = profileMatch.email;
                     } else {
@@ -152,12 +152,12 @@ export default function LoginPage() {
                 if (error) throw error;
 
                 if (data.session) {
-                    await supabase.from('profiles').update({ 
-                        current_session_id: data.session.user.id 
+                    await supabase.from('profiles').update({
+                        current_session_id: data.session.user.id
                     }).eq('id', data.session.user.id);
 
                     const { data: profile } = await supabase.from('profiles').select('username').eq('id', data.session.user.id).single();
-                    
+
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     if (!profile?.username) {
                         router.replace('/setup-profile');
@@ -189,9 +189,9 @@ export default function LoginPage() {
 
     return (
         <View style={{ flex: 1 }}>
-            <AuthScreen 
-                title={isForgotPassword ? "Reset Password" : (isSignUp ? "Create Account" : "Welcome Back")} 
-                subtitle={isForgotPassword ? "We'll send a link to your email" : (isSignUp ? "Join Chat Warriors today!" : "Login to your account")} 
+            <AuthScreen
+                title={isForgotPassword ? "Reset Password" : (isSignUp ? "Create Account" : "Welcome Back")}
+                subtitle={isForgotPassword ? "We'll send a link to your email" : (isSignUp ? "Join Chat Warriors today!" : "Login to your account")}
                 loading={loading}
             >
                 <View>
@@ -257,25 +257,25 @@ export default function LoginPage() {
                                     style={[inputStyle, { paddingRight: 50 }]}
                                     editable={!loading}
                                 />
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => setShowPassword(!showPassword)}
-                                    style={{ 
-                                        position: 'absolute', 
-                                        right: 12, 
-                                        top: 12, 
-                                        padding: 4 
+                                    style={{
+                                        position: 'absolute',
+                                        right: 12,
+                                        top: 12,
+                                        padding: 4
                                     }}
                                 >
-                                    <Ionicons 
-                                        name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                                        size={22} 
-                                        color="#9CA3AF" 
+                                    <Ionicons
+                                        name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                        size={22}
+                                        color="#9CA3AF"
                                     />
                                 </TouchableOpacity>
                             </View>
 
                             {!isSignUp && (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => setIsForgotPassword(true)}
                                     style={{ alignSelf: 'flex-end', marginBottom: 16 }}
                                 >
@@ -300,6 +300,10 @@ export default function LoginPage() {
                         )}
                     </TouchableOpacity>
 
+                    <Text style={{ textAlign: 'center', marginTop: 10, color: '#F68537', fontSize: 12, fontWeight: 'bold' }}>
+                        OTA Update: Magic Successful! ✨ (v1.1.0)
+                    </Text>
+
                     <TouchableOpacity
                         onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -313,12 +317,12 @@ export default function LoginPage() {
                         style={{ alignItems: 'center', marginTop: 24, padding: 10 }}
                     >
                         <Text style={{ color: '#6B7280', fontSize: 15 }}>
-                            {isForgotPassword 
-                                ? "Back to Login" 
+                            {isForgotPassword
+                                ? "Back to Login"
                                 : (isSignUp ? "Already have an account? " : "Don't have an account? ")}
                             <Text style={{ color: '#F68537', fontWeight: 'bold' }}>
-                                {isForgotPassword 
-                                    ? "" 
+                                {isForgotPassword
+                                    ? ""
                                     : (isSignUp ? "Login here" : "Sign Up")}
                             </Text>
                         </Text>

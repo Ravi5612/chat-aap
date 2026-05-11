@@ -17,6 +17,9 @@ import { useCallManager } from '@/hooks/useCallManager';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import { getLocalWallpaper, saveLocalWallpaper } from '@/lib/localDb';
+import { useDbStore } from '@/store/useDbStore';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
@@ -81,6 +84,93 @@ export default function ChatScreen() {
     // Media Viewer State
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
+
+    // Wallpaper State
+    const [wallpaper, setWallpaper] = useState<string | null>(null);
+
+    useEffect(() => {
+        const loadWallpaper = async () => {
+            const { db } = useDbStore.getState();
+            if (db && safeFriendId && currentUser?.id) {
+                // 1. Check Local DB
+                let uri = await getLocalWallpaper(db, safeFriendId);
+                
+                // 2. If not in local, check Supabase
+                if (!uri) {
+                    const { data, error } = await supabase
+                        .from('chat_wallpapers')
+                        .select('wallpaper_url')
+                        .eq('user_id', currentUser.id)
+                        .eq('chat_id', safeFriendId)
+                        .single();
+                    
+                    if (!error && data?.wallpaper_url) {
+                        uri = data.wallpaper_url;
+                        // Save to local for next time
+                        await saveLocalWallpaper(db, safeFriendId, uri);
+                    }
+                }
+                
+                if (uri) setWallpaper(uri);
+            }
+        };
+        loadWallpaper();
+    }, [safeFriendId, currentUser?.id]);
+
+    const handleSetWallpaper = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [9, 16],
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0].uri && currentUser?.id) {
+            const localUri = result.assets[0].uri;
+            setWallpaper(localUri);
+            
+            try {
+                // 1. Upload to Cloudinary (using existing logic pattern)
+                const formData = new FormData();
+                formData.append('file', {
+                    uri: localUri,
+                    type: 'image/jpeg',
+                    name: 'wallpaper.jpg',
+                } as any);
+                formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+
+                const cloudRes = await fetch(
+                    `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+                    { method: 'POST', body: formData }
+                );
+                const cloudData = await cloudRes.json();
+                const remoteUrl = cloudData.secure_url;
+
+                if (remoteUrl) {
+                    // 2. Save to Supabase
+                    const { error: supError } = await supabase
+                        .from('chat_wallpapers')
+                        .upsert({
+                            user_id: currentUser.id,
+                            chat_id: safeFriendId,
+                            wallpaper_url: remoteUrl
+                        });
+                    
+                    if (supError) throw supError;
+
+                    // 3. Save to local DB
+                    const { db } = useDbStore.getState();
+                    if (db) {
+                        await saveLocalWallpaper(db, safeFriendId, remoteUrl);
+                    }
+                    Alert.alert("Success", "Wallpaper synced to cloud!");
+                }
+            } catch (error) {
+                console.error("Wallpaper Sync Error:", error);
+                Alert.alert("Sync Error", "Wallpaper saved locally but failed to sync to cloud.");
+            }
+        }
+    };
 
     const onSendMessage = (text: string) => {
         if (isBlocked) {
@@ -267,15 +357,31 @@ export default function ChatScreen() {
 
     const MainContainer = KeyboardAvoidingView;
     const containerProps = {
-        behavior: Platform.OS === 'ios' ? 'padding' as const : 'height' as const,
-        keyboardVerticalOffset: keyboardOffset
+        behavior: Platform.OS === 'ios' ? 'padding' as const : undefined,
+        keyboardVerticalOffset: Platform.OS === 'ios' ? 0 : 0
     };
 
     return (
         <MainContainer
             {...containerProps}
-            style={{ flex: 1, backgroundColor: '#EBD8B7' }}
+            style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}
         >
+            {wallpaper && (
+                <Image
+                    source={{ uri: wallpaper }}
+                    style={StyleSheet.absoluteFillObject}
+                    contentFit="cover"
+                    priority="high"
+                />
+            )}
+            {wallpaper && (
+                <View 
+                    style={[
+                        StyleSheet.absoluteFillObject, 
+                        { backgroundColor: 'rgba(0,0,0,0.2)' } // Subtle overlay for readability
+                    ]} 
+                />
+            )}
             <StatusBar barStyle="dark-content" />
             <Stack.Screen options={{ headerShown: false }} />
 
@@ -351,6 +457,7 @@ export default function ChatScreen() {
                             if (!currentUser) return;
                             router.back();
                         }}
+                        onSetWallpaper={handleSetWallpaper}
                     />
                 </View>
             </View>

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/supabase';
+import { useDbStore } from '@/store/useDbStore';
+import { getLocalCallLogs, saveLocalCallLog } from '@/lib/localDb';
 
 export interface CallLog {
     id: string;
@@ -47,6 +49,20 @@ export const useCallLogs = () => {
                 return;
             }
 
+            // 1. Load from Local DB first for instant UI
+            if (offset === 0) {
+                const { db } = useDbStore.getState();
+                if (db) {
+                    const localLogs = await getLocalCallLogs(db, user.id);
+                    if (localLogs.length > 0) {
+                        console.log(`useCallLogs: Loaded ${localLogs.length} logs from Local DB`);
+                        // Note: Profiles won't be enriched yet, but we show what we have
+                        setLogs(localLogs as any);
+                        setLoading(false);
+                    }
+                }
+            }
+
             console.log(`[DEBUG] useCallLogs: Querying logs for UUID: "${user.id}"`);
             const { data: basicLogs, error: logError } = await supabase
                 .from('call_logs')
@@ -90,6 +106,12 @@ export const useCallLogs = () => {
                     setHasMore(false);
                 } else {
                     setHasMore(true);
+                }
+
+                // 2. Save fetched logs to Local DB
+                const { db } = useDbStore.getState();
+                if (db) {
+                    basicLogs.forEach(log => saveLocalCallLog(db, log));
                 }
             } else {
                 if (isRefresh || offset === 0) setLogs([]);

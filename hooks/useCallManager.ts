@@ -6,27 +6,37 @@ import { useCallStore } from '@/store/useCallStore';
 
 const RINGTONE_URL = 'https://vgqasnzpnnmshclnshob.supabase.co/storage/v1/object/public/system/ringtone.mp3';
 
-export const useCallManager = (currentUser: any, combinedItems: any[], isListener = true) => {
+export const useCallManager = (currentUser: any, combinedItems: any[], isListener = true, profile: any = null) => {
     const { callSession, setCallSession, setCallActive, endCall: endGlobalCall } = useCallStore();
     const soundRef = useRef<Audio.Sound | null>(null);
-    const profile = currentUser;
 
     // Handle ringtone
     useEffect(() => {
         const manageRingtone = async () => {
             try {
                 if (callSession?.status === 'incoming') {
+                    // Set Audio Mode for Call
+                    await Audio.setAudioModeAsync({
+                        playsInSilentModeIOS: true,
+                        staysActiveInBackground: true,
+                        shouldRouteThroughEarpieceAndroid: false,
+                        shouldDuckAndroid: true,
+                    });
+
                     const userCallTone = profile?.call_tone || RINGTONE_URL;
+                    console.log('[DEBUG] CallManager: Playing ringtone:', userCallTone);
+
                     if (soundRef.current) {
                         await soundRef.current.unloadAsync();
                     }
                     const { sound } = await Audio.Sound.createAsync(
                         { uri: userCallTone },
-                        { shouldPlay: true, isLooping: true }
+                        { shouldPlay: true, isLooping: true, volume: 1.0 }
                     );
                     soundRef.current = sound;
                 } else {
                     if (soundRef.current) {
+                        console.log('[DEBUG] CallManager: Stopping ringtone');
                         await soundRef.current.stopAsync();
                         await soundRef.current.unloadAsync();
                         soundRef.current = null;
@@ -40,10 +50,10 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         manageRingtone();
         return () => {
             if (soundRef.current) {
-                soundRef.current.unloadAsync();
+                soundRef.current.unloadAsync().catch(() => {});
             }
         };
-    }, [callSession?.status]);
+    }, [callSession?.status, profile?.call_tone]);
 
     // Setup Global Realtime Listener for calls
     useEffect(() => {
@@ -99,7 +109,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [currentUser?.id, combinedItems]);
+    }, [currentUser?.id, combinedItems, callSession]);
 
     const handleStartCall = (friend: any, type: 'audio' | 'video' = 'video') => {
         console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type);

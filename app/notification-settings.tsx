@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -11,16 +11,6 @@ import * as DocumentPicker from 'expo-document-picker';
 import { supabase } from '@/lib/supabase';
 
 import { Buffer } from 'buffer';
-
-// Manual base64 to ArrayBuffer helper
-function base64ToArrayBuffer(base64: string) {
-    const binary = Buffer.from(base64, 'base64');
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary[i];
-    }
-    return bytes.buffer;
-}
 
 const MESSAGE_TONES = [
     { id: 'default', name: 'Standard Ping', url: 'https://raw.githubusercontent.com/Anshuman71/chat-app/master/client/src/assets/notification.mp3' },
@@ -34,12 +24,21 @@ const CALL_TONES = [
     { id: 'energetic', name: 'High Pulse', url: 'https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg' },
 ];
 
-export default function NotificationsScreen() {
+export default function NotificationSettingsScreen() {
     const router = useRouter();
-    const { user, profile, updateProfile } = useAuthStore();
+    const { user, profile, updateProfile, syncProfile } = useAuthStore();
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        syncProfile();
+        return () => {
+            if (sound) {
+                sound.unloadAsync().catch(() => {});
+            }
+        };
+    }, []);
 
     const playSound = async (id: string, url: string) => {
         try {
@@ -53,23 +52,39 @@ export default function NotificationsScreen() {
             );
             setSound(newSound);
             newSound.setOnPlaybackStatusUpdate((status: any) => {
-                if (status.didJustFinish) setPlayingId(null);
+                if (status.didJustFinish) {
+                    setPlayingId(null);
+                    newSound.unloadAsync().catch(() => {});
+                }
             });
         } catch (error) {
             console.error('Error playing sound', error);
             setPlayingId(null);
+            Alert.alert('Error', 'Could not play this tone.');
         }
     };
 
     const handleSave = async (type: 'message' | 'call', url: string) => {
         setSaving(true);
-        const updates = type === 'message' ? { message_tone: url } : { call_tone: url };
-        await updateProfile(updates);
-        setSaving(false);
+        try {
+            const updates = type === 'message' ? { message_tone: url } : { call_tone: url };
+            const success = await updateProfile(updates);
+            if (!success) throw new Error('Failed to save');
+        } catch (error) {
+            console.error('Error saving tone:', error);
+            Alert.alert('Error', 'Failed to update tone.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const pickAndUploadTone = async (type: 'message' | 'call') => {
         try {
+            if (!user?.id) {
+                Alert.alert('Error', 'User session not found.');
+                return;
+            }
+
             const result = await DocumentPicker.getDocumentAsync({
                 type: 'audio/*',
                 copyToCacheDirectory: true
@@ -92,12 +107,12 @@ export default function NotificationsScreen() {
             });
 
             const base64 = fileData.split(',')[1];
-            const fileName = `${user.id}/${Date.now()}_${asset.name}`;
+            const fileName = `${user.id}/${Date.now()}_${asset.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
             const filePath = `tones/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
-                .from('media')
-                .upload(filePath, base64ToArrayBuffer(base64), {
+                .from('chat-files')
+                .upload(filePath, Buffer.from(base64, 'base64'), {
                     contentType: asset.mimeType || 'audio/mpeg',
                     upsert: true
                 });
@@ -105,12 +120,14 @@ export default function NotificationsScreen() {
             if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage
-                .from('media')
+                .from('chat-files')
                 .getPublicUrl(filePath);
 
             await handleSave(type, publicUrl);
-        } catch (error) {
+            Alert.alert('Success', 'Custom tone uploaded and set!');
+        } catch (error: any) {
             console.error('Error uploading custom tone:', error);
+            Alert.alert('Error', error.message || 'Failed to upload custom tone.');
         } finally {
             setSaving(false);
         }
@@ -167,6 +184,10 @@ export default function NotificationsScreen() {
                         <Text style={styles.sectionDesc}>Choose the sound you hear for new messages</Text>
                         {MESSAGE_TONES.map(tone => renderToneItem(tone, 'message'))}
                         
+                        {profile?.message_tone && !MESSAGE_TONES.some(t => t.url === profile.message_tone) && (
+                            renderToneItem({ id: 'custom-msg', name: 'Custom Message Tone', url: profile.message_tone }, 'message')
+                        )}
+                        
                         <TouchableOpacity 
                             style={styles.customUploadButton}
                             onPress={() => pickAndUploadTone('message')}
@@ -180,6 +201,10 @@ export default function NotificationsScreen() {
                         <Text style={styles.sectionTitle}>CALL RINGTONES</Text>
                         <Text style={styles.sectionDesc}>Choose the ringtone for audio and video calls</Text>
                         {CALL_TONES.map(tone => renderToneItem(tone, 'call'))}
+
+                        {profile?.call_tone && !CALL_TONES.some(t => t.url === profile.call_tone) && (
+                            renderToneItem({ id: 'custom-call', name: 'Custom Call Tone', url: profile.call_tone }, 'call')
+                        )}
 
                         <TouchableOpacity 
                             style={styles.customUploadButton}

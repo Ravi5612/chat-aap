@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
+import { useDbStore } from './useDbStore';
+import { saveLocalProfile, getLocalProfile } from '@/lib/localDb';
 
 interface AuthState {
     session: Session | null;
@@ -56,8 +58,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     syncProfile: async () => {
         const { user } = get();
         if (user?.id) {
+            // 1. Try loading from Local DB first
+            const { db } = useDbStore.getState();
+            if (db) {
+                const localProfile = await getLocalProfile(db, user.id);
+                if (localProfile) {
+                    console.log('AuthStore: Loaded self-profile from Local DB');
+                    set({ profile: localProfile });
+                }
+            }
+
+            // 2. Fetch from Supabase
             const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (data) set({ profile: data });
+            if (data) {
+                set({ profile: data });
+                // 3. Save to Local DB
+                if (db) saveLocalProfile(db, data);
+            }
         }
     },
     updateProfile: async (updates: any) => {
@@ -70,7 +87,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
             // Re-sync after update
             const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (data) set({ profile: data });
+            if (data) {
+                set({ profile: data });
+                const { db } = useDbStore.getState();
+                if (db) saveLocalProfile(db, data);
+            }
             return true;
         } catch (e) {
             console.error('AuthStore: Profile update failed:', e);

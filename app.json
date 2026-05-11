@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.ravirai.chatwarriors",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#FFF5E6"
@@ -80,7 +81,8 @@
             "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -91,12 +93,14 @@
         "origin": false
       },
       "eas": {
-        "projectId": "a5f0a97e-382f-4cd8-b3f2-b23797964284"
+        "projectId": "94a9828d-0fc5-4ba7-83e5-82c4bcd82670"
       }
     },
-    "owner": "ravirai",
     "updates": {
-      "url": "https://u.expo.dev/a5f0a97e-382f-4cd8-b3f2-b23797964284"
+      "url": "https://u.expo.dev/94a9828d-0fc5-4ba7-83e5-82c4bcd82670",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

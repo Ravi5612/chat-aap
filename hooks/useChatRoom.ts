@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase';
 import { useChatStore } from '@/store/useChatStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { decryptText } from '@/utils/chatCrypto';
+import { useDbStore } from '@/store/useDbStore';
+import { saveLocalMessage } from '@/lib/localDb';
 
 export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: boolean = false) => {
     const { user: currentUser } = useAuthStore();
@@ -139,6 +141,10 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                             if (state.messages.some(m => m.id === finalMsg.id)) return state;
                             return { messages: [...state.messages, finalMsg] };
                         });
+
+                        // Save to Local DB
+                        const { db } = useDbStore.getState();
+                        if (db) saveLocalMessage(db, finalMsg);
                     } catch (e) {
                         console.error("ChatRoom: Realtime decryption failed", e);
                         // Silently reload messages to fix the UI
@@ -162,7 +168,14 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                             if (msg.id === updatedMsg.id) {
                                 const currentStatus = msg.status || 'sent';
                                 if (statusOrder[newStatus as keyof typeof statusOrder] > statusOrder[currentStatus as keyof typeof statusOrder]) {
-                                    return { ...msg, ...updatedMsg, status: newStatus };
+                                    // ONLY update status fields, NEVER overwrite the message text
+                                    return { 
+                                        ...msg, 
+                                        status: newStatus, 
+                                        is_read: updatedMsg.is_read,
+                                        delivered_at: updatedMsg.delivered_at,
+                                        read_at: updatedMsg.read_at
+                                    };
                                 }
                             }
                             return msg;
@@ -180,13 +193,23 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                 const msg = payload.payload;
                 if (!msg || msg.sender_id === currentUser.id) return;
 
+                // Derive relevance
+                const isRelevant = isGroup 
+                    ? msg.group_id === friendId 
+                    : (msg.sender_id === friendId && msg.receiver_id === currentUser.id);
+                
+                if (!isRelevant) return;
+
                 try {
+                    const currentKey = useChatStore.getState().chatKey;
+                    if (!currentKey) return;
+
                     let finalMsg = { ...msg };
 
                     // 1. Decrypt Message Text
                     if (msg.message && typeof msg.message === 'string' && msg.message.trim().startsWith('{')) {
                         try {
-                            finalMsg.message = await decryptText(msg.message, chatKey);
+                            finalMsg.message = await decryptText(msg.message, currentKey);
                         } catch (err) {
                             console.warn("Text decryption failed", err);
                         }
@@ -195,18 +218,23 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     // 2. Decrypt File URL
                     if (msg.file_url && typeof msg.file_url === 'string' && msg.file_url.trim().startsWith('{')) {
                         try {
-                            finalMsg.file_url = await decryptText(msg.file_url, chatKey);
+                            finalMsg.file_url = await decryptText(msg.file_url, currentKey);
                         } catch (err) {
                             console.warn("File URL decryption failed", err);
                         }
                     }
 
                     useChatStore.setState((state) => {
+                        // Strict deduplication
                         if (state.messages.some(m => m.id === finalMsg.id)) return state;
                         return { messages: [...state.messages, finalMsg] };
                     });
 
-                    // Mark as read instantly
+                    // Save to Local DB
+                    const { db } = useDbStore.getState();
+                    if (db) saveLocalMessage(db, finalMsg);
+
+                    // Mark as read
                     useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
                 } catch (e) {
                     console.error("Broadcast listener error:", e);

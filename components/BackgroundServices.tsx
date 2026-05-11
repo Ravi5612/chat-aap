@@ -7,9 +7,21 @@ import { useCallManager } from '@/hooks/useCallManager';
 import { useInitialPermissions } from '@/hooks/useInitialPermissions';
 import CallScreen from '@/components/chat/CallScreen';
 
+import { useNotificationStore } from '@/store/useNotificationStore';
+import { useDbStore } from '@/store/useDbStore';
+import InAppNotification from '@/components/ui/InAppNotification';
+
 export const BackgroundServices = () => {
     const session = useAuthStore(state => state.session);
     const combinedItems = useFriendsStore(state => state.combinedItems);
+    const { currentNotification, clearNotification } = useNotificationStore();
+    const initializeDb = useDbStore(state => state.initialize);
+
+    useEffect(() => {
+        if (session?.user) {
+            initializeDb();
+        }
+    }, [session?.user]);
     
     // 1. Permissions
     useInitialPermissions();
@@ -20,24 +32,31 @@ export const BackgroundServices = () => {
 
     // 3. Call Management
     const memoizedFriends = React.useMemo(() => combinedItems || [], [combinedItems?.length]);
+    const profile = useAuthStore(state => state.profile);
     const { 
         callSession, 
         setCallActive, 
         endCall 
-    } = useCallManager(session?.user, memoizedFriends);
+    } = useCallManager(session?.user, memoizedFriends, true, profile);
 
     if (!session?.user) return null;
 
     return (
-        <CallScreen
-            visible={!!callSession}
-            callState={callSession?.status}
-            onEndCall={endCall}
-            onAcceptCall={setCallActive}
-            currentUser={session?.user}
-            callType={callSession?.type || 'video'}
-            friend={callSession?.friend || {}}
-            offer={callSession?.offer}
-        />
+        <>
+            <InAppNotification 
+                notification={currentNotification} 
+                onClose={clearNotification} 
+            />
+            <CallScreen
+                visible={!!callSession}
+                callState={callSession?.status}
+                onEndCall={endCall}
+                onAcceptCall={setCallActive}
+                currentUser={session?.user}
+                callType={callSession?.type || 'video'}
+                friend={callSession?.friend || {}}
+                offer={callSession?.offer}
+            />
+        </>
     );
 };

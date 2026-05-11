@@ -58,7 +58,13 @@ export const usePushNotifications = (userId: string | null) => {
     const saveTokenToDb = async (uid: string, token: string) => {
         try {
             // Update profile with push token so backend can send notifications
-            await supabase.from('profiles').update({ push_token: token }).eq('id', uid);
+            console.log('[DEBUG] PushNotifications: Saving token to Supabase:', token);
+            const { error } = await supabase.from('profiles').update({ push_token: token }).eq('id', uid);
+            if (error) {
+                console.error('[ERROR] PushNotifications: Failed to save token:', error);
+            } else {
+                console.log('[SUCCESS] PushNotifications: Token saved successfully');
+            }
         } catch (error) {
             console.error('Error saving push token:', error);
         }

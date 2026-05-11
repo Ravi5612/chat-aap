@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { useDbStore } from './useDbStore';
+import { saveLocalStatus, getLocalStatuses, pruneExpiredStatuses, syncLocalStatuses, saveLocalConversation, getLocalConversations, saveLocalProfile } from '@/lib/localDb';
 
 interface FriendsState {
     friends: any[];
@@ -66,6 +68,17 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         
         set({ loading: shouldShowLoading, error: null });
 
+        // 1. Try loading from Local DB first for instant UI
+        const { db } = useDbStore.getState();
+        if (db && combinedItems.length === 0) {
+            const localConv = await getLocalConversations(db);
+            if (localConv.length > 0) {
+                console.log(`FriendsStore: Loaded ${localConv.length} conversations from Local DB`);
+                set({ combinedItems: localConv });
+                set({ loading: false });
+            }
+        }
+
         try {
             // 1. Fetch Blocked Users & Friendships in parallel
             const [blockedRes, friendshipsSent, friendshipsRecd] = await Promise.all([
@@ -87,6 +100,18 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
             // 2. Fetch Groups, Statuses (for friends only), and Unread Counts in parallel
             const nowIso = new Date().toISOString();
+            
+            // 1. Try loading from Local DB first
+            const { db } = useDbStore.getState();
+            if (db) {
+                const localStatuses = await getLocalStatuses(db);
+                if (localStatuses.length > 0) {
+                    console.log(`FriendsStore: Loaded ${localStatuses.length} statuses from Local DB`);
+                    // We don't have full UI integration yet for local statuses here, 
+                    // but we'll use them if Supabase fails or is slow.
+                }
+                await pruneExpiredStatuses(db);
+            }
             const [groupRes, statusRes, viewsRes, unreadRes, recentMsgsRes] = await Promise.all([
                 supabase.from('group_members').select('group_id, groups (id, name, avatar_url)').eq('user_id', userId),
                 supabase.from('statuses').select('id, user_id, expires_at, is_deleted').in('user_id', allRelevantIds).gt('expires_at', nowIso).eq('is_deleted', false),
@@ -105,6 +130,13 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                 if (viewedStatusIds.has(s.id)) acc[s.user_id].viewedCount++;
                 return acc;
             }, {});
+
+            // 2. Save fetched statuses to Local DB and Sync Deletions
+            if (db && statusRes.data) {
+                const fetchedStatusIds = statusRes.data.map(s => s.id);
+                statusRes.data.forEach(s => saveLocalStatus(db, s));
+                await syncLocalStatuses(db, fetchedStatusIds, userId);
+            }
 
             // Process Unread Counts (filtered for groups user is in)
             const userGroupIds = new Set(groupRes.data?.map(m => m.group_id) || []);
@@ -144,6 +176,14 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                     isArchived: f.is_archived
                 };
             }).filter(Boolean);
+
+            // 2b. Save Friend Profiles to Local DB
+            if (db) {
+                friendships.forEach((f: any) => {
+                    const p = f.type === 'sent' ? f.friend : f.user;
+                    if (p) saveLocalProfile(db, p);
+                });
+            }
 
             // Format Groups
             const formattedGroups = (groupRes.data || []).filter(m => m.groups).map((m: any) => ({
@@ -198,6 +238,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                 combinedItems: sortedItems,
                 loading: false
             });
+
+            // 3. Save to Local DB
+            if (db) {
+                sortedItems.forEach(item => saveLocalConversation(db, item));
+            }
         } catch (e: any) {
             console.error('loadFriends ERROR:', e);
             set({ error: e.message, loading: false });

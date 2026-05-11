@@ -1,5 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useDbStore } from '@/store/useDbStore';
+import { saveLocalCallLog } from '@/lib/localDb';
 
 // Global variable to persist across hook re-renders for the same session
 let globalLastSessionId = '';
@@ -69,8 +71,21 @@ export const useCallLogger = (currentUser: any, friend: any, callType: string, c
 
             if (logError) throw logError;
 
-            // Get the generated ID if needed, or just let messages have its own
             const logId = logData && logData[0] ? logData[0].id : null;
+
+            // 3. Save to Local DB
+            const { db } = useDbStore.getState();
+            if (db && logId) {
+                await saveLocalCallLog(db, {
+                    id: logId,
+                    user_id: userData.id,
+                    friend_id: friendData.id,
+                    type: currentType,
+                    status: status,
+                    duration: duration,
+                    created_at: new Date().toISOString()
+                });
+            }
 
             // Save to messages (this is what shows in the chat box)
             const { error: msgError } = await supabase.from('messages').insert([{

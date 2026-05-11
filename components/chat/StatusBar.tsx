@@ -216,10 +216,18 @@ export default function StatusBar({
                                                 backgroundColor: 'white'
                                             }}
                                         >
-                                            <Image
-                                                source={{ uri: item.img || 'https://via.placeholder.com/150' }}
-                                                style={{ width: '100%', height: '100%', borderRadius: 32 }}
-                                            />
+                                        <View style={{ width: '100%', height: '100%', borderRadius: 32, overflow: 'hidden', backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                                            {item.statuses?.[0]?.media_type === 'text' ? (
+                                                <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: item.statuses[0].background_color || '#F68537' }}>
+                                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>{item.statuses[0].content?.charAt(0)}</Text>
+                                                </View>
+                                            ) : (
+                                                <Image
+                                                    source={{ uri: item.statuses?.[0]?.media_url || item.img || 'https://via.placeholder.com/150' }}
+                                                    style={{ width: '100%', height: '100%' }}
+                                                />
+                                            )}
+                                        </View>
                                         </TouchableOpacity>
                                         <Text style={{ fontSize: 9, fontWeight: '900', color: '#64748B', maxWidth: 64, textAlign: 'center' }} numberOfLines={1}>
                                             {item.name.toUpperCase()}

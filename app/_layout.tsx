@@ -17,9 +17,27 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { SplashScreen } from '@/components/SplashScreen';
 import { BackgroundServices } from '@/components/BackgroundServices';
+import * as Updates from 'expo-updates';
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
+
+  useEffect(() => {
+    async function onFetchUpdateAsync() {
+      try {
+        if (__DEV__) return;
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch (error) {
+        console.log(`Error fetching latest Expo update: ${error}`);
+      }
+    }
+    onFetchUpdateAsync();
+  }, []);
+
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
