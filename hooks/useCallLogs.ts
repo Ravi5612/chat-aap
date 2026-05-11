@@ -34,8 +34,20 @@ export const useCallLogs = () => {
 
     const loadLogs = async (offset = 0, isRefresh = false) => {
         try {
-            if (offset === 0) setLoading(true);
-            else setLoadingMore(true);
+            if (offset === 0 && !isRefresh) {
+                // 1. Instantly load from local SQLite cache to skip loading skeleton
+                const sqliteCache = require('@/lib/database').getFromCache('call_logs_cache');
+                if (sqliteCache && sqliteCache.logs && sqliteCache.logs.length > 0) {
+                    setLogs(sqliteCache.logs);
+                    setLoading(false); // Skip loading spinner!
+                } else {
+                    setLoading(true);
+                }
+            } else if (offset === 0 && isRefresh) {
+                setLoading(true);
+            } else {
+                setLoadingMore(true);
+            }
 
             let user = currentUser;
             if (!user) {
@@ -45,7 +57,8 @@ export const useCallLogs = () => {
 
             if (!user || !user.id || String(user.id) === 'null' || String(user.id) === 'undefined') {
                 console.log('[DEBUG] useCallLogs: Invalid User ID detected, skipping query.', { id: user?.id });
-                setLoading(false);
+                if (offset === 0) setLoading(false);
+                else setLoadingMore(false);
                 return;
             }
 
@@ -93,12 +106,17 @@ export const useCallLogs = () => {
 
                 if (isRefresh || offset === 0) {
                     setLogs(enrichedLogs);
+                    // ✅ Save fresh first-page logs to SQLite cache
+                    require('@/lib/database').saveToCache('call_logs_cache', { logs: enrichedLogs });
                 } else {
                     setLogs(prev => {
                         const all = [...prev, ...enrichedLogs];
-                        return all.filter((item, index, self) =>
+                        const deduplicated = all.filter((item, index, self) =>
                             index === self.findIndex((t) => t.id === item.id)
                         );
+                        // ✅ Save paginated logs to SQLite cache too
+                        require('@/lib/database').saveToCache('call_logs_cache', { logs: deduplicated });
+                        return deduplicated;
                     });
                 }
 
@@ -114,7 +132,10 @@ export const useCallLogs = () => {
                     basicLogs.forEach(log => saveLocalCallLog(db, log));
                 }
             } else {
-                if (isRefresh || offset === 0) setLogs([]);
+                if (isRefresh || offset === 0) {
+                    setLogs([]);
+                    require('@/lib/database').saveToCache('call_logs_cache', { logs: [] });
+                }
                 setHasMore(false);
             }
 

@@ -5,7 +5,7 @@ import { getChatKey, decryptText, encryptText } from '@/utils/chatCrypto';
 import { uploadChatMessageMedia } from '../utils/uploadHelper';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { useDbStore } from './useDbStore';
-import { saveLocalMessage, getLocalMessages } from '@/lib/localDb';
+import { saveLocalMessage, getLocalMessages, getChatClearTimestamp, markMessageAsDeletedLocally, getLocallyDeletedMessages } from '@/lib/localDb';
 
 interface ChatState {
     messages: any[];
@@ -27,7 +27,7 @@ interface ChatState {
     sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string) => Promise<void>;
     reactToMessage: (messageId: string, emoji: string, currentUser: any) => Promise<void>;
     saveEdit: (messageId: string, newText: string, currentUser: any) => Promise<void>;
-    deleteMessage: (messageId: string) => Promise<void>;
+    deleteMessage: (messageId: string, forEveryone: boolean) => Promise<void>;
     forwardMessage: (messageText: string, friendIds: string[], currentUser: any) => Promise<void>;
     setTypingStatus: (typing: boolean, friendId: string, currentUser: any) => void;
     cleanupChat: () => void;
@@ -58,12 +58,22 @@ export const useChatStore = create<ChatState>((set, get) => {
             if (!currentUser || !friendId) return;
             const { cache } = get();
 
+            // 0. Load instantly from SQLite if available
+            const sqliteCache = require('@/lib/database').getFromCache(`chat_messages_${friendId}`);
+
             // Restore from cache instantly if exists
             if (cache[friendId]) {
                 console.log(`ChatStore: Restoring ${friendId} from cache`);
                 set({
                     messages: cache[friendId].messages,
                     chatKey: cache[friendId].key,
+                    activeChatId: friendId
+                });
+            } else if (sqliteCache && sqliteCache.messages) {
+                console.log(`ChatStore: Restoring ${friendId} from SQLite`);
+                set({
+                    messages: sqliteCache.messages,
+                    chatKey: null,
                     activeChatId: friendId
                 });
             } else {
@@ -74,7 +84,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const key = cache[friendId]?.key || await getChatKey(currentUser.id, friendId, isGroup);
                 set((state) => ({
                     chatKey: key,
-                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: state.cache[friendId]?.messages || [], key } }
+                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: state.cache[friendId]?.messages || sqliteCache?.messages || [], key } }
                 }));
             } catch (err) {
                 console.error("ChatStore: Key error:", err);
@@ -82,28 +92,47 @@ export const useChatStore = create<ChatState>((set, get) => {
         },
 
         loadMessages: async (friendId, currentUser, isGroup) => {
-            const { chatKey, cache } = get();
+            const { chatKey, cache, messages } = get();
             if (!friendId || !currentUser || !chatKey) return;
 
             const PAGE_SIZE = 50;
             const isFirstLoad = !cache[friendId] || cache[friendId].messages.length === 0;
-            if (isFirstLoad) set({ loading: true });
+            // Only show skeleton loader if we have NO messages from anywhere (neither memory nor SQLite)
+            if (isFirstLoad && messages.length === 0) set({ loading: true });
 
             // 1. Try loading from Local DB first for instant UI
-            const { db } = useDbStore.getState();
-            if (db) {
-                const localMsgs = await getLocalMessages(db, friendId, isGroup);
-                if (localMsgs.length > 0) {
-                    console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB`);
-                    set({ 
-                        messages: localMsgs, 
-                        loading: false,
-                        cache: { ...get().cache, [friendId]: { messages: localMsgs, key: chatKey } }
-                    });
+            try {
+                const { db } = useDbStore.getState();
+                if (db && friendId) {
+                    const clearTimestamp = await getChatClearTimestamp(db, friendId);
+                    const localDeletedIds = await getLocallyDeletedMessages(db);
+                    let localMsgs = await getLocalMessages(db, friendId, isGroup);
+                    
+                    if (clearTimestamp) {
+                        localMsgs = localMsgs.filter(m => m && m.created_at && new Date(m.created_at) > new Date(clearTimestamp));
+                    }
+
+                    if (localDeletedIds && localDeletedIds.length > 0) {
+                        localMsgs = localMsgs.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                    }
+
+                    if (localMsgs && localMsgs.length > 0) {
+                        console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB`);
+                        set({ 
+                            messages: localMsgs, 
+                            loading: false,
+                            cache: { ...get().cache, [friendId]: { messages: localMsgs, key: chatKey } }
+                        });
+                    }
                 }
+            } catch (dbErr) {
+                console.warn('[DB] Local load failed, falling back to network:', dbErr);
             }
 
             try {
+                const { db } = useDbStore.getState();
+                const clearTimestamp = db ? await getChatClearTimestamp(db, friendId) : null;
+
                 // ✅ Pehle total count lo
                 let countQuery = supabase
                     .from('messages')
@@ -113,6 +142,10 @@ export const useChatStore = create<ChatState>((set, get) => {
                     countQuery = countQuery.eq('group_id', friendId);
                 } else {
                     countQuery = countQuery.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
+                }
+
+                if (clearTimestamp) {
+                    countQuery = countQuery.gt('created_at', clearTimestamp);
                 }
 
                 const { count } = await countQuery;
@@ -140,6 +173,10 @@ export const useChatStore = create<ChatState>((set, get) => {
                     query = query.eq('group_id', friendId);
                 } else {
                     query = query.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
+                }
+
+                if (clearTimestamp) {
+                    query = query.gt('created_at', clearTimestamp);
                 }
 
                 const { data, error } = await query
@@ -187,10 +224,21 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
                 }));
 
+                let finalMessages = decryptedMessages;
+                try {
+                    const { db } = useDbStore.getState();
+                    const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
+                    if (localDeletedIds && localDeletedIds.length > 0) {
+                        finalMessages = decryptedMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                    }
+                } catch (e) {
+                    console.warn('[ChatStore] Local filter failed:', e);
+                }
+
                 const activeChatId = get().activeChatId;
                 if (activeChatId === friendId) {
                     // Deduplicate by ID
-                    const uniqueMessages = Array.from(new Map(decryptedMessages.map(m => [m.id, m])).values());
+                    const uniqueMessages = Array.from(new Map(finalMessages.map(m => [m.id, m])).values());
                     
                     set({
                         messages: uniqueMessages,
@@ -200,18 +248,20 @@ export const useChatStore = create<ChatState>((set, get) => {
                     });
 
                     // 2. Save fetched messages to Local DB for next time
+                    const { db } = useDbStore.getState();
                     if (db) {
-                        decryptedMessages.forEach(msg => saveLocalMessage(db, msg));
+                        finalMessages.forEach(msg => saveLocalMessage(db, msg));
                     }
                 }
 
                 // Update cache with deduplicated messages
-                set((state) => {
-                    const uniqueMessages = Array.from(new Map(decryptedMessages.map(m => [m.id, m])).values());
-                    return {
-                        cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: chatKey } }
-                    };
-                });
+                const uniqueMessagesArray = Array.from(new Map(decryptedMessages.map(m => [m.id, m])).values());
+                set((state) => ({
+                    cache: { ...state.cache, [friendId]: { messages: uniqueMessagesArray, key: chatKey } }
+                }));
+
+                // ✅ Save to SQLite Cache
+                require('@/lib/database').saveToCache(`chat_messages_${friendId}`, { messages: uniqueMessagesArray });
 
                 // Mark as read
                 const unreadIds = (data || [])
@@ -260,6 +310,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                     return;
                 }
 
+                const { db } = useDbStore.getState();
+                const clearTimestamp = db ? await getChatClearTimestamp(db, friendId) : null;
+
                 let query = supabase
                     .from('messages')
                     .select(`
@@ -273,6 +326,10 @@ export const useChatStore = create<ChatState>((set, get) => {
                     query = query.eq('group_id', friendId);
                 } else {
                     query = query.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
+                }
+
+                if (clearTimestamp) {
+                    query = query.gt('created_at', clearTimestamp);
                 }
 
                 const { data, error } = await query
@@ -314,8 +371,19 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
                 }));
 
+                let filteredOlderMessages = decryptedOlderMessages;
+                try {
+                    const { db } = useDbStore.getState();
+                    const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
+                    if (localDeletedIds && localDeletedIds.length > 0) {
+                        filteredOlderMessages = decryptedOlderMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                    }
+                } catch (e) {
+                    console.warn('[ChatStore] LoadMore filter failed:', e);
+                }
+
                 // ✅ Purane messages pehle, naye baad mein - Deduplicate by ID
-                const combinedMessages = [...decryptedOlderMessages, ...messages];
+                const combinedMessages = [...filteredOlderMessages, ...messages].filter(m => m && m.id);
                 const uniqueMessages = Array.from(new Map(combinedMessages.map(m => [m.id, m])).values());
 
                 set({
@@ -329,6 +397,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                 set((state) => ({
                     cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: chatKey } }
                 }));
+
+                // ✅ Save to SQLite Cache
+                require('@/lib/database').saveToCache(`chat_messages_${friendId}`, { messages: uniqueMessages });
 
             } catch (error: any) {
                 console.error('ChatStore: LoadMore error:', error.message);
@@ -369,17 +440,28 @@ export const useChatStore = create<ChatState>((set, get) => {
             let messageToEncrypt = text;
             let fileData: any = null;
 
+            // ✅ Find the replied message from local state so the sender can see it instantly
+            const replyMsgObj = replyToId ? messages.find(m => m.id === replyToId) : null;
+            const replyObject = replyMsgObj ? {
+                id: replyMsgObj.id,
+                message: replyMsgObj.message,
+                sender_id: replyMsgObj.sender_id,
+                created_at: replyMsgObj.created_at
+            } : null;
+
             const tempMsg: any = {
                 id: tempId,
-                message: text.startsWith('[Voice Message]') || text.startsWith('[Image]') ? '' : text,
+                message: text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Document]') ? '' : text,
                 sender_id: currentUser.id,
                 receiver_id: isGroup ? null : friendId,
                 group_id: isGroup ? friendId : null,
                 status: 'sending',
                 reply_to_id: replyToId,
+                reply: replyObject,
                 created_at: new Date().toISOString(),
-                file_url: text.startsWith('[Voice Message]') ? text.split(' ')[2] : (text.startsWith('[Image]') ? text.split(' ')[1] : null),
-                file_type: text.startsWith('[Voice Message]') ? 'audio/m4a' : (text.startsWith('[Image]') ? 'image/jpeg' : null)
+                file_url: text.startsWith('[Voice Message]') ? text.split(' ')[2] : (text.startsWith('[Image]') ? text.split(' ')[1] : (text.startsWith('[Document]') ? text.split(' | ')[0].replace('[Document] ', '').trim() : null)),
+                file_type: text.startsWith('[Voice Message]') ? 'audio/m4a' : (text.startsWith('[Image]') ? 'image/jpeg' : (text.startsWith('[Document]') ? text.split(' | ')[2].trim() : null)),
+                file_name: text.startsWith('[Document]') ? text.split(' | ')[1].trim() : null
             };
 
             const updatedMessages = [...messages, tempMsg];
@@ -389,12 +471,32 @@ export const useChatStore = create<ChatState>((set, get) => {
             }));
 
             try {
-                if (text.startsWith('[Voice Message]') || text.startsWith('[Image]')) {
+                if (text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Document]')) {
                     const isVoice = text.startsWith('[Voice Message]');
-                    const localUri = isVoice ? text.split(' ')[2] : text.split(' ')[1];
+                    const isDoc = text.startsWith('[Document]');
+                    
+                    let localUri = '';
+                    let uploadType: 'image' | 'voice' | 'document' = 'image';
+                    let originalName = '';
+                    let docMime = '';
+
+                    if (isVoice) {
+                        localUri = text.split(' ')[2];
+                        uploadType = 'voice';
+                    } else if (isDoc) {
+                        const parts = text.split(' | ');
+                        localUri = parts[0].replace('[Document] ', '').trim();
+                        originalName = parts[1].trim();
+                        docMime = parts[2].trim();
+                        uploadType = 'document';
+                    } else {
+                        localUri = text.split(' ')[1];
+                        uploadType = 'image';
+                    }
+
                     if (localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
-                        fileData = await uploadChatMessageMedia(localUri, isVoice ? 'voice' : 'image', currentUser.id);
-                        messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : 'an image')}`;
+                        fileData = await uploadChatMessageMedia(localUri, uploadType, currentUser.id, originalName, docMime);
+                        messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : (isDoc ? 'a document' : 'an image'))}`;
                     }
                 }
 
@@ -417,9 +519,11 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const { data, error } = await supabase.from('messages').insert([insertData]).select().single();
                 if (error) throw error;
 
-                const finalMsg = { ...data, message: messageToEncrypt };
+                const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject };
                 set((state) => {
                     const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
+                    // ✅ Save to SQLite Cache
+                    require('@/lib/database').saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
                     return {
                         messages: newMessages,
                         cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
@@ -484,9 +588,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             try {
                 const encryptedText = await encryptText(newText, chatKey);
                 const { error } = await supabase.from('messages').update({
-                    message: encryptedText,
-                    is_edited: true,
-                    edited_at: new Date().toISOString()
+                    message: encryptedText
                 }).eq('id', messageId);
 
                 if (error) throw error;
@@ -509,28 +611,60 @@ export const useChatStore = create<ChatState>((set, get) => {
             }
         },
 
-        deleteMessage: async (messageId) => {
+        deleteMessage: async (messageId, forEveryone) => {
             const { messages, activeChannel, activeChatId, chatKey } = get();
-            if (!activeChatId) return;
+            if (!activeChatId || !chatKey) return;
             try {
-                const { error } = await supabase.from('messages').delete().eq('id', messageId);
-                if (error) throw error;
+                const { db } = useDbStore.getState();
 
-                const newMessages = messages.filter(m => m.id !== messageId);
-                set({ messages: newMessages });
-                set((state) => ({
-                    cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
-                }));
+                if (forEveryone) {
+                    // 1. Update on Server (Replace content)
+                    const encryptedDeletedText = await encryptText('SYSTEM_MSG: DELETED', chatKey);
+                    const { error } = await supabase.from('messages').update({
+                        message: encryptedDeletedText,
+                        file_url: null,
+                        file_name: null,
+                        file_type: null
+                    }).eq('id', messageId);
 
-                if (activeChannel) {
-                    activeChannel.send({
-                        type: 'broadcast',
-                        event: 'message_delete',
-                        payload: { message_id: messageId }
-                    });
+                    if (error) throw error;
+
+                    // 2. Update Local UI
+                    const newMessages = messages.map(m => m.id === messageId ? { ...m, message: 'SYSTEM_MSG: DELETED', file_url: null } : m);
+                    set({ messages: newMessages });
+
+                    // 3. Broadcast Edit
+                    if (activeChannel) {
+                        activeChannel.send({
+                            type: 'broadcast',
+                            event: 'message_edit',
+                            payload: { message_id: messageId, message: encryptedDeletedText }
+                        });
+                    }
+                } else {
+                    // Delete for Me
+                    if (db) {
+                        await markMessageAsDeletedLocally(db, messageId);
+                    }
+                    const newMessages = messages.filter(m => m && m.id && m.id !== messageId);
+                    set({ messages: newMessages });
                 }
-            } catch (err) {
-                Alert.alert('Error', 'Failed to delete message');
+
+                // Update Cache Safely
+                const finalMessages = get().messages;
+                set((state) => ({
+                    cache: { 
+                        ...state.cache, 
+                        [activeChatId]: { 
+                            ...state.cache[activeChatId], 
+                            messages: finalMessages, 
+                            key: chatKey 
+                        } 
+                    }
+                }));
+            } catch (err: any) {
+                console.error("Delete error:", err);
+                Alert.alert('Error', `Failed to delete message: ${err.message || err.details || 'Unknown error'}`);
             }
         },
 

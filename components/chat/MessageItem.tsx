@@ -7,6 +7,10 @@ import VoiceMessagePlayer from './VoiceMessagePlayer';
 import FlyingReaction from './FlyingReaction';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as FileSystem from 'expo-file-system';
+import { getMediaCache, saveMediaCache } from '@/lib/localDb';
+import { useDbStore } from '@/store/useDbStore';
+import { useState, useEffect } from 'react';
 
 interface MessageItemProps {
     message: any;
@@ -24,8 +28,9 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
     const panResponder = useRef(
         PanResponder.create({
-            onMoveShouldSetPanResponder: (_, gestureState) => {
-                return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && gestureState.dx > 10;
+            onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+                // Ensure horizontal swipe takes priority over vertical scroll and child presses
+                return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 15;
             },
             onPanResponderGrant: () => {
                 // Potential haptic on start of swipe
@@ -48,6 +53,9 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
             },
         })
     ).current;
+    
+    const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
+    const [localVoiceUrl, setLocalVoiceUrl] = useState<string | null>(null);
 
     const formatTime = (ts: string) => {
         if (!ts) return '';
@@ -55,19 +63,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
-    const isSystemMsg = message.message?.startsWith('SYSTEM_MSG:');
-    if (isSystemMsg) {
-        return (
-            <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 16 }}>
-                <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.6)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 9999, borderWidth: 1, borderColor: '#FDE1D3', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F68537' }} />
-                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#B45309', textTransform: 'uppercase', letterSpacing: 1.5, textAlign: 'center' }}>
-                        {message.message.replace('SYSTEM_MSG:', '').trim()}
-                    </Text>
-                </View>
-            </View>
-        );
-    }
+
 
     const handleLongPress = (event: any) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -99,6 +95,133 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     // Call Log detection
     const isCallLog = message.message_type === 'call' || !!message.call_details;
     const callDetails = message.call_details || {};
+
+    // Media Caching Logic
+    useEffect(() => {
+        const handleMediaCache = async () => {
+            const { db } = useDbStore.getState();
+            if (!db) return;
+
+            // Handle Image Caching
+            if (imageUrl && !imageUrl.startsWith('file://')) {
+                const cached = await getMediaCache(db, imageUrl);
+                if (cached) {
+                    setLocalImageUrl(cached);
+                } else {
+                    try {
+                        const filename = (typeof imageUrl === 'string' ? imageUrl.split('/').pop() : null) || 'media.jpg';
+                        const localUri = `${FileSystem.cacheDirectory}${filename}`;
+                        const download = await FileSystem.downloadAsync(imageUrl, localUri);
+                        if (download.status === 200) {
+                            await saveMediaCache(db, imageUrl, download.uri, 'image');
+                            setLocalImageUrl(download.uri);
+                        }
+                    } catch (e) {
+                        console.error('[CACHE] Image download failed:', e);
+                    }
+                }
+            }
+
+            // Handle Voice Caching
+            if (voiceUri && !voiceUri.startsWith('file://')) {
+                const cached = await getMediaCache(db, voiceUri);
+                if (cached) {
+                    setLocalVoiceUrl(cached);
+                } else {
+                    try {
+                        const filename = (typeof voiceUri === 'string' ? voiceUri.split('/').pop() : null) || 'voice.m4a';
+                        const localUri = `${FileSystem.cacheDirectory}${filename}`;
+                        const download = await FileSystem.downloadAsync(voiceUri, localUri);
+                        if (download.status === 200) {
+                            await saveMediaCache(db, voiceUri, download.uri, 'audio');
+                            setLocalVoiceUrl(download.uri);
+                        }
+                    } catch (e) {
+                        console.error('[CACHE] Voice download failed:', e);
+                    }
+                }
+            }
+        };
+
+        handleMediaCache();
+    }, [imageUrl, voiceUri]);
+
+    const isSystemMsg = message.message?.startsWith('SYSTEM_MSG:');
+
+    // Contact detection
+    const isContactMessage = textContent?.startsWith('[Contact]');
+    let contactName = '';
+    let contactPhone = '';
+    if (isContactMessage) {
+        const parts = textContent!.substring(9).split('|');
+        contactName = parts[0]?.trim() || 'Unknown Contact';
+        contactPhone = parts[1]?.trim() || '';
+        textContent = ''; // Hide raw text
+    }
+
+    // Location detection
+    const isLocationMessage = textContent?.startsWith('[Location]');
+    let locationCoords = '';
+    let locationAddress = '';
+    if (isLocationMessage) {
+        const parts = textContent!.substring(11).split('|');
+        locationCoords = parts[0]?.trim() || '';
+        locationAddress = parts[1]?.trim() || 'Shared Location';
+        textContent = ''; // Hide raw text
+    }
+
+    // Document detection
+    const isDocumentMessage = textContent?.startsWith('[Document]') || (message.file_url && message.file_type && !message.file_type.startsWith('image/') && !message.file_type.startsWith('audio/'));
+    let documentName = message.file_name || 'Document';
+    let documentSize = message.file_size ? `${(message.file_size / 1024 / 1024).toFixed(2)} MB` : '';
+    let documentUrl = message.file_url;
+    
+    if (textContent?.startsWith('[Document]')) {
+        const parts = textContent.substring(11).split('|');
+        if (!message.file_name) documentName = parts[1]?.trim() || 'Document';
+        if (!documentUrl) documentUrl = parts[0]?.trim() || '';
+        textContent = ''; // Hide raw text
+    }
+
+    if (isSystemMsg) {
+        return (
+            <View style={{ 
+                flexDirection: 'row', 
+                justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', 
+                marginVertical: 4,
+                paddingHorizontal: 16,
+                width: '100%'
+            }}>
+                <View style={{ 
+                    backgroundColor: isCurrentUser ? '#FFF7ED' : '#F9FAFB', 
+                    paddingHorizontal: 14, 
+                    paddingVertical: 8, 
+                    borderRadius: 12, 
+                    borderWidth: 1, 
+                    borderColor: isCurrentUser ? '#FFEDD5' : '#F3F4F6',
+                    flexDirection: 'row', 
+                    alignItems: 'center', 
+                    gap: 8,
+                    maxWidth: '85%',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 1,
+                    elevation: 1
+                }}>
+                    <Ionicons name="ban-outline" size={16} color={isCurrentUser ? '#F97316' : '#6B7280'} />
+                    <Text style={{ 
+                        fontSize: 12, 
+                        fontWeight: '700', 
+                        color: isCurrentUser ? '#C2410C' : '#374151',
+                        fontStyle: 'italic'
+                    }}>
+                        {isCurrentUser ? 'You deleted this message' : 'This message was deleted'}
+                    </Text>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={{ position: 'relative', width: '100%', overflow: 'visible' }}>
@@ -221,10 +344,10 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     {imageUrl && (
                         <TouchableOpacity onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            onImagePress?.(imageUrl);
+                            onImagePress?.(localImageUrl || imageUrl);
                         }}>
                             <Image
-                                source={{ uri: imageUrl }}
+                                source={{ uri: localImageUrl || imageUrl }}
                                 style={{ width: 256, height: 256, backgroundColor: '#F3F4F6' }}
                                 contentFit="cover"
                                 transition={400}
@@ -233,8 +356,8 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     )}
 
                     {/* Voice Message Content */}
-                    {isVoiceMessage && voiceUri && (
-                        <VoiceMessagePlayer uri={voiceUri} isCurrentUser={isCurrentUser} />
+                    {isVoiceMessage && (localVoiceUrl || voiceUri) && (
+                        <VoiceMessagePlayer uri={localVoiceUrl || voiceUri} isCurrentUser={isCurrentUser} />
                     )}
 
                     {/* Call Log Content */}
@@ -276,16 +399,130 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                         </View>
                     )}
 
+                    {/* Contact Card Content */}
+                    {isContactMessage && (
+                        <View style={{ padding: 12, width: 220 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
+                                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                    <Ionicons name="person" size={20} color={isCurrentUser ? 'white' : '#9CA3AF'} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={1}>{contactName}</Text>
+                                    <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }}>Contact</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    import('react-native').then(({ Linking }) => {
+                                        Linking.openURL(`tel:${contactPhone}`);
+                                    });
+                                }}
+                                style={{ alignItems: 'center', paddingVertical: 4 }}
+                            >
+                                <Text style={{ color: isCurrentUser ? 'white' : '#F68537', fontWeight: 'bold', fontSize: 14 }}>Call {contactPhone}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* Location Card Content */}
+                    {isLocationMessage && (
+                        <View style={{ padding: 12, width: 220 }}>
+                            <View style={{ 
+                                flexDirection: 'row', 
+                                alignItems: 'center', 
+                                marginBottom: 12, 
+                                paddingBottom: 12, 
+                                borderBottomWidth: 1, 
+                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' 
+                            }}>
+                                <View style={{ 
+                                    width: 40, 
+                                    height: 40, 
+                                    borderRadius: 20, 
+                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(16, 185, 129, 0.1)', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    marginRight: 12 
+                                }}>
+                                    <Ionicons name="location" size={20} color={isCurrentUser ? 'white' : '#10B981'} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={1}>Location</Text>
+                                    <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }} numberOfLines={2}>{locationAddress}</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    import('react-native').then(({ Linking }) => {
+                                        Linking.openURL(`https://maps.google.com/?q=${locationCoords}`);
+                                    });
+                                }}
+                                style={{ alignItems: 'center', paddingVertical: 4 }}
+                            >
+                                <Text style={{ color: isCurrentUser ? 'white' : '#10B981', fontWeight: 'bold', fontSize: 14 }}>View on Map</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* Document Card Content */}
+                    {isDocumentMessage && (
+                        <View style={{ padding: 12, width: 240 }}>
+                            <View style={{ 
+                                flexDirection: 'row', 
+                                alignItems: 'center', 
+                                marginBottom: 12, 
+                                paddingBottom: 12, 
+                                borderBottomWidth: 1, 
+                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' 
+                            }}>
+                                <View style={{ 
+                                    width: 44, 
+                                    height: 44, 
+                                    borderRadius: 12, 
+                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(124, 58, 237, 0.1)', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    marginRight: 12 
+                                }}>
+                                    <Ionicons name="document-text" size={24} color={isCurrentUser ? 'white' : '#7C3AED'} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={2}>{documentName}</Text>
+                                    {documentSize ? (
+                                        <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280', marginTop: 2 }}>{documentSize}</Text>
+                                    ) : null}
+                                </View>
+                            </View>
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    if (documentUrl) {
+                                        import('react-native').then(({ Linking }) => {
+                                            Linking.openURL(documentUrl);
+                                        });
+                                    }
+                                }}
+                                disabled={!documentUrl || message.status === 'sending'}
+                                style={{ alignItems: 'center', paddingVertical: 4 }}
+                            >
+                                <Text style={{ color: isCurrentUser ? 'white' : '#7C3AED', fontWeight: 'bold', fontSize: 14 }}>
+                                    {message.status === 'sending' ? 'Uploading...' : 'Open Document'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
                     <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
                         {textContent && textContent.trim() !== '' && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && (
                             <Text style={{
                                 fontSize: 15,
                                 lineHeight: 22,
                                 color: isCurrentUser ? 'white' : '#1F2937',
-                                fontStyle: textContent.trim().startsWith('{"iv":') ? 'italic' : 'normal',
-                                opacity: textContent.trim().startsWith('{"iv":') ? 0.7 : 1
+                                fontStyle: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 'italic' : 'normal',
+                                opacity: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 0.7 : 1
                             }}>
-                                {textContent.trim().startsWith('{"iv":') ? 'Decrypting...' : textContent}
+                                {textContent && textContent.trim && textContent.trim().startsWith('{"iv":') 
+                                    ? 'Decrypting...' 
+                                    : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
                             </Text>
                         )}
 

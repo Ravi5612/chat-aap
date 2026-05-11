@@ -343,12 +343,12 @@ const styles = StyleSheet.create({
     },
     actionButton: {
         width: '100%',
-        backgroundColor: '#F68537',
+        backgroundColor: '#FF69B4', // Hot Pink
         paddingVertical: 18,
         borderRadius: 16,
         alignItems: 'center',
         marginTop: 8,
-        shadowColor: '#F68537',
+        shadowColor: '#FF69B4',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.3,
         shadowRadius: 10,

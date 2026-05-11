@@ -13,13 +13,15 @@ interface ChatMenuProps {
     isGroup: boolean;
     onLeaveGroup: () => void;
     onSetWallpaper: () => void;
+    onLedger: () => void;
 }
 
-export default function ChatMenu({ visible, onClose, onViewProfile, onClearChat, onBlockUser, isBlocked, isGroup, onLeaveGroup, onSetWallpaper }: ChatMenuProps) {
+export default function ChatMenu({ visible, onClose, onViewProfile, onClearChat, onBlockUser, isBlocked, isGroup, onLeaveGroup, onSetWallpaper, onLedger }: ChatMenuProps) {
     if (!visible) return null;
 
     const mainItems = [
         { label: 'View Profile', icon: 'person-outline', onPress: onViewProfile, color: '#F68537' },
+        { label: 'Hisab-Kitab 💸', icon: 'book-outline', onPress: onLedger, color: '#F68537' },
         { label: 'Mute Notifications', icon: 'volume-mute-outline', onPress: () => { }, color: '#F68537' },
         { label: 'Set Wallpaper', icon: 'image-outline', onPress: onSetWallpaper, color: '#F68537' },
         { label: 'Clear Chat', icon: 'trash-outline', onPress: onClearChat, color: '#F68537' },

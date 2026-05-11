@@ -3,7 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import { useDbStore } from './useDbStore';
-import { saveLocalProfile, getLocalProfile } from '@/lib/localDb';
+import { saveLocalProfile, getLocalProfile, updateLocalProfile, getPendingProfileSync } from '@/lib/localDb';
 
 interface AuthState {
     session: Session | null;
@@ -17,6 +17,7 @@ interface AuthState {
     syncOnlineStatus: (isOnline: boolean) => Promise<void>;
     syncProfile: () => Promise<void>;
     updateProfile: (updates: any) => Promise<boolean>;
+    syncPendingProfile: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -78,24 +79,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
     },
     updateProfile: async (updates: any) => {
-        const { user } = get();
+        const { user, profile } = get();
         if (!user?.id) return false;
 
+        const { db } = useDbStore.getState();
+        const updatedProfile = { ...profile, ...updates };
+
+        // 1. Update UI and Local DB immediately (Optimistic)
+        set({ profile: updatedProfile });
+        if (db) {
+            await updateLocalProfile(db, { ...updatedProfile, id: user.id }, true);
+        }
+
         try {
+            // 2. Try updating Supabase
             const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
             if (error) throw error;
 
-            // Re-sync after update
-            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (data) {
-                set({ profile: data });
-                const { db } = useDbStore.getState();
-                if (db) saveLocalProfile(db, data);
+            // 3. Success! Mark as synced in local DB
+            if (db) {
+                await updateLocalProfile(db, { id: user.id }, false);
             }
             return true;
         } catch (e) {
-            console.error('AuthStore: Profile update failed:', e);
-            return false;
+            console.warn('[OFFLINE] Profile update failed, saved locally for sync:', e);
+            // It stays as needs_sync = 1 in SQLite
+            return true; // Return true because it was saved locally
+        }
+    },
+    syncPendingProfile: async () => {
+        const { db } = useDbStore.getState();
+        if (!db) return;
+
+        const pending = await getPendingProfileSync(db);
+        if (pending) {
+            console.log('[SYNC] Pushing pending profile updates to Supabase...');
+            const { needs_sync, ...updates } = pending;
+            try {
+                const { error } = await supabase.from('profiles').update(updates).eq('id', pending.id);
+                if (!error) {
+                    await updateLocalProfile(db, { id: pending.id }, false);
+                    console.log('[SYNC] Profile sync successful');
+                }
+            } catch (e) {
+                console.error('[SYNC] Profile sync failed:', e);
+            }
         }
     }
 }));

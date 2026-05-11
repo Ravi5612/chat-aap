@@ -2,10 +2,30 @@ import { supabase } from '@/lib/supabase';
 import { Buffer } from 'buffer';
 import * as FileSystem from 'expo-file-system';
 
-export const uploadChatMessageMedia = async (uri: string, type: 'image' | 'voice', userId: string) => {
+export const uploadChatMessageMedia = async (
+    uri: string, 
+    type: 'image' | 'voice' | 'document', 
+    userId: string,
+    originalFileName?: string,
+    mimeType?: string
+) => {
     try {
-        const fileExt = type === 'image' ? 'jpg' : 'm4a';
-        const fileName = `${Date.now()}.${fileExt}`;
+        let fileName = `${Date.now()}`;
+        let contentType = '';
+
+        if (type === 'image') {
+            fileName += '.jpg';
+            contentType = 'image/jpeg';
+        } else if (type === 'voice') {
+            fileName += '.m4a';
+            contentType = 'audio/m4a';
+        } else if (type === 'document') {
+            fileName += `_${originalFileName || 'file'}`;
+            // Clean up fileName to avoid spaces and weird characters causing URL issues
+            fileName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+            contentType = mimeType || 'application/octet-stream';
+        }
+
         const filePath = `${userId}/${fileName}`;
 
         // Get file info for size
@@ -22,7 +42,7 @@ export const uploadChatMessageMedia = async (uri: string, type: 'image' | 'voice
         const { data, error } = await supabase.storage
             .from('chat-files')
             .upload(filePath, binaryData, {
-                contentType: type === 'image' ? 'image/jpeg' : 'audio/m4a',
+                contentType: contentType,
                 cacheControl: '3600',
                 upsert: false
             });
@@ -38,8 +58,8 @@ export const uploadChatMessageMedia = async (uri: string, type: 'image' | 'voice
 
         return {
             url: publicUrl,
-            name: fileName,
-            type: type === 'image' ? 'image/jpeg' : 'audio/m4a',
+            name: originalFileName || fileName,
+            type: contentType,
             size: fileSize
         };
     } catch (error) {

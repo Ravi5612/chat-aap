@@ -23,6 +23,7 @@ import * as Contacts from 'expo-contacts';
 import AttachmentMenu from './AttachmentMenu';
 import AudioRecorder from './AudioRecorder';
 import EmojiPickerModal from './EmojiPickerModal';
+import ContactPickerModal from './ContactPickerModal';
 
 import * as Haptics from 'expo-haptics';
 
@@ -37,6 +38,8 @@ interface ChatInputProps {
     onSaveEdit?: (text: string) => void;
     isMember?: boolean;
     isKeyboardOpen?: boolean;
+    initialMessage?: string;
+    onDraftChange?: (text: string) => void;
 }
 
 export default function ChatInput({
@@ -49,15 +52,18 @@ export default function ChatInput({
     onCancelEdit,
     onSaveEdit,
     isMember = true,
-    isKeyboardOpen = false
+    isKeyboardOpen = false,
+    initialMessage = '',
+    onDraftChange
 }: ChatInputProps) {
-    const [message, setMessage] = useState('');
+    const [message, setMessage] = useState(initialMessage);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [emojiModalVisible, setEmojiModalVisible] = useState(false);
     const insets = useSafeAreaInsets();
     const inputRef = useRef<TextInput>(null);
     const typingTimeoutRef = useRef<any>(null);
+    const draftTimeoutRef = useRef<any>(null);
 
     React.useEffect(() => {
         if (editingMessage) {
@@ -70,12 +76,10 @@ export default function ChatInput({
 
     const handleSubmit = () => {
         if (!message.trim() && !selectedImage) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setIsRecording(true);
             return;
         }
 
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         if (editingMessage && onSaveEdit) {
             onSaveEdit(message.trim());
@@ -89,6 +93,7 @@ export default function ChatInput({
 
         setMessage('');
         setSelectedImage(null);
+        if (onDraftChange) onDraftChange(''); // Clear draft on send
         if (onTyping) {
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             onTyping(false);
@@ -124,29 +129,54 @@ export default function ChatInput({
     };
 
     const handleLocation = async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission denied', 'Allow location access to share your location.');
-            return;
-        }
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission denied', 'Allow location access to share your location.');
+                return;
+            }
 
-        const location = await Location.getCurrentPositionAsync({});
-        const mapsUrl = `https://maps.google.com/?q=${location.coords.latitude},${location.coords.longitude}`;
-        onSendMessage(`📍 Location: ${mapsUrl}`);
+            // Optional: Show a loading indicator if you have state for it, but for now just await
+            const location = await Location.getCurrentPositionAsync({});
+            
+            let addressStr = 'Current Location';
+            try {
+                const [geocode] = await Location.reverseGeocodeAsync({
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude
+                });
+                
+                if (geocode) {
+                    // Combine available address components
+                    const parts = [
+                        geocode.name, 
+                        geocode.street, 
+                        geocode.city || geocode.subregion, 
+                        geocode.region
+                    ].filter(Boolean);
+                    
+                    if (parts.length > 0) {
+                        addressStr = parts.join(', ');
+                    }
+                }
+            } catch (geocodeError) {
+                console.log('Reverse geocode failed:', geocodeError);
+            }
+
+            onSendMessage(`[Location] ${location.coords.latitude},${location.coords.longitude} | ${addressStr}`);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to get location. Please try again.');
+        }
     };
 
-    const handleContact = async () => {
-        const { status } = await Contacts.requestPermissionsAsync();
-        if (status === 'granted') {
-            const { data } = await Contacts.getContactsAsync({
-                fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
-            });
+    const [contactModalVisible, setContactModalVisible] = useState(false);
 
-            if (data.length > 0) {
-                Alert.alert("Contact Shared", `Shared ${data[0].name}`);
-                onSendMessage(`👤 Contact: ${data[0].name} (${data[0].phoneNumbers?.[0]?.number || 'N/A'})`);
-            }
-        }
+    const handleContact = async () => {
+        setContactModalVisible(true);
+    };
+
+    const handleSelectContact = (name: string, phone: string) => {
+        onSendMessage(`[Contact] ${name} | ${phone}`);
     };
 
     const handleDocument = async () => {
@@ -156,9 +186,6 @@ export default function ChatInput({
                 copyToCacheDirectory: true,
             });
 
-            // New SDK returns { assets, canceled }
-            // Older shape: { name, uri, size, mimeType, type }
-            // Handle both safely
             // @ts-ignore
             if (result.canceled) return;
 
@@ -168,8 +195,9 @@ export default function ChatInput({
 
             const name = asset.name || 'file';
             const uri = asset.uri;
+            const mimeType = asset.mimeType || 'application/octet-stream';
 
-            onSendMessage(`📎 Document: ${name}\n${uri}`);
+            onSendMessage(`[Document] ${uri} | ${name} | ${mimeType}`);
         } catch (error) {
             Alert.alert('Error', 'Failed to pick document.');
         }
@@ -183,6 +211,15 @@ export default function ChatInput({
 
     const handleChangeText = (text: string) => {
         setMessage(text);
+        
+        // Debounced Draft Save
+        if (onDraftChange) {
+            if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
+            draftTimeoutRef.current = setTimeout(() => {
+                onDraftChange(text);
+            }, 500); // Save after 500ms of no typing
+        }
+
         if (onTyping) {
             const now = Date.now();
             if (now - lastTypingSentRef.current > 3000) {
@@ -372,6 +409,12 @@ export default function ChatInput({
                     visible={emojiModalVisible}
                     onClose={() => setEmojiModalVisible(false)}
                     onSelect={handleSelectEmoji}
+                />
+
+                <ContactPickerModal
+                    visible={contactModalVisible}
+                    onClose={() => setContactModalVisible(false)}
+                    onSelectContact={handleSelectContact}
                 />
             </View>
         </View>

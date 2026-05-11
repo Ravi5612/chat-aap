@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import MessageList from '@/components/chat/MessageList';
 import ChatInput from '@/components/chat/ChatInput';
 import { supabase } from '@/lib/supabase';
@@ -13,12 +15,22 @@ import MessageContextMenu from '@/components/chat/MessageContextMenu';
 import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
 import MediaViewer from '@/components/chat/MediaViewer';
 import CallScreen from '@/components/chat/CallScreen';
+import LedgerModal from '@/components/chat/LedgerModal';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import { useChatStore } from '@/store/useChatStore';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
-import { getLocalWallpaper, saveLocalWallpaper } from '@/lib/localDb';
+import { 
+    saveLocalMessage, 
+    getLocalMessages, 
+    clearLocalChat, 
+    saveChatClearTimestamp,
+    saveLocalWallpaper, 
+    getLocalWallpaper,
+    saveLocalDraft,
+    getLocalDraft 
+} from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
 
 export default function ChatScreen() {
@@ -40,6 +52,14 @@ export default function ChatScreen() {
 
     const chatRoom = useChatRoom(safeFriendId, currentUser, isGroup === 'true');
     
+    // Generate a consistent Room ID for shared settings like wallpapers
+    const roomId = useMemo(() => {
+        if (isGroup === 'true') return safeFriendId;
+        if (!currentUser?.id || !safeFriendId) return '';
+        const ids = [currentUser.id, safeFriendId].sort();
+        return `${ids[0]}_${ids[1]}`;
+    }, [currentUser?.id, safeFriendId, isGroup]);
+    
     // Check both Presence and DB status for maximum reliability
     const isUserOnline = useMemo(() => {
         if (!safeFriendId) return false;
@@ -54,7 +74,7 @@ export default function ChatScreen() {
         loading,
         loadingMore,
         isTyping,
-        handleSendMessage,
+        handleSendMessage: handleSendMessageOriginal,
         handleTypingStatus,
         handleReact,
         handleSaveEdit,
@@ -87,35 +107,162 @@ export default function ChatScreen() {
 
     // Wallpaper State
     const [wallpaper, setWallpaper] = useState<string | null>(null);
+    const [draft, setDraft] = useState('');
+    const [isDraftLoaded, setIsDraftLoaded] = useState(false);
+    const [ledgerVisible, setLedgerVisible] = useState(false);
 
-    useEffect(() => {
-        const loadWallpaper = async () => {
+    const loadDraft = async () => {
+        try {
+            const { db } = useDbStore.getState();
+            if (db && roomId) {
+                const savedDraft = await getLocalDraft(db, roomId);
+                setDraft(savedDraft || '');
+                setIsDraftLoaded(true);
+            } else {
+                setIsDraftLoaded(true); // Don't block UI if DB not ready
+            }
+        } catch (e) {
+            console.error('[DRAFT] Load failed:', e);
+            setIsDraftLoaded(true);
+        }
+    };
+
+    const handleDraftChange = (text: string) => {
+        setDraft(text);
+        const { db } = useDbStore.getState();
+        if (db && roomId) {
+            saveLocalDraft(db, roomId, text);
+        }
+    };
+
+    const loadWallpaper = async () => {
+        try {
+            const { db } = useDbStore.getState();
+            if (db && roomId) {
+                console.log(`[DB] Loading shared wallpaper for room: ${roomId}`);
+                let uri = await getLocalWallpaper(db, roomId);
+                
+                // Only fetch from Supabase if we don't have it locally or just to sync
+                const { data, error } = await supabase
+                    .from('chat_wallpapers')
+                    .select('wallpaper_url')
+                    .eq('chat_id', roomId)
+                    .maybeSingle();
+                
+                if (!error && data?.wallpaper_url) {
+                    uri = data.wallpaper_url;
+                    await saveLocalWallpaper(db, roomId, uri);
+                }
+                setWallpaper(uri);
+            }
+        } catch (e) {
+            console.error('[WALLPAPER] Load failed:', e);
+        }
+    };
+
+    const markMessagesAsReadLocally = useCallback(async () => {
+        try {
             const { db } = useDbStore.getState();
             if (db && safeFriendId && currentUser?.id) {
-                // 1. Check Local DB
-                let uri = await getLocalWallpaper(db, safeFriendId);
-                
-                // 2. If not in local, check Supabase
-                if (!uri) {
-                    const { data, error } = await supabase
-                        .from('chat_wallpapers')
-                        .select('wallpaper_url')
-                        .eq('user_id', currentUser.id)
-                        .eq('chat_id', safeFriendId)
-                        .single();
-                    
-                    if (!error && data?.wallpaper_url) {
-                        uri = data.wallpaper_url;
-                        // Save to local for next time
-                        await saveLocalWallpaper(db, safeFriendId, uri);
+                await db.runAsync(
+                    'UPDATE messages SET status = ? WHERE receiver_id = ? AND sender_id = ? AND status != ?',
+                    ['read', currentUser.id, safeFriendId, 'read']
+                );
+            }
+        } catch (e) {
+            console.warn('[DB] Mark read failed:', e);
+        }
+    }, [safeFriendId, currentUser?.id]);
+
+    const syncReadReceipts = useCallback(async () => {
+        const { db } = useDbStore.getState();
+        if (db && safeFriendId && currentUser?.id) {
+            try {
+                // Find messages that are 'read' locally but we haven't synced yet
+                // For simplicity, we just update all delivered messages to read for this chat on Supabase
+                const { error } = await supabase
+                    .from('messages')
+                    .update({ status: 'read' })
+                    .eq('receiver_id', currentUser.id)
+                    .eq('sender_id', safeFriendId)
+                    .eq('status', 'delivered');
+
+                if (error) throw error;
+                console.log('[SYNC] Read receipts synced to Supabase');
+            } catch (error) {
+                console.error('[SYNC] Read receipts failed:', error);
+            }
+        }
+    }, [safeFriendId, currentUser?.id]);
+
+    useEffect(() => {
+        setWallpaper(null);
+        loadWallpaper();
+        loadDraft();
+        markMessagesAsReadLocally();
+    }, [roomId]);
+
+    // Batch sync read receipts every 10 seconds
+    useEffect(() => {
+        const interval = setInterval(() => {
+            syncReadReceipts();
+        }, 10000);
+        return () => clearInterval(interval);
+    }, [syncReadReceipts]);
+
+    const syncPendingMessages = useCallback(async () => {
+        const { db } = useDbStore.getState();
+        if (db && roomId && currentUser?.id) {
+            try {
+                const pending = await db.getAllAsync<any>(
+                    'SELECT * FROM messages WHERE status = ? AND (receiver_id = ? OR group_id = ?)',
+                    ['pending', safeFriendId, safeFriendId]
+                );
+
+                if (pending.length > 0) {
+                    console.log(`[OFFLINE] Syncing ${pending.length} pending messages...`);
+                    for (const msg of pending) {
+                        const { data, error } = await supabase
+                            .from('messages')
+                            .insert([{
+                                sender_id: msg.sender_id,
+                                receiver_id: msg.receiver_id,
+                                group_id: msg.group_id,
+                                message: msg.message,
+                                status: 'sent',
+                                created_at: msg.created_at
+                            }])
+                            .select()
+                            .single();
+                        
+                        if (!error && data) {
+                            await db.runAsync('DELETE FROM messages WHERE id = ?', [msg.id]);
+                            await saveLocalMessage(db, { ...data, status: 'sent' });
+                        }
                     }
                 }
-                
-                if (uri) setWallpaper(uri);
+            } catch (error) {
+                console.error('[OFFLINE] Sync failed:', error);
             }
-        };
-        loadWallpaper();
-    }, [safeFriendId, currentUser?.id]);
+        }
+    }, [roomId, safeFriendId, currentUser?.id]);
+
+    useEffect(() => {
+        if (messages.length > 0) {
+            const lastMsg = messages[messages.length - 1];
+            // Trigger wallpaper refresh if a wallpaper change message is detected
+            if (lastMsg.message?.includes('changed the chat wallpaper')) {
+                loadWallpaper();
+            }
+            
+            // Mark as read locally whenever new messages arrive and we are in the screen
+            if (lastMsg.sender_id !== currentUser?.id) {
+                markMessagesAsReadLocally();
+            }
+        }
+        // Try syncing pending messages whenever messages update (or on mount)
+        syncPendingMessages();
+    }, [messages, syncPendingMessages, markMessagesAsReadLocally]);
 
     const handleSetWallpaper = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -125,60 +272,91 @@ export default function ChatScreen() {
             quality: 0.8,
         });
 
-        if (!result.canceled && result.assets[0].uri && currentUser?.id) {
-            const localUri = result.assets[0].uri;
-            setWallpaper(localUri);
-            
+        if (!result.canceled && result.assets[0].uri && currentUser?.id && roomId) {
+            const tempUri = result.assets[0].uri;
             try {
-                // 1. Upload to Cloudinary (using existing logic pattern)
-                const formData = new FormData();
-                formData.append('file', {
-                    uri: localUri,
-                    type: 'image/jpeg',
-                    name: 'wallpaper.jpg',
-                } as any);
-                formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+                // 1. Save locally FIRST for instant persistence
+                const { db } = useDbStore.getState();
+                const filename = `wallpaper_${roomId}.jpg`;
+                const permanentUri = `${FileSystem.documentDirectory}${filename}`;
+                
+                // Copy to permanent storage
+                await FileSystem.copyAsync({ from: tempUri, to: permanentUri });
+                
+                // Update UI and Local DB immediately
+                setWallpaper(permanentUri);
+                if (db) await saveLocalWallpaper(db, roomId, permanentUri);
 
-                const cloudRes = await fetch(
-                    `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
-                    { method: 'POST', body: formData }
-                );
+                // 2. Upload to Cloudinary in background for sync
+                const formData = new FormData();
+                formData.append('file', { uri: tempUri, type: 'image/jpeg', name: 'wallpaper.jpg', } as any);
+                formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+                
+                const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
                 const cloudData = await cloudRes.json();
                 const remoteUrl = cloudData.secure_url;
 
                 if (remoteUrl) {
-                    // 2. Save to Supabase
-                    const { error: supError } = await supabase
-                        .from('chat_wallpapers')
-                        .upsert({
-                            user_id: currentUser.id,
-                            chat_id: safeFriendId,
-                            wallpaper_url: remoteUrl
-                        });
-                    
-                    if (supError) throw supError;
+                    const systemMsg = {
+                        id: `system_${Date.now()}`,
+                        sender_id: currentUser.id,
+                        receiver_id: isGroup === 'true' ? null : safeFriendId,
+                        group_id: isGroup === 'true' ? safeFriendId : null,
+                        message: `SYSTEM_MSG: ✨ ${currentUser.username || currentUser.full_name || 'Someone'} changed the chat wallpaper`,
+                        status: 'sent',
+                        created_at: new Date().toISOString(),
+                    };
 
-                    // 3. Save to local DB
+                    // 1. Save to Supabase
+                    const { data: remoteData, error: remoteError } = await supabase
+                        .from('messages')
+                        .insert([{ ...systemMsg, id: undefined }])
+                        .select()
+                        .single();
+
+                    // 2. Update Supabase Wallpaper entry
+                    await supabase.from('chat_wallpapers').upsert({ 
+                        chat_id: roomId, 
+                        wallpaper_url: remoteUrl, 
+                        user_id: currentUser.id 
+                    });
+
+                    // 3. Save LOCALLY so it shows up immediately
                     const { db } = useDbStore.getState();
                     if (db) {
-                        await saveLocalWallpaper(db, safeFriendId, remoteUrl);
+                        await saveLocalMessage(db, remoteData || systemMsg);
                     }
-                    Alert.alert("Success", "Wallpaper synced to cloud!");
+
+                    Alert.alert("Success", "Wallpaper updated for everyone!");
                 }
             } catch (error) {
                 console.error("Wallpaper Sync Error:", error);
-                Alert.alert("Sync Error", "Wallpaper saved locally but failed to sync to cloud.");
+                Alert.alert("Sync Error", "Failed to update shared wallpaper, but it's saved locally.");
             }
         }
     };
 
-    const onSendMessage = (text: string) => {
+    const handleSendMessage = async (text: string) => {
+        if (!text.trim() || !currentUser) return;
+        
         if (isBlocked) {
-            Alert.alert("Blocked", "You have blocked this user. Unblock them to send messages.");
+            Alert.alert("Blocked", "Unblock this user to send messages.");
             return;
         }
-        handleSendMessage(text, replyingTo?.id);
+
+        const replyId = replyingTo?.id;
+        
+        // Clear UI states immediately for better UX
         setReplyingTo(null);
+        setDraft('');
+        handleDraftChange('');
+
+        try {
+            // Use the store's method which handles Optimistic UI, Encryption, and Local DB
+            await handleSendMessageOriginal(text, replyId);
+        } catch (error) {
+            console.error('[CHAT] Send failed:', error);
+        }
     };
 
     const onSaveEdit = (text: string) => {
@@ -189,49 +367,59 @@ export default function ChatScreen() {
     };
 
     const handleClearChat = async () => {
-        Alert.alert(
-            "Clear Chat",
-            "Are you sure you want to clear all messages? This cannot be undone.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Clear",
-                    style: "destructive",
-                    onPress: async () => {
-                        await supabase.from('messages').delete().or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
+        Alert.alert("Clear Chat", "Are you sure you want to clear this chat for yourself? (Friend will still see the messages)", [
+            { text: "Cancel", style: "cancel" },
+            { 
+                text: "Clear for Me", 
+                style: "destructive", 
+                onPress: async () => {
+                    try {
+                        const now = new Date().toISOString();
+                        const { db } = useDbStore.getState();
+
+                        // 1. Save "Clear" timestamp LOCALLY
+                        if (db) {
+                            await saveChatClearTimestamp(db, safeFriendId, now);
+                            // 2. Clear from Local Messages table (Physical Delete)
+                            await clearLocalChat(db, friendId as string, isGroup === 'true');
+                        }
+
+                        // 3. Clear Zustand Store & Cache
+                        useChatStore.setState((state) => {
+                            const newCache = { ...state.cache };
+                            if (newCache[safeFriendId]) {
+                                newCache[safeFriendId] = { ...newCache[safeFriendId], messages: [] };
+                            }
+                            return { 
+                                messages: [], 
+                                cache: newCache 
+                            };
+                        });
+
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        Alert.alert("Success", "Chat cleared for you.");
+                    } catch (e: any) {
+                        console.error('[CHAT] Clear for me failed:', e);
+                        Alert.alert("Error", `Failed to clear chat locally: ${e.message || 'Unknown error'}`);
                     }
-                }
-            ]
-        );
+                } 
+            }
+        ]);
     };
 
     const handleBlockToggle = async () => {
         if (!currentUser) return;
         if (isBlocked) {
             await unblockUser(currentUser.id, friendId as string);
-            Alert.alert("Unblocked", `${friendName} has been unblocked.`);
         } else {
-            Alert.alert(
-                "Block User",
-                `Are you sure you want to block ${friendName}? You will not receive messages from them.`,
-                [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                        text: "Block",
-                        style: "destructive",
-                        onPress: async () => {
-                            await blockUser(currentUser.id, friendId as string);
-                            Alert.alert("Blocked", `${friendName} has been blocked.`);
-                        }
-                    }
-                ]
-            );
+            Alert.alert("Block User", `Are you sure you want to block ${friendName}?`, [
+                { text: "Cancel", style: "cancel" },
+                { text: "Block", style: "destructive", onPress: async () => { await blockUser(currentUser.id, friendId as string); } }
+            ]);
         }
     };
 
-    const handleViewProfile = () => {
-        router.push(`/profile/${friendId}` as any);
-    };
+    const handleViewProfile = () => { router.push(`/profile/${friendId}` as any); };
 
     const handleLongPress = (message: any, y: number) => {
         setSelectedMessage(message);
@@ -241,32 +429,28 @@ export default function ChatScreen() {
 
     const handleMessageAction = (action: string) => {
         if (!selectedMessage) return;
-
         switch (action) {
-            case 'reply':
-                setReplyingTo(selectedMessage);
-                setEditingMessage(null);
-                break;
-            case 'copy':
-                Clipboard.setString(selectedMessage.message || '');
-                break;
-            case 'forward':
-                setForwardText(selectedMessage.message || '');
-                setForwardModalVisible(true);
-                break;
-            case 'edit':
-                setEditingMessage(selectedMessage);
-                setReplyingTo(null);
-                break;
-            case 'delete':
+            case 'reply': setReplyingTo(selectedMessage); setEditingMessage(null); break;
+            case 'copy': Clipboard.setString(selectedMessage.message || ''); break;
+            case 'forward': setForwardText(selectedMessage.message || ''); setForwardModalVisible(true); break;
+            case 'edit': setEditingMessage(selectedMessage); setReplyingTo(null); break;
+            case 'delete': 
                 Alert.alert(
-                    "Delete Message",
-                    "Are you sure you want to delete this message for everyone?",
+                    "Delete Message", 
+                    "Choose how you want to delete this message.", 
                     [
                         { text: "Cancel", style: "cancel" },
-                        { text: "Delete", style: "destructive", onPress: () => handleDeleteMessage(selectedMessage.id) }
+                        { 
+                            text: "Delete for Me", 
+                            onPress: () => handleDeleteMessage(selectedMessage.id, false) 
+                        },
+                        { 
+                            text: "Delete for Everyone", 
+                            style: "destructive", 
+                            onPress: () => handleDeleteMessage(selectedMessage.id, true) 
+                        }
                     ]
-                );
+                ); 
                 break;
         }
     };
@@ -276,10 +460,7 @@ export default function ChatScreen() {
         Alert.alert("Success", "Message forwarded");
     };
 
-    const handleImagePress = (uri: string) => {
-        setViewerImage(uri);
-        setViewerVisible(true);
-    };
+    const handleImagePress = (uri: string) => { setViewerImage(uri); setViewerVisible(true); };
 
     const formatLastSeen = (timestamp: string) => {
         if (!timestamp) return 'offline';
@@ -287,43 +468,23 @@ export default function ChatScreen() {
         const now = new Date();
         const diffInMs = now.getTime() - date.getTime();
         const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-
         const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        if (diffInDays === 0 && now.getDate() === date.getDate()) {
-            return `last seen today at ${timeStr}`;
-        } else if (diffInDays === 1 || (diffInDays === 0 && now.getDate() !== date.getDate())) {
-            return `last seen yesterday at ${timeStr}`;
-        } else {
-            return `last seen ${date.toLocaleDateString()}`;
-        }
+        if (diffInDays === 0 && now.getDate() === date.getDate()) return `last seen today at ${timeStr}`;
+        if (diffInDays === 1 || (diffInDays === 0 && now.getDate() !== date.getDate())) return `last seen yesterday at ${timeStr}`;
+        return `last seen ${date.toLocaleDateString()}`;
     };
-
-    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
         const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-        const keyboardShowListener = Keyboard.addListener(showEvent, (e) => {
-            setKeyboardHeight(e.endCoordinates.height);
-            setKeyboardVisible(true);
-        });
-        const keyboardHideListener = Keyboard.addListener(hideEvent, () => {
-            setKeyboardHeight(0);
-            setKeyboardVisible(false);
-        });
-
-        return () => {
-            keyboardShowListener.remove();
-            keyboardHideListener.remove();
-        };
+        const keyboardShowListener = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+        const keyboardHideListener = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+        return () => { keyboardShowListener.remove(); keyboardHideListener.remove(); };
     }, []);
 
     if (!currentUser || (loading && messages.length === 0)) {
         return (
             <SafeAreaView style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
-                {/* Skeleton Header */}
                 <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#E2E8F0' }} />
                     <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E2E8F0' }} />
@@ -332,18 +493,10 @@ export default function ChatScreen() {
                         <View style={{ width: 60, height: 10, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
                     </View>
                 </View>
-
-                {/* Skeleton Messages */}
                 <View style={{ flex: 1, padding: 16 }}>
                     <View style={{ alignSelf: 'flex-start', width: '60%', height: 60, backgroundColor: 'white', borderRadius: 20, borderBottomLeftRadius: 4, marginBottom: 16, opacity: 0.6 }} />
                     <View style={{ alignSelf: 'flex-end', width: '50%', height: 45, backgroundColor: '#F68537', borderRadius: 20, borderBottomRightRadius: 4, marginBottom: 16, opacity: 0.3 }} />
-                    <View style={{ alignSelf: 'flex-start', width: '70%', height: 80, backgroundColor: 'white', borderRadius: 20, borderBottomLeftRadius: 4, marginBottom: 16, opacity: 0.6 }} />
-                    <View style={{ alignSelf: 'flex-end', width: '40%', height: 45, backgroundColor: '#F68537', borderRadius: 20, borderBottomRightRadius: 4, marginBottom: 16, opacity: 0.3 }} />
-                    <View style={{ alignSelf: 'flex-start', width: '55%', height: 50, backgroundColor: 'white', borderRadius: 20, borderBottomLeftRadius: 4, marginBottom: 16, opacity: 0.6 }} />
-                    <View style={{ alignSelf: 'flex-end', width: '65%', height: 70, backgroundColor: '#F68537', borderRadius: 20, borderBottomRightRadius: 4, marginBottom: 16, opacity: 0.3 }} />
                 </View>
-
-                {/* Skeleton Input */}
                 <View style={{ padding: 16, backgroundColor: 'white', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <View style={{ flex: 1, height: 45, borderRadius: 25, backgroundColor: '#E2E8F0' }} />
                     <View style={{ width: 45, height: 45, borderRadius: 22.5, backgroundColor: '#E2E8F0' }} />
@@ -352,113 +505,39 @@ export default function ChatScreen() {
         );
     }
 
-    // Calculate keyboard offset: On Android we might need a small offset for the status bar
-    const keyboardOffset = Platform.OS === 'ios' ? 0 : (StatusBar.currentHeight || 0);
-
-    const MainContainer = KeyboardAvoidingView;
-    const containerProps = {
-        behavior: Platform.OS === 'ios' ? 'padding' as const : undefined,
-        keyboardVerticalOffset: Platform.OS === 'ios' ? 0 : 0
-    };
-
     return (
-        <MainContainer
-            {...containerProps}
-            style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}
-        >
-            {wallpaper && (
-                <Image
-                    source={{ uri: wallpaper }}
-                    style={StyleSheet.absoluteFillObject}
-                    contentFit="cover"
-                    priority="high"
-                />
-            )}
-            {wallpaper && (
-                <View 
-                    style={[
-                        StyleSheet.absoluteFillObject, 
-                        { backgroundColor: 'rgba(0,0,0,0.2)' } // Subtle overlay for readability
-                    ]} 
-                />
-            )}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}>
+            {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high" />}
+            {wallpaper && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.2)' }]} />}
             <StatusBar barStyle="dark-content" />
             <Stack.Screen options={{ headerShown: false }} />
 
-            {/* Custom Header */}
-            <View style={{
-                paddingTop: insets.top,
-                backgroundColor: 'white',
-                borderBottomWidth: 1,
-                borderBottomColor: 'rgba(0,0,0,0.05)',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingHorizontal: 8,
-                paddingVertical: 10,
-                zIndex: 1000,
-                elevation: 4
-            }}>
+            <View style={{ paddingTop: insets.top, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 10, zIndex: 1000, elevation: 4 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <TouchableOpacity onPress={() => { Haptics.selectionAsync(); router.back(); }}>
                         <Ionicons name="chevron-back" size={28} color="#F68537" />
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={handleViewProfile}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
-                    >
-                        <Image
-                            source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }}
-                            style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }}
-                            contentFit="cover"
-                        />
+                    <TouchableOpacity onPress={handleViewProfile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Image source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }} contentFit="cover" />
                         <View>
                             <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
-                            <Text style={{
-                                fontSize: 10,
-                                color: isTyping ? '#10B981' : (isUserOnline ? '#10B981' : '#94A3B8'),
-                                fontWeight: 'bold',
-                                textTransform: 'uppercase',
-                                letterSpacing: 0.5
-                            }}>
+                            <Text style={{ fontSize: 10, color: isTyping ? '#10B981' : (isUserOnline ? '#10B981' : '#94A3B8'), fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                 {isTyping || friendData?.isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(friendData?.lastSeen))}
                             </Text>
                         </View>
                     </TouchableOpacity>
                 </View>
-
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <TouchableOpacity
-                        onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio')}
-                        style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                    >
-                        <Ionicons name="call" size={18} color="white" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video')}
-                        style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                    >
+                    <TouchableOpacity onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video')} style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}>
                         <Ionicons name="videocam" size={18} color="white" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio')} style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="call" size={18} color="white" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 4 }}>
                         <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
                     </TouchableOpacity>
-
-                    <ChatMenu
-                        visible={menuVisible}
-                        onClose={() => setMenuVisible(false)}
-                        onViewProfile={handleViewProfile}
-                        onClearChat={handleClearChat}
-                        onBlockUser={handleBlockToggle}
-                        isBlocked={isBlocked}
-                        isMember={isMember}
-                        isGroup={isGroup === 'true'}
-                        onLeaveGroup={async () => {
-                            if (!currentUser) return;
-                            router.back();
-                        }}
-                        onSetWallpaper={handleSetWallpaper}
-                    />
+                    <ChatMenu visible={menuVisible} onClose={() => setMenuVisible(false)} onViewProfile={handleViewProfile} onClearChat={handleClearChat} onBlockUser={handleBlockToggle} isBlocked={isBlocked} isMember={isMember} isGroup={isGroup === 'true'} onLeaveGroup={async () => router.back()} onSetWallpaper={handleSetWallpaper} onLedger={() => { setMenuVisible(false); setLedgerVisible(true); }} />
                 </View>
             </View>
 
@@ -474,32 +553,30 @@ export default function ChatScreen() {
                     onLoadMore={handleLoadMore}
                     loadingMore={loadingMore}
                 />
-
+                
                 {isTyping && (
                     <View style={styles.typingIndicatorContainer}>
                         <View style={styles.typingBubble}>
-                            <View style={styles.dotsContainer}>
-                                <View style={styles.dot} />
-                                <View style={[styles.dot, { opacity: 0.6 }]} />
-                                <View style={[styles.dot, { opacity: 0.3 }]} />
-                            </View>
                             <Text style={styles.typingText}>{friendName} is typing...</Text>
                         </View>
                     </View>
                 )}
 
-
-                <ChatInput
-                    onSendMessage={onSendMessage}
-                    onTyping={handleTypingStatus}
-                    replyingTo={replyingTo}
-                    onCancelReply={() => setReplyingTo(null)}
-                    editingMessage={editingMessage}
-                    onCancelEdit={() => setEditingMessage(null)}
-                    onSaveEdit={onSaveEdit}
-                    isMember={isMember}
-                    isKeyboardOpen={keyboardVisible}
-                />
+                {isDraftLoaded && (
+                    <ChatInput
+                        onSendMessage={handleSendMessage}
+                        onTyping={handleTypingStatus}
+                        replyingTo={replyingTo}
+                        onCancelReply={() => setReplyingTo(null)}
+                        editingMessage={editingMessage}
+                        onCancelEdit={() => setEditingMessage(null)}
+                        onSaveEdit={onSaveEdit}
+                        isMember={isMember}
+                        isKeyboardOpen={keyboardVisible}
+                        initialMessage={draft}
+                        onDraftChange={handleDraftChange}
+                    />
+                )}
             </View>
 
             <MessageContextMenu
@@ -524,7 +601,14 @@ export default function ChatScreen() {
                 onClose={() => setViewerVisible(false)}
                 imageUri={viewerImage}
             />
-        </MainContainer>
+
+            <LedgerModal 
+                visible={ledgerVisible}
+                onClose={() => setLedgerVisible(false)}
+                friendId={safeFriendId}
+                friendName={friendName || 'Friend'}
+            />
+        </KeyboardAvoidingView>
     );
 }
 
@@ -533,11 +617,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 10,
         position: 'absolute',
-        bottom: 0,
+        bottom: 70, // Above ChatInput
         left: 0,
     },
     typingBubble: {
-        backgroundColor: '#E8F9F1',
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
         paddingHorizontal: 14,
         paddingVertical: 8,
         borderRadius: 20,
@@ -546,21 +630,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
         maxWidth: '80%',
-        shadowColor: '#10B981',
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
-    },
-    dotsContainer: {
-        flexDirection: 'row',
-        gap: 3,
-    },
-    dot: {
-        width: 5,
-        height: 5,
-        borderRadius: 2.5,
-        backgroundColor: '#10B981',
     },
     typingText: {
         fontSize: 13,

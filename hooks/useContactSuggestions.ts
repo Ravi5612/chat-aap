@@ -18,13 +18,22 @@ export const useContactSuggestions = () => {
     const loadSuggestions = async (forceRefresh = false) => {
         if (!currentUser?.id) return;
         
-        // Use cache if it's recent and not forced to refresh
+        // 0. Instant SQLite Cache Load
+        const localCached = require('@/lib/database').getFromCache('contact_suggestions');
+        if (localCached && suggestions.length === 0 && !forceRefresh) {
+             setSuggestions(localCached);
+        }
+
+        // Use memory cache if it's recent and not forced to refresh
         if (!forceRefresh && cachedSuggestions && (Date.now() - lastFetchTime < CACHE_DURATION)) {
             setSuggestions(cachedSuggestions);
             return;
         }
 
-        setLoading(true);
+        // Only show loading if we don't have any local suggestions to show
+        if (!localCached) {
+            setLoading(true);
+        }
 
         try {
             const { status } = await Contacts.requestPermissionsAsync();
@@ -149,6 +158,7 @@ export const useContactSuggestions = () => {
                 cachedSuggestions = finalSuggestions;
                 lastFetchTime = Date.now();
                 setSuggestions(finalSuggestions);
+                require('@/lib/database').saveToCache('contact_suggestions', finalSuggestions);
             }
         } catch (error) {
             console.error("Error loading contact suggestions:", error);

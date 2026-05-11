@@ -4,7 +4,7 @@ import { useChatStore } from '@/store/useChatStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { decryptText } from '@/utils/chatCrypto';
 import { useDbStore } from '@/store/useDbStore';
-import { saveLocalMessage } from '@/lib/localDb';
+import { saveLocalMessage, getLocallyDeletedMessages } from '@/lib/localDb';
 
 export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: boolean = false) => {
     const { user: currentUser } = useAuthStore();
@@ -200,6 +200,14 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                 
                 if (!isRelevant) return;
 
+                // ✅ Filter out locally deleted messages
+                const { db } = useDbStore.getState();
+                const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
+                if (localDeletedIds.includes(msg.id)) {
+                    console.log('[REALTIME] Ignoring locally deleted message:', msg.id);
+                    return;
+                }
+
                 try {
                     const currentKey = useChatStore.getState().chatKey;
                     if (!currentKey) return;
@@ -320,8 +328,8 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
         if (currentUser) saveEdit(messageId, newText, currentUser);
     }, [currentUser, saveEdit]);
 
-    const handleDeleteMessage = useCallback((messageId: string) => {
-        deleteMessage(messageId);
+    const handleDeleteMessage = useCallback((messageId: string, forEveryone: boolean) => {
+        deleteMessage(messageId, forEveryone);
     }, [deleteMessage]);
 
     const handleForwardMessage = useCallback((messageText: string, friendIds: string[]) => {

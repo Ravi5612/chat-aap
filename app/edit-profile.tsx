@@ -9,10 +9,12 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { Buffer } from 'buffer';
+import { useDbStore } from '@/store/useDbStore';
+import { getPendingProfileSync } from '@/lib/localDb';
 
 export default function EditProfileScreen() {
     const router = useRouter();
-    const { profile, updateProfile, syncProfile } = useAuthStore();
+    const { profile, updateProfile, syncProfile, syncPendingProfile } = useAuthStore();
     const [loading, setLoading] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -30,6 +32,7 @@ export default function EditProfileScreen() {
 
     useEffect(() => {
         syncProfile();
+        syncPendingProfile();
     }, []);
 
     const pickImage = async () => {
@@ -118,10 +121,18 @@ export default function EditProfileScreen() {
         });
 
         if (success) {
-            Alert.alert('Success', 'Profile updated successfully! ✅');
+            // Check if we actually synced or just saved locally
+            const { db } = useDbStore.getState();
+            const pending = db ? await getPendingProfileSync(db) : null;
+            
+            if (pending) {
+                Alert.alert('Saved Offline', 'Profile saved locally and will sync when internet is available. ✅');
+            } else {
+                Alert.alert('Success', 'Profile updated successfully! ✅');
+            }
             router.back();
         } else {
-            Alert.alert('Error', 'Failed to update profile details. Please check your connection.');
+            Alert.alert('Error', 'Failed to update profile details.');
         }
         setLoading(false);
     };

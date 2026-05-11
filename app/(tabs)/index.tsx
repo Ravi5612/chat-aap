@@ -35,8 +35,14 @@ export default function HomeScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedImageForZoom, setSelectedImageForZoom] = useState<string | null>(null);
 
+  // Ensure profile is loaded when Home screen mounts
+  useEffect(() => {
+    if (currentUser && !profile) {
+      useAuthStore.getState().syncProfile();
+    }
+  }, [currentUser, profile]);
+
   const onTabChange = (tab: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setActiveTab(tab);
   };
 
@@ -101,7 +107,6 @@ export default function HomeScreen() {
       console.warn('HomeScreen: Cannot chat, friend.id is missing!', friend);
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const nameParam = encodeURIComponent(friend.name || 'Chat');
     const groupParam = friend.isGroup ? 'true' : 'false';
     const imageParam = encodeURIComponent(friend.img || '');
@@ -110,7 +115,6 @@ export default function HomeScreen() {
   };
 
   const handleImageClick = (friend: any) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`);
   };
 
@@ -199,7 +203,6 @@ export default function HomeScreen() {
             {/* Search Button */}
             <TouchableOpacity
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/search' as any);
               }}
               style={{
@@ -227,7 +230,6 @@ export default function HomeScreen() {
             {/* Sent Requests - 🆕 Added */}
             <TouchableOpacity
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/sent-requests' as any);
               }}
               style={{ position: 'relative' }}
@@ -243,7 +245,6 @@ export default function HomeScreen() {
             {/* Received Friend Requests */}
             <TouchableOpacity
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/friend-requests' as any);
               }}
               style={{ position: 'relative' }}
@@ -259,7 +260,6 @@ export default function HomeScreen() {
             {/* Notifications */}
             <TouchableOpacity
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/notifications' as any);
               }}
               style={{ position: 'relative' }}

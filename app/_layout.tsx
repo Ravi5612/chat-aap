@@ -18,6 +18,7 @@ import { useFriendsStore } from '@/store/useFriendsStore';
 import { SplashScreen } from '@/components/SplashScreen';
 import { BackgroundServices } from '@/components/BackgroundServices';
 import * as Updates from 'expo-updates';
+import { setupDatabase } from '@/lib/database';
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
@@ -42,17 +43,20 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [isMounted, setIsMounted] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
 
   useEffect(() => {
     // 1. Setup Auth Listener & Initial Session
     const setupAuth = async () => {
       try {
+        setupDatabase(); // Initialize SQLite local database
         const { data: { session } } = await supabase.auth.getSession();
         setSession(session);
         if (session) {
           useAuthStore.getState().syncProfile();
           useFriendsStore.getState().fetchBlockedUsers(session.user.id);
+          // Skip the animated splash screen if the user is already logged in
+          setShowSplash(false);
         }
       } catch (error) {
         console.error('Error getting session:', error);
@@ -95,7 +99,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (initializing || !isMounted || showSplash) return;
+    if (initializing || !isMounted) return;
 
     const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup') || (segments as string[]).includes('forgot-password') || (segments as string[]).includes('reset-password');
     const isRoot = (segments as string[]).length === 0;
@@ -109,9 +113,7 @@ export default function RootLayout() {
     }
   }, [session, initializing, segments, isMounted, showSplash]);
 
-  if (showSplash) {
-    return <SplashScreen onAnimationFinish={() => setShowSplash(false)} />;
-  }
+
 
   if (initializing) {
     return (

@@ -1,25 +1,45 @@
-import { View, Text, SafeAreaView, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import { useDbStore } from '@/store/useDbStore';
+import { saveLocalSearch, getLocalSearches, clearLocalSearch } from '@/lib/localDb';
+import * as Haptics from 'expo-haptics';
 
 export default function SearchPeopleScreen() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [recentSearches, setRecentSearches] = useState<any[]>([]);
     const router = useRouter();
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
+        loadRecentSearches();
     }, []);
+
+    const loadRecentSearches = async () => {
+        const { db } = useDbStore.getState();
+        if (db) {
+            const data = await getLocalSearches(db, 'friend');
+            setRecentSearches(data);
+        }
+    };
 
     const handleSearch = async (text: string) => {
         setQuery(text);
         if (text.length < 2) {
             setResults([]);
             return;
+        }
+
+        // Save to history (debounced)
+        const { db } = useDbStore.getState();
+        if (db && text.length > 3) {
+            saveLocalSearch(db, text, 'friend').then(() => loadRecentSearches());
         }
 
         setLoading(true);
@@ -148,11 +168,44 @@ export default function SearchPeopleScreen() {
                         </View>
                     )}
                     ListEmptyComponent={
-                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
-                            <Ionicons name="people-outline" size={64} color="#CBD5E1" />
-                            <Text style={{ color: '#9CA3AF', marginTop: 16, textAlign: 'center' }}>
-                                {query.length < 2 ? 'Search for friends by username or email' : 'No users found'}
-                            </Text>
+                        <View style={{ flex: 1 }}>
+                            {query.length < 2 && recentSearches.length > 0 ? (
+                                <View style={{ padding: 16 }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#64748B' }}>RECENT SEARCHES</Text>
+                                    </View>
+                                    {recentSearches.map((item) => (
+                                        <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                                            <TouchableOpacity 
+                                                onPress={() => handleSearch(item.query)}
+                                                style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                                            >
+                                                <Ionicons name="time-outline" size={20} color="#94A3B8" style={{ marginRight: 12 }} />
+                                                <Text style={{ fontSize: 16, color: '#334155' }}>{item.query}</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity 
+                                                onPress={async () => {
+                                                    const { db } = useDbStore.getState();
+                                                    if (db) {
+                                                        await clearLocalSearch(db, item.id);
+                                                        loadRecentSearches();
+                                                    }
+                                                }}
+                                                style={{ padding: 4 }}
+                                            >
+                                                <Ionicons name="close" size={20} color="#94A3B8" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))}
+                                </View>
+                            ) : (
+                                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
+                                    <Ionicons name="people-outline" size={64} color="#CBD5E1" />
+                                    <Text style={{ color: '#9CA3AF', marginTop: 16, textAlign: 'center' }}>
+                                        {query.length < 2 ? 'Search for friends by username or email' : 'No users found'}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
                     }
                 />

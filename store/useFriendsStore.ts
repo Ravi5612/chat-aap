@@ -62,7 +62,19 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     loadFriends: async (userId, force = false) => {
         if (!userId || userId === 'null') return;
         
-        // Silent loading: Only show loader if we have no data yet OR if it's a forced refresh
+        // 0. Load instantly from SQLite cache if available
+        const cachedData = require('@/lib/database').getFromCache('home_chats');
+        if (cachedData && get().combinedItems.length === 0 && !force) {
+            set({
+                friends: cachedData.friends || [],
+                groups: cachedData.groups || [],
+                myStatuses: cachedData.myStatuses || { active: [] },
+                combinedItems: cachedData.combinedItems || [],
+                loading: false
+            });
+        }
+
+        // Silent loading: Only show loader if we have no data yet (cache empty) OR if it's a forced refresh
         const { combinedItems } = get();
         const shouldShowLoading = combinedItems.length === 0 || force;
         
