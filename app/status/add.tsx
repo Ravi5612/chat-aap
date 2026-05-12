@@ -19,6 +19,11 @@ export default function AddStatus() {
     const [loading, setLoading] = useState(false);
     const [selectedMedia, setSelectedMedia] = useState<any>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [privacy, setPrivacy] = useState<'all' | 'selected'>('all');
+    const [selectedViewerIds, setSelectedViewerIds] = useState<string[]>([]);
+    const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+    const [showFriendPicker, setShowFriendPicker] = useState(false);
+    const { friends } = (require('@/hooks/useFriends').useFriends)();
 
     const pickMedia = async () => {
         try {
@@ -58,10 +63,10 @@ export default function AddStatus() {
             let mediaType = 'text';
 
             if (selectedMedia) {
-                const isVideo = selectedMedia.type === 'video';
+                const isVideo = selectedMedia.type === 'video' || (selectedMedia.uri && selectedMedia.uri.toLowerCase().endsWith('.mp4'));
                 const uploadResult = await uploadChatMessageMedia(
                     selectedMedia.uri, 
-                    'image',
+                    isVideo ? 'video' : 'image',
                     user.id
                 );
                 mediaUrl = uploadResult.url;
@@ -82,7 +87,9 @@ export default function AddStatus() {
                 media_url: encryptedMediaUrl,
                 background_color: selectedMedia ? null : bgColor,
                 expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                is_deleted: false
+                is_deleted: false,
+                privacy_type: privacy,
+                viewer_ids: privacy === 'selected' ? selectedViewerIds : null
             };
 
             const { error } = await supabase.from('statuses').insert([statusData]);
@@ -121,6 +128,16 @@ export default function AddStatus() {
                 </TouchableOpacity>
 
                 <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity 
+                        onPress={() => setShowPrivacyModal(true)}
+                        style={[styles.headerIconButton, { width: 'auto', paddingHorizontal: 12, gap: 6, flexDirection: 'row' }]}
+                    >
+                        <Ionicons name={privacy === 'all' ? "people-outline" : "person-add-outline"} size={20} color="white" />
+                        <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                            {privacy === 'all' ? 'All Friends' : `${selectedViewerIds.length} Selected`}
+                        </Text>
+                    </TouchableOpacity>
+
                     {!selectedMedia && (
                         <TouchableOpacity 
                             onPress={pickMedia}
@@ -133,7 +150,7 @@ export default function AddStatus() {
                     {!selectedMedia && (
                         <TouchableOpacity
                             onPress={handlePost}
-                            disabled={loading || !content.trim()}
+                            disabled={loading || (!content.trim() && !selectedMedia)}
                             style={[
                                 styles.postButton,
                                 { opacity: (!content.trim() || loading) ? 0.6 : 1 }
@@ -262,9 +279,96 @@ export default function AddStatus() {
                 onClose={() => setShowEmojiPicker(false)}
                 onSelect={(emoji) => {
                     onEmojiSelect(emoji);
-                    // Don't close immediately to allow multiple emojis
                 }}
             />
+
+            {/* Privacy Modal */}
+            {showPrivacyModal && (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, justifyContent: 'flex-end' }]}>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowPrivacyModal(false)} />
+                    <View style={{ backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: insets.bottom + 20 }}>
+                        <Text style={{ fontSize: 20, fontWeight: '900', color: '#1E293B', marginBottom: 8 }}>Status Privacy</Text>
+                        <Text style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>Who can see your status updates?</Text>
+                        
+                        <TouchableOpacity 
+                            onPress={() => {
+                                setPrivacy('all');
+                                setShowPrivacyModal(false);
+                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                        >
+                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name="people" size={20} color="#3B82F6" />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 16 }}>
+                                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1E293B' }}>All Friends</Text>
+                                <Text style={{ fontSize: 12, color: '#94A3B8' }}>Share with all your contacts</Text>
+                            </View>
+                            {privacy === 'all' && <Ionicons name="checkmark-circle" size={24} color="#10B981" />}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                            onPress={() => {
+                                setPrivacy('selected');
+                                setShowPrivacyModal(false);
+                                setShowFriendPicker(true);
+                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}
+                        >
+                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name="person-add" size={20} color="#10B981" />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 16 }}>
+                                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1E293B' }}>Only Share With...</Text>
+                                <Text style={{ fontSize: 12, color: '#94A3B8' }}>Select specific friends</Text>
+                            </View>
+                            {privacy === 'selected' && <Ionicons name="checkmark-circle" size={24} color="#10B981" />}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {/* Friend Picker Modal */}
+            {showFriendPicker && (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'white', zIndex: 200, paddingTop: insets.top }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                        <TouchableOpacity onPress={() => setShowFriendPicker(false)}>
+                            <Ionicons name="arrow-back" size={24} color="#1E293B" />
+                        </TouchableOpacity>
+                        <Text style={{ fontSize: 18, fontWeight: '900', color: '#1E293B' }}>Select Friends</Text>
+                        <TouchableOpacity onPress={() => setShowFriendPicker(false)}>
+                            <Text style={{ color: '#F68537', fontWeight: 'bold' }}>Done</Text>
+                        </TouchableOpacity>
+                    </View>
+                    
+                    <ScrollView style={{ flex: 1 }}>
+                        {friends.map((friend: any) => (
+                            <TouchableOpacity 
+                                key={friend.id}
+                                onPress={() => {
+                                    if (selectedViewerIds.includes(friend.id)) {
+                                        setSelectedViewerIds(prev => prev.filter(id => id !== friend.id));
+                                    } else {
+                                        setSelectedViewerIds(prev => [...prev, friend.id]);
+                                    }
+                                }}
+                                style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}
+                            >
+                                <Image 
+                                    source={{ uri: friend.img }}
+                                    style={{ width: 44, height: 44, borderRadius: 22 }}
+                                />
+                                <Text style={{ flex: 1, marginLeft: 16, fontSize: 16, fontWeight: '600' }}>{friend.name}</Text>
+                                <Ionicons 
+                                    name={selectedViewerIds.includes(friend.id) ? "checkbox" : "square-outline"} 
+                                    size={24} 
+                                    color={selectedViewerIds.includes(friend.id) ? "#F68537" : "#CBD5E1"} 
+                                />
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
         </View>
     );
 }

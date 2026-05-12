@@ -20,6 +20,9 @@ import { Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { GlassHeader } from '@/components/ui/GlassHeader';
+import { useFriendsStore } from '@/store/useFriendsStore';
+import ChatLockModal from '@/components/chat/ChatLockModal';
+import * as SecureStore from 'expo-secure-store';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -34,6 +37,10 @@ export default function HomeScreen() {
   const [selectedFriendForMenu, setSelectedFriendForMenu] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedImageForZoom, setSelectedImageForZoom] = useState<string | null>(null);
+  const [lockModalVisible, setLockModalVisible] = useState(false);
+  const [lockModalMode, setLockModalMode] = useState<'verify' | 'setup'>('verify');
+  const [pendingLockedFriend, setPendingLockedFriend] = useState<any>(null);
+
 
   // Ensure profile is loaded when Home screen mounts
   useEffect(() => {
@@ -66,6 +73,42 @@ export default function HomeScreen() {
           router.push(`/new-group?initialMemberId=${friend.id}` as any);
         }
         break;
+      case 'block':
+        Alert.alert(
+          "Block User",
+          `Are you sure you want to block ${friend.name}? They will not be able to message or call you.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Block",
+              style: "destructive",
+              onPress: async () => {
+                const { blockUser } = useFriendsStore.getState();
+                await blockUser(currentUser.id, friend.id);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            }
+          ]
+        );
+        break;
+      case 'unblock':
+        Alert.alert(
+          "Unblock User",
+          `Are you sure you want to unblock ${friend.name}?`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Unblock",
+              onPress: async () => {
+                const { unblockUser } = useFriendsStore.getState();
+                await unblockUser(currentUser.id, friend.id);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            }
+          ]
+        );
+        break;
+
       case 'delete':
         Alert.alert(
           "Delete Chat",
@@ -90,9 +133,31 @@ export default function HomeScreen() {
           ]
         );
         break;
+      case 'lock':
+        // Check if password exists
+        const storedPassword = await SecureStore.getItemAsync('chat_lock_password');
+        if (!storedPassword) {
+            setPendingLockedFriend(friend);
+            setLockModalMode('setup');
+            setLockModalVisible(true);
+        } else {
+            const { lockChat } = useFriendsStore.getState();
+            await lockChat(friend.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert("Chat Locked", "This chat is now moved to the Locked tab.");
+        }
+        break;
+
+      case 'unlock':
+        const { unlockChat } = useFriendsStore.getState();
+        await unlockChat(friend.id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Chat Unlocked", "This chat is now visible in the main list.");
+        break;
       default:
         console.log('Action not implemented:', action);
     }
+
   };
 
   const {
@@ -103,16 +168,22 @@ export default function HomeScreen() {
   } = useStatusActions(currentUser, loadFriends);
 
   const handleSelectFriend = (friend: any) => {
-    if (!friend?.id) {
-      console.warn('HomeScreen: Cannot chat, friend.id is missing!', friend);
-      return;
+    if (!friend?.id) return;
+
+    if (friend.isLocked) {
+        setPendingLockedFriend(friend);
+        setLockModalMode('verify');
+        setLockModalVisible(true);
+        return;
     }
+
     const nameParam = encodeURIComponent(friend.name || 'Chat');
     const groupParam = friend.isGroup ? 'true' : 'false';
     const imageParam = encodeURIComponent(friend.img || '');
     const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
     router.push(url as any);
   };
+
 
   const handleImageClick = (friend: any) => {
     setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`);
@@ -121,26 +192,30 @@ export default function HomeScreen() {
   const filteredItems = combinedItems.filter(item => {
     // Tab filtering
     let tabMatch = true;
-    if (activeTab === 'all') tabMatch = !item.isArchived;
-    else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived;
-    else if (activeTab === 'groups') tabMatch = item.isGroup && !item.isArchived;
-    else if (activeTab === 'favourites') tabMatch = item.isFavorite && !item.isArchived;
-    else if (activeTab === 'archive') tabMatch = item.isArchived;
+    if (activeTab === 'all') tabMatch = !item.isArchived && !item.isLocked;
+    else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived && !item.isLocked;
+    else if (activeTab === 'groups') tabMatch = item.isGroup && !item.isArchived && !item.isLocked;
+    else if (activeTab === 'favourites') tabMatch = item.isFavorite && !item.isArchived && !item.isLocked;
+    else if (activeTab === 'archive') tabMatch = item.isArchived && !item.isLocked;
+    else if (activeTab === 'locked') tabMatch = item.isLocked;
 
     // Search query filtering
     const searchMatch = !searchQuery ||
       (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return tabMatch && searchMatch;
+
   });
 
   const tabCounts = {
-    all: combinedItems.filter(i => !i.isArchived).length,
-    friends: combinedItems.filter(i => !i.isGroup && !i.isArchived).length,
-    groups: combinedItems.filter(i => i.isGroup && !i.isArchived).length,
-    favourites: combinedItems.filter(i => i.isFavorite && !i.isArchived).length,
-    archive: combinedItems.filter(i => i.isArchived).length,
+    all: combinedItems.filter(i => !i.isArchived && !i.isLocked).length,
+    friends: combinedItems.filter(i => !i.isGroup && !i.isArchived && !i.isLocked).length,
+    groups: combinedItems.filter(i => i.isGroup && !i.isArchived && !i.isLocked).length,
+    favourites: combinedItems.filter(i => i.isFavorite && !i.isArchived && !i.isLocked).length,
+    archive: combinedItems.filter(i => i.isArchived && !i.isLocked).length,
+    locked: combinedItems.filter(i => i.isLocked).length,
   };
+
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -320,7 +395,33 @@ export default function HomeScreen() {
           onAction={handleMenuAction}
         />
 
+        <ChatLockModal
+          visible={lockModalVisible}
+          mode={lockModalMode}
+          onClose={() => {
+              setLockModalVisible(false);
+              setPendingLockedFriend(null);
+          }}
+          onSuccess={async () => {
+              setLockModalVisible(false);
+              if (lockModalMode === 'setup' && pendingLockedFriend) {
+                  const { lockChat } = useFriendsStore.getState();
+                  await lockChat(pendingLockedFriend.id);
+                  Alert.alert("Chat Locked", "This chat is now moved to the Locked tab.");
+              } else if (lockModalMode === 'verify' && pendingLockedFriend) {
+                  // After verification, open chat
+                  const f = pendingLockedFriend;
+                  const nameParam = encodeURIComponent(f.name || 'Chat');
+                  const groupParam = f.isGroup ? 'true' : 'false';
+                  const imageParam = encodeURIComponent(f.img || '');
+                  router.push(`/chat/${f.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}` as any);
+              }
+              setPendingLockedFriend(null);
+          }}
+        />
+
         {/* Profile Image Zoom Modal */}
+
         <Modal
           visible={!!selectedImageForZoom}
           transparent={true}

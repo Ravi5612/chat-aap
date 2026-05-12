@@ -16,6 +16,7 @@ interface UseAgoraProps {
     onAcceptCall: () => void;
     currentUser: any;
     friend: any;
+    isGroup?: boolean;
 }
 
 export const useAgora = ({
@@ -24,10 +25,11 @@ export const useAgora = ({
     onEndCall,
     onAcceptCall,
     currentUser,
-    friend
+    friend,
+    isGroup = false
 }: UseAgoraProps) => {
     const [joined, setJoined] = useState(false);
-    const [remoteUid, setRemoteUid] = useState(0);
+    const [remoteUids, setRemoteUids] = useState<number[]>([]);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
     const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
@@ -77,7 +79,7 @@ export const useAgora = ({
                 },
                 onUserJoined: (connection: any, rUid: number) => {
                     console.log('[CALL_ACTION] REMOTE USER JOINED! UID:', rUid);
-                    setRemoteUid(rUid);
+                    setRemoteUids(prev => [...new Set([...prev, rUid])]);
                     
                     // Only trigger acceptance ONCE to avoid state loops
                     if (stateRef.current === 'outgoing' && !hasAcceptedRef.current) {
@@ -87,13 +89,17 @@ export const useAgora = ({
                 },
                 onUserOffline: (connection: any, rUid: number) => {
                     console.log('[CALL_ACTION] Remote user offline:', rUid);
-                    setRemoteUid(0);
-                    onEndCall();
+                    setRemoteUids(prev => prev.filter(uid => uid !== rUid));
+                    
+                    // Only end call automatically if it was 1-on-1
+                    if (!isGroup) {
+                        onEndCall();
+                    }
                 },
                 onLeaveChannel: () => {
                     console.log('[CALL_ACTION] Left Agora channel');
                     setJoined(false);
-                    setRemoteUid(0);
+                    setRemoteUids([]);
                     setRemoteAudioMuted(false);
                     setRemoteVideoMuted(false);
                     setConnectionStatus('Disconnected');
@@ -162,7 +168,7 @@ export const useAgora = ({
             engine.current.leaveChannel();
             engine.current.stopPreview();
             setJoined(false);
-            setRemoteUid(0);
+            setRemoteUids([]);
             isJoining.current = false;
             setConnectionStatus('Disconnected');
         }
@@ -179,10 +185,14 @@ export const useAgora = ({
 
     useEffect(() => {
         if (currentUser?.id && friend?.id) {
-            const ids = [currentUser.id, friend.id].sort();
-            channelName.current = `call_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+            if (isGroup) {
+                channelName.current = `group_call_${friend.id.substring(0, 16)}`;
+            } else {
+                const ids = [currentUser.id, friend.id].sort();
+                channelName.current = `call_${ids[0].substring(0, 8)}_${ids[1].substring(0, 8)}`;
+            }
         }
-    }, [currentUser?.id, friend?.id]);
+    }, [currentUser?.id, friend?.id, isGroup]);
 
     useEffect(() => {
         const isCallActive = ['active', 'outgoing', 'incoming'].includes(callState as string);
@@ -233,7 +243,7 @@ export const useAgora = ({
 
     return {
         joined,
-        remoteUid,
+        remoteUids,
         isMuted,
         isVideoOff,
         remoteAudioMuted,

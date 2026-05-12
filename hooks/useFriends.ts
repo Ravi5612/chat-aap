@@ -10,6 +10,7 @@ export const useFriends = () => {
         groups,
         combinedItems,
         myStatuses,
+        statusInfo,
         loading,
         error,
         loadFriends
@@ -64,5 +65,5 @@ export const useFriends = () => {
         }
     }, [currentUser]);
 
-    return { friends, groups, combinedItems, myStatuses, loading, error, loadFriends: () => currentUser && loadFriends(currentUser.id) };
+    return { friends, groups, combinedItems, myStatuses, statusInfo, loading, error, loadFriends: () => currentUser && loadFriends(currentUser.id) };
 };

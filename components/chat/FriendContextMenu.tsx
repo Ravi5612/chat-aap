@@ -63,6 +63,25 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
                                     <Text style={styles.actionText}>{friend.isArchived ? 'Unarchive Chat' : 'Archive Chat'}</Text>
                                 </TouchableOpacity>
 
+                                <TouchableOpacity
+                                    style={styles.actionItem}
+                                    onPress={() => { onAction(friend.isLocked ? 'unlock' : 'lock', friend); onClose(); }}
+                                >
+                                    <Ionicons name={friend.isLocked ? "lock-open-outline" : "lock-closed-outline"} size={20} color="#4B5563" />
+                                    <Text style={styles.actionText}>{friend.isLocked ? 'Unlock Chat' : 'Lock Chat'}</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.actionItem}
+                                    onPress={() => { onAction(friend.isBlocked ? 'unblock' : 'block', friend); onClose(); }}
+                                >
+                                    <Ionicons name={friend.isBlocked ? "checkmark-circle-outline" : "ban-outline"} size={20} color={friend.isBlocked ? "#10B981" : "#EF4444"} />
+                                    <Text style={[styles.actionText, { color: friend.isBlocked ? '#10B981' : '#EF4444' }]}>
+                                        {friend.isBlocked ? 'Unblock User' : 'Block User'}
+                                    </Text>
+                                </TouchableOpacity>
+
+
                                 <View style={styles.divider} />
 
                                 <TouchableOpacity

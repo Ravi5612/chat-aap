@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 interface FriendListItemProps {
     friend: any;
@@ -16,6 +17,11 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
     const ringColor = hasStatus
         ? (friend.allStatusesViewed ? '#D1D5DB' : '#10B981') // gray-300 : emerald-500
         : 'transparent';
+
+    if (friend.isBlocked) {
+        console.log(`[DEBUG] Rendering blocked user: ${friend.name}, isBlocked: ${friend.isBlocked}`);
+    }
+
 
     return (
         <TouchableOpacity
@@ -112,7 +118,12 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
 
             <View style={{ flex: 1, marginLeft: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0, 0, 0, 0.05)', paddingBottom: 12 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#111827' }}>{friend.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: friend.isBlocked ? '#9CA3AF' : '#111827' }}>{friend.name}</Text>
+                        {friend.isBlocked && (
+                            <Ionicons name="ban-outline" size={14} color="#EF4444" />
+                        )}
+                    </View>
                     {friend.lastMessageTime && (
                         <Text style={{ fontSize: 12, color: '#6B7280' }}>{friend.lastMessageTime}</Text>
                     )}

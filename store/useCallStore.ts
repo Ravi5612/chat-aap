@@ -5,6 +5,7 @@ interface CallSession {
     type: 'audio' | 'video';
     friend: any;
     offer?: any;
+    isGroup?: boolean;
 }
 
 interface CallState {

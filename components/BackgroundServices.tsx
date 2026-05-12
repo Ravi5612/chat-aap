@@ -56,6 +56,7 @@ export const BackgroundServices = () => {
                 callType={callSession?.type || 'video'}
                 friend={callSession?.friend || {}}
                 offer={callSession?.offer}
+                isGroup={callSession?.isGroup}
             />
         </>
     );

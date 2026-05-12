@@ -19,7 +19,9 @@ export default function FilterTabs({ activeTab, onTabChange, counts = {}, onSear
         { id: 'groups', label: 'Groups', icon: '👨‍👩‍👧‍👦' },
         { id: 'favourites', label: 'Favourites', icon: '⭐' },
         { id: 'archive', label: 'Archive', icon: '📦' },
+        { id: 'locked', label: 'Locked', icon: '🔒' },
     ];
+
 
     const handleSearch = (text: string) => {
         setLocalQuery(text);

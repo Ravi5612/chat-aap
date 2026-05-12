@@ -17,8 +17,9 @@ export default function ForwardMessageModal({ visible, onClose, onForward, messa
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     const filteredFriends = combinedItems.filter(f =>
-        !f.isGroup && f.name.toLowerCase().includes(searchQuery.toLowerCase())
+        !f.isGroup && !f.isLocked && f.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
 
     const toggleSelect = (id: string) => {
         Haptics.selectionAsync();

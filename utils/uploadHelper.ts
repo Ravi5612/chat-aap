@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system';
 
 export const uploadChatMessageMedia = async (
     uri: string, 
-    type: 'image' | 'voice' | 'document', 
+    type: 'image' | 'voice' | 'document' | 'video', 
     userId: string,
     originalFileName?: string,
     mimeType?: string
@@ -16,6 +16,9 @@ export const uploadChatMessageMedia = async (
         if (type === 'image') {
             fileName += '.jpg';
             contentType = 'image/jpeg';
+        } else if (type === 'video') {
+            fileName += '.mp4';
+            contentType = 'video/mp4';
         } else if (type === 'voice') {
             fileName += '.m4a';
             contentType = 'audio/m4a';

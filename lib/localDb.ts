@@ -35,8 +35,13 @@ export const initDatabase = async () => {
                 unread_count INTEGER DEFAULT 0,
                 is_group INTEGER DEFAULT 0,
                 name TEXT,
-                avatar TEXT
+                avatar TEXT,
+                is_locked INTEGER DEFAULT 0,
+                is_favorite INTEGER DEFAULT 0,
+                is_archived INTEGER DEFAULT 0
             );
+
+
         `);
 
         // 3. Create Statuses Table
@@ -141,6 +146,16 @@ export const initDatabase = async () => {
             );
         `);
 
+        // 13. Blocked Users Table
+        await db.execAsync(`
+            CREATE TABLE IF NOT EXISTS blocked_users (
+                blocker_id TEXT NOT NULL,
+                blocked_id TEXT NOT NULL,
+                PRIMARY KEY (blocker_id, blocked_id)
+            );
+        `);
+
+
         // Migration: Ensure needs_sync exists in profiles
         try {
             await db.execAsync('ALTER TABLE profiles ADD COLUMN needs_sync INTEGER DEFAULT 0;');
@@ -156,6 +171,25 @@ export const initDatabase = async () => {
         } catch (e) {
             // Column probably already exists, ignore
         }
+
+        // Migration: Ensure is_locked exists in conversations
+        try {
+            await db.execAsync('ALTER TABLE conversations ADD COLUMN is_locked INTEGER DEFAULT 0;');
+            console.log('[DB] Migration: Added is_locked to conversations');
+        } catch (e) {
+            // Column probably already exists, ignore
+        }
+
+        // Migration: Ensure is_favorite and is_archived exist
+        try {
+            await db.execAsync('ALTER TABLE conversations ADD COLUMN is_favorite INTEGER DEFAULT 0;');
+            await db.execAsync('ALTER TABLE conversations ADD COLUMN is_archived INTEGER DEFAULT 0;');
+            console.log('[DB] Migration: Added is_favorite and is_archived to conversations');
+        } catch (e) {
+            // Columns probably already exist, ignore
+        }
+
+
 
         console.log('[SUCCESS] Local DB Initialized');
         return db;
@@ -597,8 +631,8 @@ export const getLocalCallLogs = async (db: SQLite.SQLiteDatabase, userId: string
 export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any) => {
     try {
         await db.runAsync(
-            `INSERT OR REPLACE INTO conversations (id, name, avatar, last_message, last_message_at, unread_count, is_group) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT OR REPLACE INTO conversations (id, name, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 conv.id,
                 conv.name || 'Unknown',
@@ -606,9 +640,14 @@ export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any
                 conv.last_message || '',
                 conv.lastActivity || '0',
                 conv.unreadCount || 0,
-                conv.isGroup ? 1 : 0
+                conv.isGroup ? 1 : 0,
+                conv.isLocked ? 1 : 0,
+                conv.isFavorite ? 1 : 0,
+                conv.isArchived ? 1 : 0
             ]
         );
+
+
     } catch (error) {
         console.error('[ERROR] Failed to save local conversation:', error);
     }
@@ -624,8 +663,13 @@ export const getLocalConversations = async (db: SQLite.SQLiteDatabase) => {
             img: row.avatar,
             unreadCount: row.unread_count,
             isGroup: row.is_group === 1,
+            isLocked: row.is_locked === 1,
+            isFavorite: row.is_favorite === 1,
+            isArchived: row.is_archived === 1,
             lastActivity: row.last_message_at
         }));
+
+
     } catch (error) {
         console.error('[ERROR] Failed to get local conversations:', error);
         return [];
@@ -674,3 +718,52 @@ export const getLocallyDeletedMessages = async (db: SQLite.SQLiteDatabase) => {
         return [];
     }
 };
+
+// Helper functions for Blocked Users
+export const saveLocalBlock = async (db: SQLite.SQLiteDatabase, blockerId: string, blockedId: string) => {
+    try {
+        await db.runAsync(
+            'INSERT OR REPLACE INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)',
+            [blockerId, blockedId]
+        );
+    } catch (error) {
+        console.error('[ERROR] Failed to save local block:', error);
+    }
+};
+
+export const deleteLocalBlock = async (db: SQLite.SQLiteDatabase, blockerId: string, blockedId: string) => {
+    try {
+        await db.runAsync(
+            'DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?',
+            [blockerId, blockedId]
+        );
+    } catch (error) {
+        console.error('[ERROR] Failed to delete local block:', error);
+    }
+};
+
+export const getLocalBlocks = async (db: SQLite.SQLiteDatabase, blockerId: string) => {
+    try {
+        const results = await db.getAllAsync<any>(
+            'SELECT blocked_id FROM blocked_users WHERE blocker_id = ?',
+            [blockerId]
+        );
+        return results.map(row => row.blocked_id);
+    } catch (error) {
+        console.error('[ERROR] Failed to get local blocks:', error);
+        return [];
+    }
+};
+
+export const syncLocalBlocks = async (db: SQLite.SQLiteDatabase, blockerId: string, remoteBlockedIds: string[]) => {
+    try {
+        // Clear old blocks for this user and insert fresh ones
+        await db.runAsync('DELETE FROM blocked_users WHERE blocker_id = ?', [blockerId]);
+        for (const id of remoteBlockedIds) {
+            await saveLocalBlock(db, blockerId, id);
+        }
+    } catch (error) {
+        console.error('[ERROR] Failed to sync local blocks:', error);
+    }
+};
+

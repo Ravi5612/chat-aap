@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Image, TouchableOpacity, Dimensions, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList, Alert } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +57,17 @@ export default function StatusViewer() {
             console.error('StatusViewer: Status Fetch Error:', statusError);
         }
 
+        // Filter by privacy (since RLS might be complex, we do it here)
+        let accessibleStatuses = statusData || [];
+        if (accessibleStatuses.length > 0 && currentUser) {
+            accessibleStatuses = accessibleStatuses.filter((s: any) => {
+                if (s.user_id === currentUser.id) return true;
+                if (s.privacy_type === 'all' || !s.privacy_type) return true;
+                if (s.privacy_type === 'selected' && s.viewer_ids?.includes(currentUser.id)) return true;
+                return false;
+            });
+        }
+
         // 2. Fetch profile separately (ensure header info is available)
         const { data: profile } = await supabase
             .from('profiles')
@@ -63,12 +75,12 @@ export default function StatusViewer() {
             .eq('id', userId)
             .single();
 
-        if (statusData) {
+        if (accessibleStatuses.length > 0) {
             const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
             // Use owner's self-key for status decryption
             const statusKey = await getChatKey(userId as string, userId as string);
 
-            const enrichedData = await Promise.all(statusData.map(async (s) => {
+            const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
                 let decryptedContent = s.content;
                 let decryptedMediaUrl = s.media_url;
 
@@ -88,9 +100,10 @@ export default function StatusViewer() {
             }));
 
             let filteredData = enrichedData;
-
+            
             // If specific date requested (History bundle)
             if (isArchive === 'true' && date) {
+                const now = new Date();
                 filteredData = enrichedData.filter(s => {
                     const sDate = new Date(s.created_at);
                     const diffDays = Math.floor((now.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -104,8 +117,10 @@ export default function StatusViewer() {
                 });
             }
 
-            console.log('StatusViewer: Status Data count:', statusData.length, 'Filtered:', filteredData.length);
+            console.log('StatusViewer: Status Data count:', accessibleStatuses.length, 'Filtered:', filteredData.length);
             setStatuses(filteredData);
+        } else {
+            setStatuses([]);
         }
         setLoading(false);
     };
@@ -243,6 +258,47 @@ export default function StatusViewer() {
         }
     };
 
+    const handleDeleteStatus = async () => {
+        if (!currentStatusUI || !isOwner) return;
+
+        Alert.alert(
+            'Delete Status',
+            'Are you sure you want to delete this status update?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase
+                                .from('statuses')
+                                .update({ is_deleted: true })
+                                .eq('id', currentStatusUI.id);
+
+                            if (error) throw error;
+
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            
+                            // Remove from local state
+                            const updatedStatuses = statuses.filter(s => s.id !== currentStatusUI.id);
+                            if (updatedStatuses.length === 0) {
+                                router.back();
+                            } else {
+                                setStatuses(updatedStatuses);
+                                if (currentIndex >= updatedStatuses.length) {
+                                    setCurrentIndex(updatedStatuses.length - 1);
+                                }
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to delete status');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     if (loading) {
         return (
             <View style={{ flex: 1, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center' }}>
@@ -281,10 +337,23 @@ export default function StatusViewer() {
             >
                 {currentStatusUI.media_type !== 'text' ? (
                     <View style={{ flex: 1 }}>
-                        <Image
-                            source={{ uri: currentStatusUI.media_url }}
-                            style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-                        />
+                        {currentStatusUI.media_type === 'video' ? (
+                            <Video
+                                source={{ uri: currentStatusUI.media_url }}
+                                rate={1.0}
+                                volume={1.0}
+                                isMuted={false}
+                                resizeMode={ResizeMode.CONTAIN}
+                                shouldPlay={true}
+                                isLooping={true}
+                                style={{ width: '100%', height: '100%' }}
+                            />
+                        ) : (
+                            <Image
+                                source={{ uri: currentStatusUI.media_url }}
+                                style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                            />
+                        )}
                         {currentStatusUI.content && (
                             <View style={{ position: 'absolute', bottom: 120, left: 0, right: 0, padding: 20, backgroundColor: 'rgba(0,0,0,0.5)' }}>
                                 <Text style={{ color: 'white', fontSize: 16, textAlign: 'center', fontWeight: '500' }}>{currentStatusUI.content}</Text>
@@ -331,9 +400,16 @@ export default function StatusViewer() {
                             </Text>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
-                        <Ionicons name="close" size={32} color="white" />
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {isOwner && (
+                            <TouchableOpacity onPress={handleDeleteStatus} style={{ padding: 8, marginRight: 8 }}>
+                                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
+                            <Ionicons name="close" size={32} color="white" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
 
@@ -395,10 +471,25 @@ export default function StatusViewer() {
                         <View style={{ width: 40, height: 4, backgroundColor: '#E2E8F0', borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                            <Text style={{ fontSize: 20, fontWeight: '900', color: '#1E293B' }}>Viewed by {statusViewers.length}</Text>
-                            <TouchableOpacity onPress={() => setShowViewers(false)}>
-                                <Ionicons name="close-circle" size={28} color="#94A3B8" />
-                            </TouchableOpacity>
+                            <View>
+                                <Text style={{ fontSize: 20, fontWeight: '900', color: '#1E293B' }}>Viewed by {statusViewers.length}</Text>
+                                <Text style={{ fontSize: 12, color: '#94A3B8' }}>Only you can see this</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <TouchableOpacity 
+                                    onPress={() => {
+                                        setShowViewers(false);
+                                        handleDeleteStatus();
+                                    }}
+                                    style={{ backgroundColor: '#FEF2F2', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                                >
+                                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                                    <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>Delete</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setShowViewers(false)}>
+                                    <Ionicons name="close-circle" size={28} color="#94A3B8" />
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
                         {statusViewers.length > 0 ? (

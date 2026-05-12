@@ -1,9 +1,11 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface StatusBarProps {
     myStatuses: any;
+    statusInfo: any;
     friendsWithStatus: any[];
     onAddClick: () => void;
     onViewStatus: (item: any) => void;
@@ -12,11 +14,13 @@ interface StatusBarProps {
 
 export default function StatusBar({
     myStatuses,
+    statusInfo = {},
     friendsWithStatus,
     onAddClick,
     onViewStatus,
     onViewMyStatus
 }: StatusBarProps) {
+    const { user: currentUser } = useAuthStore();
     return (
         <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
             <View style={{
@@ -86,12 +90,12 @@ export default function StatusBar({
                                                 }}
                                             >
                                                 <View style={{ width: '100%', height: '100%', borderRadius: 32, overflow: 'hidden', backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
-                                                    {myStatuses.active[0].media_type === 'text' ? (
-                                                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: myStatuses.active[0].background_color || '#F68537' }}>
-                                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>{myStatuses.active[0].content?.charAt(0)}</Text>
+                                                    {statusInfo?.[currentUser?.id]?.mediaType === 'text' ? (
+                                                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F68537' }}>
+                                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>T</Text>
                                                         </View>
                                                     ) : (
-                                                        <Image source={{ uri: myStatuses.active[0].media_url }} style={{ width: '100%', height: '100%' }} />
+                                                        <Image source={{ uri: statusInfo?.[currentUser?.id]?.thumbnail || currentUser?.avatar_url || 'https://via.placeholder.com/150' }} style={{ width: '100%', height: '100%' }} />
                                                     )}
                                                 </View>
                                             </TouchableOpacity>
@@ -138,6 +142,9 @@ export default function StatusBar({
                                             <View style={{ position: 'relative' }}>
                                                 <TouchableOpacity
                                                     onPress={() => onViewStatus({ statuses, dateKey })}
+                                                    onLongPress={() => {
+                                                        // Optional: Add a quick delete menu here too
+                                                    }}
                                                     style={{
                                                         width: 64,
                                                         height: 64,
@@ -158,21 +165,29 @@ export default function StatusBar({
                                                         )}
                                                     </View>
                                                 </TouchableOpacity>
-                                                <View style={{
-                                                    position: 'absolute',
-                                                    top: -2,
-                                                    right: -2,
-                                                    backgroundColor: '#64748B',
-                                                    width: 18,
-                                                    height: 18,
-                                                    borderRadius: 9,
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    borderWidth: 2,
-                                                    borderColor: 'white'
-                                                }}>
+                                                <TouchableOpacity 
+                                                    onPress={() => {
+                                                        // Since this is a bundle, we ask which one or just delete the latest?
+                                                        // For simplicity, we'll let the viewer handle multi-delete, 
+                                                        // but we can add a "Clear History" for this date.
+                                                        Alert.alert('History', `You are viewing ${statuses.length} status updates from ${dateKey}.`);
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: -2,
+                                                        right: -2,
+                                                        backgroundColor: '#64748B',
+                                                        width: 18,
+                                                        height: 18,
+                                                        borderRadius: 9,
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        borderWidth: 2,
+                                                        borderColor: 'white'
+                                                    }}
+                                                >
                                                     <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{statuses.length}</Text>
-                                                </View>
+                                                </TouchableOpacity>
                                                 {/* Small blue eye icon for views parity if needed */}
                                                 <View style={{
                                                     position: 'absolute',
@@ -217,13 +232,13 @@ export default function StatusBar({
                                             }}
                                         >
                                         <View style={{ width: '100%', height: '100%', borderRadius: 32, overflow: 'hidden', backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
-                                            {item.statuses?.[0]?.media_type === 'text' ? (
-                                                <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: item.statuses[0].background_color || '#F68537' }}>
-                                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>{item.statuses[0].content?.charAt(0)}</Text>
+                                            {item.mediaType === 'text' ? (
+                                                <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F68537' }}>
+                                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>T</Text>
                                                 </View>
                                             ) : (
                                                 <Image
-                                                    source={{ uri: item.statuses?.[0]?.media_url || item.img || 'https://via.placeholder.com/150' }}
+                                                    source={{ uri: item.thumbnail || item.img || 'https://via.placeholder.com/150' }}
                                                     style={{ width: '100%', height: '100%' }}
                                                 />
                                             )}

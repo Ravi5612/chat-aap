@@ -83,21 +83,25 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                     return;
                 }
 
-                const caller = combinedItems.find(f => f.id === payload.caller_id) || { id: payload.caller_id, name: 'Unknown' };
+                const caller = combinedItems.find(f => f.id === (payload.is_group ? payload.group_id : payload.caller_id)) || { id: payload.caller_id, name: 'Unknown' };
                 console.log('[CALL_ACTION] Incoming call offer from:', caller.name);
                 setCallSession({
                     status: 'incoming',
                     type: payload.call_type,
                     offer: payload.sdp,
-                    friend: caller
+                    friend: caller,
+                    isGroup: payload.is_group
                 });
             } else if (payload.type === 'accepted') {
                 console.log('[CALL_ACTION] Call accepted by remote user');
                 setCallActive();
             } else if (payload.type === 'busy') {
                 console.log('[CALL_ACTION] Remote user is busy');
-                alert('User is busy on another call');
-                setCallSession(null);
+                // Only show busy for 1-on-1 calls, for groups it's fine if some are busy
+                if (!callSession?.isGroup) {
+                    alert('User is busy on another call');
+                    setCallSession(null);
+                }
             } else if (payload.type === 'end') {
                 console.log('[CALL_ACTION] Call ended by remote user signal');
                 setCallSession(null);
@@ -111,36 +115,52 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         };
     }, [currentUser?.id, combinedItems, callSession]);
 
-    const handleStartCall = (friend: any, type: 'audio' | 'video' = 'video') => {
-        console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type);
+    const handleStartCall = async (friend: any, type: 'audio' | 'video' = 'video', isGroup: boolean = false) => {
+        console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type, 'IsGroup:', isGroup);
+        
         setCallSession({
             status: 'outgoing',
             type,
-            friend
+            friend,
+            isGroup
         });
 
-        const signalChannelName = `calls-signal-${friend.id}`;
-        console.log('[CALL_ACTION] Subscribing to signaling channel:', signalChannelName);
-        const personalChannel = supabase.channel(signalChannelName);
-        personalChannel.subscribe((status) => {
-            console.log('[CALL_ACTION] Signaling channel status:', status);
-            if (status === 'SUBSCRIBED') {
-                personalChannel.send({
-                    type: 'broadcast',
-                    event: 'signal',
-                    payload: {
-                        type: 'offer',
-                        call_type: type,
-                        caller_id: currentUser.id
-                    }
-                });
-                console.log('[CALL_ACTION] Offer broadcasted successfully');
-                setTimeout(() => {
-                    console.log('[CALL_ACTION] Cleaning up offer channel');
-                    supabase.removeChannel(personalChannel);
-                }, 5000);
+        const sendSignal = (targetId: string) => {
+            const signalChannelName = `calls-signal-${targetId}`;
+            const personalChannel = supabase.channel(signalChannelName);
+            personalChannel.subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    personalChannel.send({
+                        type: 'broadcast',
+                        event: 'signal',
+                        payload: {
+                            type: 'offer',
+                            call_type: type,
+                            caller_id: currentUser.id,
+                            is_group: isGroup,
+                            group_id: isGroup ? friend.id : null
+                        }
+                    });
+                    setTimeout(() => supabase.removeChannel(personalChannel), 5000);
+                }
+            });
+        };
+
+        if (isGroup) {
+            // Fetch group members to alert them
+            const { data: members, error } = await supabase
+                .from('group_members')
+                .select('user_id')
+                .eq('group_id', friend.id)
+                .neq('user_id', currentUser.id);
+
+            if (!error && members) {
+                console.log(`[CALL_ACTION] Notifying ${members.length} group members`);
+                members.forEach(m => sendSignal(m.user_id));
             }
-        });
+        } else {
+            sendSignal(friend.id);
+        }
     };
 
     const endCall = () => {

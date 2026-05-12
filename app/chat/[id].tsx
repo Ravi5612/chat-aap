@@ -46,8 +46,44 @@ export default function ChatScreen() {
     const combinedItems = useFriendsStore(state => state.combinedItems);
     const blockedUserIds = useFriendsStore(state => state.blockedUserIds);
     const { blockUser, unblockUser } = useFriendsStore();
-    
+    const [iAmBlocked, setIAmBlocked] = useState(false);
     const isBlocked = safeFriendId && blockedUserIds.includes(safeFriendId);
+
+    const checkBlockStatus = useCallback(async () => {
+        if (!currentUser || !safeFriendId || isGroup === 'true') return;
+        const { data, error } = await supabase
+            .from('blocked_users')
+            .select('*')
+            .eq('blocker_id', safeFriendId)
+            .eq('blocked_id', currentUser.id)
+            .maybeSingle();
+        
+        setIAmBlocked(!!data && !error);
+    }, [currentUser, safeFriendId, isGroup]);
+
+    useEffect(() => {
+        checkBlockStatus();
+        
+        // Subscribe to block changes to update UI in real-time
+        const channel = supabase
+            .channel(`block-status-${safeFriendId}`)
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'blocked_users' 
+            }, async (payload) => {
+                // Refresh local block list from store
+                if (currentUser) {
+                    await useFriendsStore.getState().fetchBlockedUsers(currentUser.id);
+                }
+                // Refresh "I am blocked" status
+                checkBlockStatus();
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [safeFriendId, checkBlockStatus, currentUser]);
+
     const friendData = useMemo(() => (combinedItems || []).find(f => f?.id === safeFriendId), [combinedItems, safeFriendId]);
 
     const chatRoom = useChatRoom(safeFriendId, currentUser, isGroup === 'true');
@@ -344,6 +380,12 @@ export default function ChatScreen() {
             return;
         }
 
+        if (iAmBlocked) {
+            Alert.alert("Blocked", "You are blocked by this user.");
+            return;
+        }
+
+
         const replyId = replyingTo?.id;
         
         // Clear UI states immediately for better UX
@@ -517,7 +559,7 @@ export default function ChatScreen() {
                     <TouchableOpacity onPress={() => { Haptics.selectionAsync(); router.back(); }}>
                         <Ionicons name="chevron-back" size={28} color="#F68537" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleViewProfile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <TouchableOpacity onPress={isGroup === 'true' ? () => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any) : handleViewProfile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                         <Image source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }} contentFit="cover" />
                         <View>
                             <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
@@ -528,16 +570,49 @@ export default function ChatScreen() {
                     </TouchableOpacity>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <TouchableOpacity onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video')} style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}>
+                    <TouchableOpacity 
+                        onPress={() => {
+                            if (isBlocked) Alert.alert("Blocked", "Unblock this user to call.");
+                            else if (iAmBlocked) Alert.alert("Blocked", "You are blocked by this user.");
+                            else handleStartCall({ id: friendId, name: friendName }, 'video', isGroup === 'true');
+                        }} 
+                        style={{ backgroundColor: (isBlocked || iAmBlocked) ? '#D1D5DB' : '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
+                        disabled={isBlocked || iAmBlocked}
+                    >
                         <Ionicons name="videocam" size={18} color="white" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio')} style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}>
+                    <TouchableOpacity 
+                        onPress={() => {
+                            if (isBlocked) Alert.alert("Blocked", "Unblock this user to call.");
+                            else if (iAmBlocked) Alert.alert("Blocked", "You are blocked by this user.");
+                            else handleStartCall({ id: friendId, name: friendName }, 'audio', isGroup === 'true');
+                        }} 
+                        style={{ backgroundColor: (isBlocked || iAmBlocked) ? '#D1D5DB' : '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
+                        disabled={isBlocked || iAmBlocked}
+                    >
                         <Ionicons name="call" size={18} color="white" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 4 }}>
                         <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
                     </TouchableOpacity>
-                    <ChatMenu visible={menuVisible} onClose={() => setMenuVisible(false)} onViewProfile={handleViewProfile} onClearChat={handleClearChat} onBlockUser={handleBlockToggle} isBlocked={isBlocked} isMember={isMember} isGroup={isGroup === 'true'} onLeaveGroup={async () => router.back()} onSetWallpaper={handleSetWallpaper} onLedger={() => { setMenuVisible(false); setLedgerVisible(true); }} />
+                    <ChatMenu 
+                        visible={menuVisible} 
+                        onClose={() => setMenuVisible(false)} 
+                        onViewProfile={handleViewProfile} 
+                        onGroupInfo={() => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any)}
+                        onClearChat={handleClearChat} 
+                        onBlockUser={handleBlockToggle} 
+                        isBlocked={isBlocked} 
+                        isMember={isMember} 
+                        isGroup={isGroup === 'true'} 
+                        onLeaveGroup={async () => {
+                            if (!currentUser?.id || !friendId) return;
+                            const success = await useFriendsStore.getState().leaveGroup(currentUser.id, friendId);
+                            if (success) router.back();
+                        }} 
+                        onSetWallpaper={handleSetWallpaper} 
+                        onLedger={() => { setMenuVisible(false); setLedgerVisible(true); }} 
+                    />
                 </View>
             </View>
 
@@ -562,7 +637,7 @@ export default function ChatScreen() {
                     </View>
                 )}
 
-                {isDraftLoaded && (
+                {isDraftLoaded && !isBlocked && !iAmBlocked && (
                     <ChatInput
                         onSendMessage={handleSendMessage}
                         onTyping={handleTypingStatus}
@@ -577,6 +652,32 @@ export default function ChatScreen() {
                         onDraftChange={handleDraftChange}
                     />
                 )}
+
+                {(isBlocked || iAmBlocked) && (
+                    <View style={{ 
+                        padding: 20, 
+                        backgroundColor: 'white', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        borderTopWidth: 1,
+                        borderTopColor: '#F3F4F6'
+                    }}>
+                        <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+                            {isBlocked 
+                                ? `You have blocked ${friendName}. Unblock to send messages.` 
+                                : `You cannot message ${friendName} because they have blocked you.`}
+                        </Text>
+                        {isBlocked && (
+                            <TouchableOpacity 
+                                onPress={handleBlockToggle}
+                                style={{ marginTop: 8, paddingVertical: 4, paddingHorizontal: 12, backgroundColor: '#FFF7ED', borderRadius: 8 }}
+                            >
+                                <Text style={{ color: '#F68537', fontWeight: 'bold', fontSize: 12 }}>UNBLOCK</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
+
             </View>
 
             <MessageContextMenu

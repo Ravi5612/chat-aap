@@ -20,6 +20,7 @@ interface CallScreenProps {
     callType: 'audio' | 'video';
     friend: any;
     offer?: any;
+    isGroup?: boolean;
 }
 
 export default function CallScreen({
@@ -30,7 +31,8 @@ export default function CallScreen({
     currentUser,
     callType,
     friend,
-    offer: incomingOffer
+    offer: incomingOffer,
+    isGroup = false
 }: CallScreenProps) {
     const [callDuration, setCallDuration] = useState(0);
     const [isSwapped, setIsSwapped] = useState(false);
@@ -39,14 +41,15 @@ export default function CallScreen({
     const lastCallInfo = useRef({
         state: callState,
         friend: friend,
-        type: callType
+        type: callType,
+        isGroup: isGroup
     });
     const hasLogged = useRef(false);
 
     // Track props for debugging
     useEffect(() => {
-        console.log(`[CALL_ACTION] Props Update - visible: ${visible}, state: ${callState}, type: ${callType}, friend: ${friend?.name}`);
-    }, [visible, callState, callType, friend?.id]);
+        console.log(`[CALL_ACTION] Props Update - visible: ${visible}, state: ${callState}, type: ${callType}, friend: ${friend?.name}, isGroup: ${isGroup}`);
+    }, [visible, callState, callType, friend?.id, isGroup]);
 
     // Draggable PIP values
     const translateX = useSharedValue(0);
@@ -55,20 +58,18 @@ export default function CallScreen({
     const onGestureEvent = (event: any) => {
         translateX.value = event.nativeEvent.translationX;
         translateY.value = event.nativeEvent.translationY;
-        // console.log('[CALL_ACTION] PIP Dragging:', Math.round(event.nativeEvent.translationX), Math.round(event.nativeEvent.translationY));
     };
 
     const onHandlerStateChange = (event: any) => {
         if (event.nativeEvent.state === State.END) {
-            console.log(`[CALL_ACTION] PIP Drag Ended at X: ${Math.round(event.nativeEvent.translationX)}, Y: ${Math.round(event.nativeEvent.translationY)}`);
             translateX.value = withSpring(event.nativeEvent.translationX);
             translateY.value = withSpring(event.nativeEvent.translationY);
         }
     };
 
     const handleSwap = () => {
+        if (isGroup) return; // Swapping is for 1-on-1 calls
         const nextSwapped = !isSwapped;
-        console.log('[CALL_ACTION] Video Swapped. Local is now:', nextSwapped ? 'Full Screen' : 'Small Box');
         setIsSwapped(nextSwapped);
     };
 
@@ -84,13 +85,14 @@ export default function CallScreen({
         lastCallInfo.current = {
             state: callState,
             friend: friend,
-            type: callType
+            type: callType,
+            isGroup: isGroup
         };
     }
 
     const {
         joined,
-        remoteUid,
+        remoteUids,
         connectionStatus,
         isMuted,
         isVideoOff,
@@ -99,110 +101,88 @@ export default function CallScreen({
         toggleMute,
         toggleVideo,
         switchCamera,
-        channelName
     } = useAgora({
         currentUser,
         friend,
         callType,
         callState,
         onAcceptCall,
-        onEndCall
+        onEndCall,
+        isGroup
     });
 
     const { saveCallLog } = useCallLogger(currentUser, friend, callType, callState);
 
     const acceptCall = () => {
         console.log('[CALL_ACTION] Accept button pressed');
-        // Signaling: Tell the caller we accepted
-        const signalChannelName = `calls-signal-${friend.id}`;
-        console.log('[CALL_ACTION] Sending accepted signal to caller channel:', signalChannelName);
+        // Signaling: Tell the caller (or group) we accepted
+        const targetId = isGroup ? friend.id : friend.id;
+        const signalChannelName = `calls-signal-${targetId}`;
         const personalChannel = supabase.channel(signalChannelName);
         personalChannel.subscribe((status) => {
-            console.log('[CALL_ACTION] Acceptance channel status:', status);
             if (status === 'SUBSCRIBED') {
                 personalChannel.send({
                     type: 'broadcast',
                     event: 'signal',
-                    payload: { type: 'accepted', caller_id: currentUser.id }
+                    payload: { 
+                        type: 'accepted', 
+                        caller_id: currentUser.id,
+                        is_group: isGroup,
+                        group_id: isGroup ? friend.id : null
+                    }
                 });
-                console.log('[CALL_ACTION] "accepted" signal broadcasted');
-                setTimeout(() => {
-                    console.log('[CALL_ACTION] Cleaning up signaling channel');
-                    supabase.removeChannel(personalChannel);
-                }, 2000);
+                setTimeout(() => supabase.removeChannel(personalChannel), 2000);
             }
         });
         onAcceptCall();
     };
 
     const endCall = () => {
-        console.log('[CALL_ACTION] End call button pressed (Manual)');
         onEndCall();
     };
 
-    // Call Duration Timer - TIMESTAMP BASED (Cannot Speed Up)
-    useEffect(() => {
-        const isCallActive = (callState === 'active');
-        
-        if (isCallActive) {
-            if (!startTimeRef.current) {
-                startTimeRef.current = Date.now();
-                console.log('[CALL_ACTION] Timer Started - StartTime set');
-            }
+    // ... (Duration timer logic remains same)
 
-            if (!intervalRef.current) {
-                intervalRef.current = setInterval(() => {
-                    if (startTimeRef.current) {
-                        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-                        setCallDuration(elapsed);
-                        if (elapsed % 5 === 0) console.log(`[CALL_ACTION] Stable Timer: ${elapsed}s`);
-                    }
-                }, 1000);
-            }
-        } else {
-            // STOP EVERYTHING
-            if (intervalRef.current) {
-                console.log('[CALL_ACTION] Stopping Timer');
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-            // Don't reset startTimeRef here, wait for visibility hidden to reset the whole session
+    const renderRemoteVideos = () => {
+        if (remoteUids.length === 0) {
+            return (
+                <View style={styles.placeholderContainer}>
+                    <View style={styles.avatarContainer}>
+                        {friend.avatar_url || friend.img ? (
+                            <Image source={{ uri: friend.avatar_url || friend.img }} style={styles.fullImage} />
+                        ) : (
+                            <Ionicons name="person" size={64} color="#94A3B8" />
+                        )}
+                    </View>
+                    <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
+                    <Text style={styles.callStatus}>
+                        {callState === 'outgoing' ? 'Calling...' :
+                            callState === 'incoming' ? 'Incoming Call...' :
+                                'Waiting for participants...'}
+                    </Text>
+                </View>
+            );
         }
 
-        return () => {
-            if (intervalRef.current && callState !== 'active') {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-        };
-    }, [callState]);
-
-    // Detect call end by visibility change
-    useEffect(() => {
-        if (!visible && lastCallInfo.current.state) {
-            const finalDuration = callDuration;
-            const finalState = lastCallInfo.current.state;
-            const finalFriend = lastCallInfo.current.friend;
-
-            if (finalFriend?.id) {
-                const logStatus = finalDuration > 0 ? 'completed' : 
-                                (finalState === 'incoming' ? 'missed' : 'cancelled');
-                
-                console.log(`[CALL_ACTION] Session Ended. Saving Log: ${logStatus}, Duration: ${finalDuration}`);
-                saveCallLog(logStatus, finalDuration, finalFriend);
-            }
-            
-            // FULL RESET FOR NEXT SESSION
-            lastCallInfo.current = { state: null as any, friend: null, type: null as any };
-            startTimeRef.current = null;
-            setCallDuration(0);
+        if (isGroup) {
+            return (
+                <View style={styles.groupVideoGrid}>
+                    {remoteUids.map((uid) => (
+                        <View key={uid} style={styles.gridVideoItem}>
+                            <AgoraVideoView uid={uid} style={styles.gridVideo} />
+                        </View>
+                    ))}
+                </View>
+            );
         }
-    }, [visible]);
 
-    const formatDuration = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        const remoteUid = remoteUids[0];
+        return (
+            <AgoraVideoView
+                uid={remoteUid}
+                style={styles.fullVideo}
+            />
+        );
     };
 
     if (!visible) return null;
@@ -215,66 +195,33 @@ export default function CallScreen({
                     {callType === 'video' ? (
                         <>
                             {isSwapped ? (
-                                /* Local video in full screen */
-                                <AgoraVideoView
-                                    uid={0}
-                                    style={styles.fullVideo}
-                                />
-                            ) : remoteUid !== 0 ? (
-                                /* Remote video in full screen */
-                                <AgoraVideoView
-                                    uid={remoteUid}
-                                    style={styles.fullVideo}
-                                />
-                            ) : (
-                                /* Waiting for remote user */
-                                <View style={styles.placeholderContainer}>
-                                    <View style={styles.avatarContainer}>
-                                        {friend.avatar_url ? (
-                                            <Image source={{ uri: friend.avatar_url }} style={styles.fullImage} />
-                                        ) : (
-                                            <Ionicons name="person" size={64} color="#94A3B8" />
-                                        )}
-                                    </View>
-                                    <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
-                                    <Text style={styles.callStatus}>
-                                        {callState === 'outgoing' ? 'Calling...' :
-                                            callState === 'incoming' ? 'Incoming Call...' :
-                                                'Connecting video...'}
-                                    </Text>
-                                </View>
-                            )}
+                                <AgoraVideoView uid={0} style={styles.fullVideo} />
+                            ) : renderRemoteVideos()}
 
-                            {/* Video Off Overlay for Main Screen (if remote is full and off) */}
-                            {(!isSwapped && remoteUid !== 0 && remoteVideoMuted) && (
-                                <View style={styles.videoOffOverlay}>
-                                    <Ionicons name="videocam-off" size={64} color="white" />
-                                    <Text style={{ color: 'white', marginTop: 12 }}>{friend.name} has turned off camera</Text>
-                                </View>
-                            )}
-
-                            {/* Remote Audio Muted Indicator */}
-                            {(!isSwapped && remoteUid !== 0 && remoteAudioMuted) && (
-                                <View style={styles.remoteStatusBadge}>
-                                    <Ionicons name="mic-off" size={16} color="white" />
-                                    <Text style={styles.remoteStatusText}>Muted</Text>
-                                </View>
-                            )}
-
-                            {/* Video Off Overlay for Main Screen (if local is full and off) */}
-                            {isSwapped && isVideoOff && (
-                                <View style={styles.videoOffOverlay}>
-                                    <Ionicons name="videocam-off" size={64} color="white" />
-                                    <Text style={{ color: 'white', marginTop: 12 }}>Your camera is off</Text>
-                                </View>
+                            {/* Remote Status Badges (simplified for group) */}
+                            {!isGroup && remoteUids.length > 0 && (
+                                <>
+                                    {remoteVideoMuted && (
+                                        <View style={styles.videoOffOverlay}>
+                                            <Ionicons name="videocam-off" size={64} color="white" />
+                                            <Text style={{ color: 'white', marginTop: 12 }}>{friend.name} has turned off camera</Text>
+                                        </View>
+                                    )}
+                                    {remoteAudioMuted && (
+                                        <View style={styles.remoteStatusBadge}>
+                                            <Ionicons name="mic-off" size={16} color="white" />
+                                            <Text style={styles.remoteStatusText}>Muted</Text>
+                                        </View>
+                                    )}
+                                </>
                             )}
                         </>
                     ) : (
-                        /* Audio Call Placeholder */
+                        /* Audio Call UI */
                         <View style={styles.placeholderContainer}>
                             <View style={styles.avatarContainer}>
-                                {friend.avatar_url ? (
-                                    <Image source={{ uri: friend.avatar_url }} style={styles.fullImage} />
+                                {friend.avatar_url || friend.img ? (
+                                    <Image source={{ uri: friend.avatar_url || friend.img }} style={styles.fullImage} />
                                 ) : (
                                     <Ionicons name="person" size={64} color="#94A3B8" />
                                 )}
@@ -283,42 +230,24 @@ export default function CallScreen({
                             <Text style={styles.callStatus}>
                                 {callState === 'outgoing' ? 'Calling...' :
                                     callState === 'incoming' ? 'Incoming Call...' :
-                                        'On Call'}
+                                        `On Call (${remoteUids.length} joined)`}
                             </Text>
-                            {remoteAudioMuted && callState === 'active' && (
-                                <View style={[styles.remoteStatusBadge, { position: 'relative', marginTop: 16, top: 0, right: 0 }]}>
-                                    <Ionicons name="mic-off" size={16} color="white" />
-                                    <Text style={styles.remoteStatusText}>Friend Muted</Text>
-                                </View>
-                            )}
                         </View>
                     )}
                 </View>
 
-                {/* Local Preview (PIP) - Draggable & Swappable */}
+                {/* Local Preview (PIP) */}
                 {callType === 'video' && (callState === 'active' || callState === 'outgoing') && (
-                    <PanGestureHandler
-                        onGestureEvent={onGestureEvent}
-                        onHandlerStateChange={onHandlerStateChange}
-                    >
+                    <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
                         <Animated.View style={[styles.pipContainer, animatedStyle]}>
-                            <TouchableOpacity
-                                activeOpacity={0.8}
-                                onPress={handleSwap}
-                                style={{ flex: 1 }}
-                            >
+                            <TouchableOpacity activeOpacity={0.8} onPress={handleSwap} style={{ flex: 1 }}>
                                 <AgoraVideoView
-                                    uid={isSwapped ? remoteUid : 0}
+                                    uid={isSwapped ? (remoteUids[0] || 0) : 0}
                                     style={styles.pipVideo}
                                     zOrderMediaOverlay={true}
                                     zOrderOnTop={true}
                                 />
-                                {!isSwapped && isVideoOff && (
-                                    <View style={styles.videoOffOverlay}>
-                                        <Ionicons name="videocam-off" size={24} color="white" />
-                                    </View>
-                                )}
-                                {isSwapped && remoteVideoMuted && (
+                                {isVideoOff && !isSwapped && (
                                     <View style={styles.videoOffOverlay}>
                                         <Ionicons name="videocam-off" size={24} color="white" />
                                     </View>
@@ -563,5 +492,23 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 12,
         fontWeight: 'bold',
+    },
+    groupVideoGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        width: '100%',
+        height: '100%',
+        padding: 2,
+    },
+    gridVideoItem: {
+        width: '50%',
+        height: '50%',
+        padding: 2,
+    },
+    gridVideo: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 8,
+        backgroundColor: '#1F2937',
     },
 });

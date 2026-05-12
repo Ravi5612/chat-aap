@@ -11,8 +11,6 @@ import StatusBar from '@/components/chat/StatusBar';
 
 // Memoized Status Item for performance
 const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: any) => void }) => {
-    const latestStatus = item.statuses?.[0] || {};
-    
     return (
         <TouchableOpacity
             onPress={() => onPress(item)}
@@ -24,13 +22,13 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                     styles.avatarRing,
                     { borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537' }
                 ]}>
-                    {latestStatus.media_type === 'text' ? (
-                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: latestStatus.background_color || '#F68537', borderRadius: 30 }}>
-                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>{latestStatus.content?.charAt(0)}</Text>
+                    {item.mediaType === 'text' ? (
+                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F68537', borderRadius: 30 }}>
+                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>T</Text>
                         </View>
                     ) : (
                         <Image
-                            source={{ uri: latestStatus.media_url || item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
+                            source={{ uri: item.thumbnail || item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
                             style={styles.avatar}
                         />
                     )}
@@ -50,13 +48,13 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
 
             <View style={[
                 styles.thumbnail,
-                { backgroundColor: (latestStatus.background_color && latestStatus.media_type === 'text') ? latestStatus.background_color : '#FDBA74' }
+                { backgroundColor: item.mediaType === 'text' ? '#F68537' : '#FDBA74' }
             ]}>
-                {latestStatus.media_type === 'text' ? (
-                    <Text style={styles.thumbnailText}>{latestStatus.content?.substring(0, 2).toUpperCase()}</Text>
+                {item.mediaType === 'text' ? (
+                    <Text style={styles.thumbnailText}>TEXT</Text>
                 ) : (
                     <Image
-                        source={{ uri: latestStatus.media_url || item.img }}
+                        source={{ uri: item.thumbnail || item.img }}
                         style={{ width: '100%', height: '100%' }}
                     />
                 )}
@@ -69,7 +67,7 @@ export default function StatusScreen() {
     const router = useRouter();
     const swipeHandlers = useSwipeNavigation();
     const insets = useSafeAreaInsets();
-    const { combinedItems, myStatuses, loading, loadFriends } = useFriends();
+    const { combinedItems = [], myStatuses = { active: [] }, statusInfo = {}, loading, loadFriends } = useFriends();
     const [currentUser, setCurrentUser] = useState<any>(null);
 
     useEffect(() => {
@@ -85,36 +83,45 @@ export default function StatusScreen() {
     } = useStatusActions(currentUser, loadFriends);
 
     const friendsWithStatus = useMemo(() => {
-        return combinedItems.filter(item => item.statusCount > 0);
-    }, [combinedItems]);
+        return combinedItems.filter(item => item.statusCount > 0).map(item => ({
+            ...item,
+            thumbnail: statusInfo[item.id]?.thumbnail,
+            mediaType: statusInfo[item.id]?.mediaType
+        }));
+    }, [combinedItems, statusInfo]);
 
-    const renderHeader = () => (
-        <>
-            {/* Header */}
-            <View style={styles.header}>
-                <View>
-                    <Text style={styles.headerTitle}>Status</Text>
-                    <Text style={styles.headerSubtitle}>Recent Updates</Text>
+    const renderHeader = () => {
+        const myActiveStatusInfo = currentUser ? statusInfo[currentUser.id] : null;
+
+        return (
+            <>
+                {/* Header */}
+                <View style={styles.header}>
+                    <View>
+                        <Text style={styles.headerTitle}>Status</Text>
+                        <Text style={styles.headerSubtitle}>Recent Updates</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+                        <Ionicons name="close" size={24} color="#64748B" />
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-                    <Ionicons name="close" size={24} color="#64748B" />
-                </TouchableOpacity>
-            </View>
 
-            {/* Horizontal Status Bar */}
-            <StatusBar
-                myStatuses={myStatuses}
-                friendsWithStatus={combinedItems.filter(i => !i.isGroup && i.statusCount > 0)}
-                onAddClick={() => setShowAddStatus(true)}
-                onViewStatus={handleViewUserStatus}
-                onViewMyStatus={handleViewMyStatus}
-            />
+                {/* Horizontal Status Bar */}
+                <StatusBar
+                    myStatuses={myStatuses}
+                    statusInfo={statusInfo}
+                    friendsWithStatus={friendsWithStatus}
+                    onAddClick={() => setShowAddStatus(true)}
+                    onViewStatus={handleViewUserStatus}
+                    onViewMyStatus={handleViewMyStatus}
+                />
 
-            <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
-                <Text style={styles.sectionTitle}>Recent Updates</Text>
-            </View>
-        </>
-    );
+                <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+                    <Text style={styles.sectionTitle}>Recent Updates</Text>
+                </View>
+            </>
+        );
+    };
 
     const renderEmpty = () => (
         <View style={styles.emptyContainer}>

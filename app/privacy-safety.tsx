@@ -3,9 +3,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFriendsStore } from '@/store/useFriendsStore';
+import { useAuthStore } from '@/store/useAuthStore';
+import React from 'react';
 
 export default function PrivacySafetyScreen() {
     const router = useRouter();
+    const { blockedUserIds } = useFriendsStore();
 
     const tips = [
         {
@@ -66,6 +70,39 @@ export default function PrivacySafetyScreen() {
                         </Text>
                     </View>
 
+                    <Text style={styles.sectionLabel}>ACCOUNT SECURITY</Text>
+
+                    <TouchableOpacity 
+                        onPress={() => router.push('/change-password')}
+                        style={styles.tipCard}
+                    >
+                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
+                            <MaterialCommunityIcons name="lock-reset" size={26} color="#F68537" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Change Password</Text>
+                            <Text style={styles.tipDesc}>Update your account password or reset it via email</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        onPress={() => router.push('/blocked-users')}
+                        style={styles.tipCard}
+                    >
+                        <View style={[styles.iconContainer, { backgroundColor: '#EF444410' }]}>
+                            <MaterialCommunityIcons name="account-cancel-outline" size={26} color="#EF4444" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Blocked Users</Text>
+                            <Text style={styles.tipDesc}>Manage users you have blocked from messaging you</Text>
+                        </View>
+                        <View style={styles.badgeContainer}>
+                            <Text style={styles.badgeText}>{blockedUserIds.length}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center', marginLeft: 8 }} />
+                    </TouchableOpacity>
+
                     <Text style={styles.sectionLabel}>SECURITY TIPS</Text>
 
                     {tips.map((tip, index) => (
@@ -82,7 +119,7 @@ export default function PrivacySafetyScreen() {
 
                     <TouchableOpacity
                         style={styles.blockButton}
-                        onPress={() => router.push('/search')} // Assuming they go search to find someone to block? Or maybe to help center.
+                        onPress={() => Alert.alert("Support", "Support feature coming soon!")}
                     >
                         <Text style={styles.blockButtonText}>Contact Support</Text>
                     </TouchableOpacity>
@@ -145,6 +182,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#9CA3AF',
         marginBottom: 20,
+        marginTop: 10,
         letterSpacing: 1.5,
     },
     tipCard: {
@@ -192,5 +230,20 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#4B5563',
+    },
+    badgeContainer: {
+        backgroundColor: '#EF4444',
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 6,
+        alignSelf: 'center',
+    },
+    badgeText: {
+        color: 'white',
+        fontSize: 11,
+        fontWeight: 'bold',
     }
 });
