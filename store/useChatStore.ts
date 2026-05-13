@@ -95,19 +95,23 @@ export const useChatStore = create<ChatState>((set, get) => {
             const { chatKey, cache, messages } = get();
             if (!friendId || !currentUser || !chatKey) return;
 
-            const PAGE_SIZE = 50;
+            const PAGE_SIZE = 20;
             const isFirstLoad = !cache[friendId] || cache[friendId].messages.length === 0;
             // Only show skeleton loader if we have NO messages from anywhere (neither memory nor SQLite)
             if (isFirstLoad && messages.length === 0) set({ loading: true });
 
-            // 1. Try loading from Local DB first for instant UI
+            // 1. Try loading from Local DB first for instant UI (Last 20)
             try {
                 const { db } = useDbStore.getState();
                 if (db && friendId) {
                     const clearTimestamp = await getChatClearTimestamp(db, friendId);
                     const localDeletedIds = await getLocallyDeletedMessages(db);
-                    let localMsgs = await getLocalMessages(db, friendId, isGroup);
+                    // Fetch last 20 from local DB
+                    let localMsgs = await getLocalMessages(db, friendId, isGroup, PAGE_SIZE, 0);
                     
+                    // Since localMsgs are DESC from DB, reverse them for ASC store
+                    localMsgs = localMsgs.reverse();
+
                     if (clearTimestamp) {
                         localMsgs = localMsgs.filter(m => m && m.created_at && new Date(m.created_at) > new Date(clearTimestamp));
                     }
@@ -117,10 +121,11 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
 
                     if (localMsgs && localMsgs.length > 0) {
-                        console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB`);
+                        console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB (Paginated)`);
                         set({ 
                             messages: localMsgs, 
                             loading: false,
+                            hasMore: localMsgs.length >= PAGE_SIZE, // Assume there's more if we got a full page
                             cache: { ...get().cache, [friendId]: { messages: localMsgs, key: chatKey } }
                         });
                     }
@@ -303,11 +308,35 @@ export const useChatStore = create<ChatState>((set, get) => {
             const { chatKey, messages, pageOffset, hasMore, loadingMore } = get();
             if (!friendId || !currentUser || !chatKey || !hasMore || loadingMore) return;
 
-            const PAGE_SIZE = 50;
+            const PAGE_SIZE = 20;
             set({ loadingMore: true });
 
             try {
-                // ✅ pageOffset se pehle ke messages lo (ascending order)
+                // 1. Try Local DB first for older messages
+                const { db } = useDbStore.getState();
+                const currentLocalCount = messages.length;
+                let olderLocalMsgs: any[] = [];
+                
+                if (db) {
+                    // Fetch next 20 from local DB
+                    olderLocalMsgs = await getLocalMessages(db, friendId, isGroup, PAGE_SIZE, currentLocalCount);
+                    olderLocalMsgs = olderLocalMsgs.reverse(); // Make them ASC
+                }
+
+                if (olderLocalMsgs.length > 0) {
+                    console.log(`ChatStore: Loaded ${olderLocalMsgs.length} older messages from Local DB`);
+                    const combined = [...olderLocalMsgs, ...messages];
+                    const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
+                    
+                    set({
+                        messages: unique,
+                        loadingMore: false,
+                        hasMore: true, // We found some locally, might be more
+                    });
+                    return;
+                }
+
+                // 2. If not in local DB, fetch from Supabase
                 const endOffset = Math.max(0, pageOffset - 1);
                 const startOffset = Math.max(0, pageOffset - PAGE_SIZE);
 
@@ -316,7 +345,6 @@ export const useChatStore = create<ChatState>((set, get) => {
                     return;
                 }
 
-                const { db } = useDbStore.getState();
                 const clearTimestamp = db ? await getChatClearTimestamp(db, friendId) : null;
 
                 let query = supabase

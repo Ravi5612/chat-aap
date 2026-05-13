@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, Modal, TouchableOpacity, SafeAreaView, StyleSheet, Dimensions, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Modal, TouchableOpacity, SafeAreaView, StyleSheet, Dimensions, Platform, Alert, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
 
 interface MediaViewerProps {
     visible: boolean;
@@ -13,6 +15,75 @@ interface MediaViewerProps {
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
 export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerProps) {
+    const [downloading, setDownloading] = useState(false);
+
+    const handleDownload = async () => {
+        if (!imageUri) return;
+        
+        try {
+            setDownloading(true);
+            
+            // 1. Request permissions
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Required', 'Please allow gallery access to save images.');
+                setDownloading(false);
+                return;
+            }
+
+            // 2. Determine file extension from URL
+            let ext = 'jpg';
+            try {
+                const urlPath = imageUri.split('?')[0]; // Remove query params
+                const urlParts = urlPath.split('.');
+                const lastPart = urlParts[urlParts.length - 1].toLowerCase();
+                if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(lastPart)) {
+                    ext = lastPart === 'jpeg' ? 'jpg' : lastPart;
+                }
+            } catch (_) {}
+
+            // 3. Use unique filename with timestamp to avoid conflicts
+            const filename = `chatwarriors_${Date.now()}.${ext}`;
+            const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+            // 4. Download to cache directory
+            const downloadResult = await FileSystem.downloadAsync(imageUri, fileUri, {
+                headers: { 'Accept': 'image/*' }
+            });
+            
+            if (downloadResult.status !== 200) {
+                throw new Error(`Download failed with status: ${downloadResult.status}`);
+            }
+
+            // 5. Save to media library
+            const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+
+            // 6. Add to ChatWarriors album
+            try {
+                const album = await MediaLibrary.getAlbumAsync('ChatWarriors');
+                if (album === null) {
+                    await MediaLibrary.createAlbumAsync('ChatWarriors', asset, false);
+                } else {
+                    await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+                }
+            } catch (albumErr) {
+                // Album creation failed but asset is saved - that's okay
+                console.warn('[DOWNLOAD] Album error (non-critical):', albumErr);
+            }
+
+            // 7. Cleanup cache file
+            try { await FileSystem.deleteAsync(fileUri, { idempotent: true }); } catch (_) {}
+
+            Alert.alert('✅ Saved!', 'Image saved to your gallery in ChatWarriors album.');
+        } catch (error: any) {
+            console.error('[DOWNLOAD] Error:', error);
+            Alert.alert('Error', 'Could not save image. Please check your internet and try again.');
+        } finally {
+            setDownloading(false);
+        }
+    };
+
+
     if (!visible) return null;
 
     return (
@@ -32,8 +103,21 @@ export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerP
                 <SafeAreaView style={styles.safeArea}>
                     <View style={styles.header}>
                         <TouchableOpacity
+                            onPress={handleDownload}
+                            style={[styles.actionButton, { marginRight: 15 }]}
+                            activeOpacity={0.7}
+                            disabled={downloading}
+                        >
+                            {downloading ? (
+                                <ActivityIndicator size="small" color="white" />
+                            ) : (
+                                <Ionicons name="download-outline" size={26} color="white" />
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
                             onPress={onClose}
-                            style={styles.closeButton}
+                            style={styles.actionButton}
                             activeOpacity={0.7}
                         >
                             <Ionicons name="close" size={28} color="white" />
@@ -73,11 +157,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         zIndex: 100,
     },
-    closeButton: {
+    actionButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(255,255,255,0.1)',
         alignItems: 'center',
         justifyContent: 'center',
     },

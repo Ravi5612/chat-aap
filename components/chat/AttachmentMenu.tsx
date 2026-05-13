@@ -6,15 +6,16 @@ interface AttachmentMenuProps {
     onLocation: () => void;
     onContact: () => void;
     onImage: () => void;
+    onCamera: () => void;
     onDocument: () => void;
 }
 
-export default function AttachmentMenu({ onLocation, onContact, onImage, onDocument }: AttachmentMenuProps) {
+export default function AttachmentMenu({ onLocation, onContact, onImage, onCamera, onDocument }: AttachmentMenuProps) {
     const [visible, setVisible] = useState(false);
 
     const items = [
         { label: 'Document', icon: 'document-text', color: '#7C3AED', onPress: onDocument },
-        { label: 'Camera', icon: 'camera', color: '#EC4899', onPress: onImage },
+        { label: 'Camera', icon: 'camera', color: '#EC4899', onPress: onCamera },
         { label: 'Gallery', icon: 'image', color: '#8B5CF6', onPress: onImage },
         { label: 'Audio', icon: 'headset', color: '#F59E0B', onPress: () => { } },
         { label: 'Location', icon: 'location', color: '#10B981', onPress: onLocation },

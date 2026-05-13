@@ -250,7 +250,6 @@ export default function StatusViewer() {
             if (error) throw error;
 
             setReplyText('');
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert('Sent', 'Your reply has been sent! 🚀');
         } catch (error: any) {
             console.error('Error sending status reply:', error);

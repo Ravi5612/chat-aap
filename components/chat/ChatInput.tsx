@@ -128,6 +128,28 @@ export default function ChatInput({
         }
     };
 
+    const handleLaunchCamera = async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Allow camera access to take photos.');
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                quality: 1,
+            });
+
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('ChatInput LaunchCamera Error:', error);
+            Alert.alert('Error', 'Failed to open camera');
+        }
+    };
+
     const handleLocation = async () => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
@@ -364,6 +386,7 @@ export default function ChatInput({
 
                         <AttachmentMenu
                             onImage={handlePickImage}
+                            onCamera={handleLaunchCamera}
                             onLocation={handleLocation}
                             onContact={handleContact}
                             onDocument={handleDocument}
@@ -371,7 +394,7 @@ export default function ChatInput({
 
                         {!message.trim() && !selectedImage && (
                             <TouchableOpacity 
-                                onPress={handlePickImage}
+                                onPress={handleLaunchCamera}
                                 style={{ padding: 8 }}
                             >
                                 <Ionicons name="camera" size={26} color="#6B7280" />

@@ -55,6 +55,40 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     
     const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
     const [localVoiceUrl, setLocalVoiceUrl] = useState<string | null>(null);
+    const [decryptedStatusContent, setDecryptedStatusContent] = useState<string | null>(null);
+    const [decryptedStatusMedia, setDecryptedStatusMedia] = useState<string | null>(null);
+
+    // ✅ Decrypt status_context content when message has a status reply
+    useEffect(() => {
+        const decryptStatusContext = async () => {
+            if (!message.status_context) return;
+            const ctx = message.status_context;
+            try {
+                const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
+                // Status is encrypted with owner's self-key (userId === userId)
+                const statusKey = await getChatKey(ctx.user_id, ctx.user_id);
+                
+                let content = ctx.content || '';
+                let mediaUrl = ctx.media_url || '';
+
+                if (content && content.trim().startsWith('{')) {
+                    try { content = await decryptText(content, statusKey); } catch (e) { content = '🔒 Status'; }
+                }
+                if (mediaUrl && mediaUrl.trim().startsWith('{')) {
+                    try { mediaUrl = await decryptText(mediaUrl, statusKey); } catch (e) { mediaUrl = ''; }
+                }
+
+                setDecryptedStatusContent(content);
+                setDecryptedStatusMedia(mediaUrl);
+            } catch (e) {
+                // Fallback: show as-is or placeholder
+                setDecryptedStatusContent(message.status_context?.content?.startsWith('{') ? '🔒 Status' : message.status_context?.content);
+                setDecryptedStatusMedia(message.status_context?.media_url?.startsWith('{') ? '' : message.status_context?.media_url);
+            }
+        };
+
+        decryptStatusContext();
+    }, [message.status_context]);
 
     const formatTime = (ts: string) => {
         if (!ts) return '';
@@ -65,7 +99,6 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
 
     const handleLongPress = (event: any) => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         if (onLongPress) {
             onLongPress(message, event.nativeEvent.pageY);
         }
@@ -290,15 +323,17 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                         >
                             <View style={{ flex: 1 }}>
                                 <Text style={{ fontWeight: '900', fontSize: 10, color: '#10B981', marginBottom: 2, textTransform: 'uppercase' }}>
-                                    Status
+                                    Status Reply
                                 </Text>
                                 <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255, 255, 255, 0.9)' : '#4B5563' }} numberOfLines={2}>
-                                    {message.status_context.media_type === 'text' ? message.status_context.content : (message.status_context.caption || 'Media Status')}
+                                    {message.status_context.media_type === 'text'
+                                        ? (decryptedStatusContent || '...')
+                                        : (message.status_context.caption || 'Media Status')}
                                 </Text>
                             </View>
-                            {message.status_context.media_type !== 'text' && (
+                            {message.status_context.media_type !== 'text' && (decryptedStatusMedia || message.status_context.media_url) && (
                                 <Image
-                                    source={{ uri: message.status_context.media_url }}
+                                    source={{ uri: decryptedStatusMedia || message.status_context.media_url }}
                                     style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.1)' }}
                                     contentFit="cover"
                                 />
@@ -407,15 +442,17 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
                     {/* Image Content */}
                     {imageUrl && (
-                        <TouchableOpacity onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            onImagePress?.(localImageUrl || imageUrl);
-                        }}>
+                        <TouchableOpacity 
+                            onPress={() => {
+                                onImagePress?.(localImageUrl || imageUrl);
+                            }}
+                            onLongPress={handleLongPress}
+                            delayLongPress={200}
+                        >
                             <Image
-                                source={{ uri: localImageUrl || imageUrl }}
-                                style={{ width: 256, height: 256, backgroundColor: '#F3F4F6' }}
+                                source={{ uri: (localImageUrl || imageUrl)?.trim() }}
+                                style={{ width: 256, height: 256, backgroundColor: '#F3F4F6', borderRadius: 12 }}
                                 contentFit="cover"
-                                transition={400}
                             />
                         </TouchableOpacity>
                     )}

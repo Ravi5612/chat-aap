@@ -20,6 +20,7 @@
     "android": {
       "package": "com.ravirai.chatwarriors",
       "googleServicesFile": "./google-services.json",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#FFF5E6"
@@ -33,6 +34,8 @@
         "ACCESS_WIFI_STATE",
         "BLUETOOTH",
         "BLUETOOTH_CONNECT",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
@@ -82,7 +85,15 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow ChatWarriors to access your photos",
+          "savePhotosPermission": "Allow ChatWarriors to save photos to your device",
+          "isStandard": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

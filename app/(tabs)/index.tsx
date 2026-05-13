@@ -39,6 +39,7 @@ export default function HomeScreen() {
   const [selectedImageForZoom, setSelectedImageForZoom] = useState<string | null>(null);
   const [lockModalVisible, setLockModalVisible] = useState(false);
   const [lockModalMode, setLockModalMode] = useState<'verify' | 'setup'>('verify');
+  const [lockModalTask, setLockModalTask] = useState<'open' | 'unlock'>('open');
   const [pendingLockedFriend, setPendingLockedFriend] = useState<any>(null);
 
 
@@ -149,10 +150,10 @@ export default function HomeScreen() {
         break;
 
       case 'unlock':
-        const { unlockChat } = useFriendsStore.getState();
-        await unlockChat(friend.id);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Chat Unlocked", "This chat is now visible in the main list.");
+        setPendingLockedFriend(friend);
+        setLockModalMode('verify');
+        setLockModalTask('unlock');
+        setLockModalVisible(true);
         break;
       default:
         console.log('Action not implemented:', action);
@@ -173,6 +174,7 @@ export default function HomeScreen() {
     if (friend.isLocked) {
         setPendingLockedFriend(friend);
         setLockModalMode('verify');
+        setLockModalTask('open');
         setLockModalVisible(true);
         return;
     }
@@ -409,12 +411,19 @@ export default function HomeScreen() {
                   await lockChat(pendingLockedFriend.id);
                   Alert.alert("Chat Locked", "This chat is now moved to the Locked tab.");
               } else if (lockModalMode === 'verify' && pendingLockedFriend) {
-                  // After verification, open chat
-                  const f = pendingLockedFriend;
-                  const nameParam = encodeURIComponent(f.name || 'Chat');
-                  const groupParam = f.isGroup ? 'true' : 'false';
-                  const imageParam = encodeURIComponent(f.img || '');
-                  router.push(`/chat/${f.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}` as any);
+                  if (lockModalTask === 'unlock') {
+                      const { unlockChat } = useFriendsStore.getState();
+                      await unlockChat(pendingLockedFriend.id);
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      Alert.alert("Chat Unlocked", "This chat is now visible in the main list.");
+                  } else {
+                      // After verification, open chat
+                      const f = pendingLockedFriend;
+                      const nameParam = encodeURIComponent(f.name || 'Chat');
+                      const groupParam = f.isGroup ? 'true' : 'false';
+                      const imageParam = encodeURIComponent(f.img || '');
+                      router.push(`/chat/${f.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}` as any);
+                  }
               }
               setPendingLockedFriend(null);
           }}

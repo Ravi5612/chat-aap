@@ -31,37 +31,47 @@ export default function MessageList({
 }: MessageListProps) {
     const flatListRef = useRef<FlatList>(null);
 
-    useEffect(() => {
-        if (messages.length > 0) {
-            try {
-                if (Platform.OS === 'ios') {
-                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                } else if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                }
-            } catch (e) {
-                console.warn('LayoutAnimation failed:', e);
-            }
-        }
-    }, [messages.length]);
+    // ✅ Removed LayoutAnimation from here as it causes jitter on Android
 
-    // ✅ Date Grouping Logic
+    // ✅ Date Grouping Logic - For Inverted list, newest first
     const groupedMessages = React.useMemo(() => {
         const items: any[] = [];
         let lastDate = '';
 
-        messages.forEach((msg) => {
+        // Messages are usually [oldest...newest]. 
+        // For inverted list we need [newest...oldest]
+        const sortedMessages = [...messages].reverse();
+
+        sortedMessages.forEach((msg, index) => {
             if (!msg || !msg.created_at) return;
-            const date = new Date(msg.created_at).toDateString();
-            if (date !== lastDate) {
-                items.push({ id: `date-${date}`, type: 'date', date });
-                lastDate = date;
-            }
+            
             items.push({ ...msg, type: 'message' });
+
+            const date = new Date(msg.created_at).toDateString();
+            const nextMsg = sortedMessages[index + 1];
+            const nextDate = nextMsg ? new Date(nextMsg.created_at).toDateString() : '';
+
+            if (date !== nextDate) {
+                items.push({ id: `date-${date}`, type: 'date', date });
+            }
         });
 
         return items;
     }, [messages]);
+
+    // ✅ useCallback - scroll to message memoize
+    const handleScrollToMessage = useCallback((replyMsg: any) => {
+        if (!replyMsg?.id) return;
+        // Search in groupedMessages which contains both dates and messages
+        const index = groupedMessages.findIndex(m => m.id === replyMsg.id);
+        if (index !== -1) {
+            flatListRef.current?.scrollToIndex({
+                index,
+                animated: true,
+                viewPosition: 0.5
+            });
+        }
+    }, [groupedMessages]);
 
     // ✅ useCallback - renderItem function baar baar recreate nahi hoga
     const renderItem = useCallback(({ item }: { item: any }) => {
@@ -120,33 +130,14 @@ export default function MessageList({
                 flyingEmoji={flyingEmoji}
             />
         );
-    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji]);
+    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji, handleScrollToMessage]);
 
-    // ✅ useCallback - scroll to message memoize
-    const handleScrollToMessage = useCallback((replyMsg: any) => {
-        if (!replyMsg?.id) return;
-        const index = messages.findIndex(m => m.id === replyMsg.id);
-        if (index !== -1) {
-            flatListRef.current?.scrollToIndex({
-                index,
-                animated: true,
-                viewPosition: 0.5
-            });
-        }
-    }, [messages]);
 
     // ✅ useCallback - keyExtractor memoize
     const keyExtractor = useCallback((item: any) => item.id, []);
 
-    // ✅ Pagination - Jab user scroll karke top pe aaye
-    const handleScrollBeginDrag = useCallback(({ nativeEvent }: any) => {
-        if (nativeEvent.contentOffset.y <= 50 && onLoadMore) {
-            onLoadMore();
-        }
-    }, [onLoadMore]);
-
-    // ✅ Loading indicator upar (purane messages load ho rahe hain)
-    const ListHeaderComponent = loadingMore ? (
+    // ✅ For inverted list, loadingMore (old messages) should be at the BOTTOM (ListFooterComponent)
+    const ListFooterComponent = loadingMore ? (
         <View style={{ paddingVertical: 12, alignItems: 'center' }}>
             <ActivityIndicator size="small" color="#F68537" />
         </View>
@@ -156,19 +147,15 @@ export default function MessageList({
         <View style={{ flex: 1 }}>
             <FlatList
                 ref={flatListRef}
+                inverted={true}
                 data={groupedMessages}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
-                ListHeaderComponent={ListHeaderComponent}
+                ListFooterComponent={ListFooterComponent}
                 contentContainerStyle={{ paddingVertical: 16 }}
-                onContentSizeChange={() => {
-                    if (!loadingMore) {
-                        flatListRef.current?.scrollToEnd({ animated: true });
-                    }
-                }}
-                onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
                 showsVerticalScrollIndicator={false}
-                onScrollBeginDrag={handleScrollBeginDrag}
+                onEndReached={onLoadMore}
+                onEndReachedThreshold={0.2}
                 onScrollToIndexFailed={(info) => {
                     flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
                     setTimeout(() => {

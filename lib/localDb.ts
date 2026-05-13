@@ -324,15 +324,17 @@ export const syncLedgerExpense = async (db: SQLite.SQLiteDatabase, msg: any, cur
     }
 };
 
-export const getLocalMessages = async (db: SQLite.SQLiteDatabase, friendId: string, isGroup: boolean = false) => {
+export const getLocalMessages = async (db: SQLite.SQLiteDatabase, friendId: string, isGroup: boolean = false, limit: number = 20, offset: number = 0) => {
     try {
         const query = isGroup 
-            ? 'SELECT * FROM messages WHERE group_id = ? ORDER BY created_at ASC'
-            : 'SELECT * FROM messages WHERE (sender_id = ? OR receiver_id = ?) AND group_id IS NULL ORDER BY created_at ASC';
+            ? 'SELECT * FROM messages WHERE group_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+            : 'SELECT * FROM messages WHERE (sender_id = ? OR receiver_id = ?) AND group_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?';
         
-        const params = isGroup ? [friendId] : [friendId, friendId];
+        const params = isGroup ? [friendId, limit, offset] : [friendId, friendId, limit, offset];
         const results = await db.getAllAsync<any>(query, params);
         
+        // Since we fetch DESC for pagination, but UI might expect ASC or handles it itself.
+        // We'll return them as they are (newest first) and let the store/UI handle sorting.
         return results.map(row => ({
             ...row,
             is_read: row.is_read === 1,
@@ -838,6 +840,31 @@ export const getChatClearTimestamp = async (db: SQLite.SQLiteDatabase, chatId: s
 
 export const markMessageAsDeletedLocally = async (db: SQLite.SQLiteDatabase, messageId: string) => {
     await db.runAsync('INSERT OR REPLACE INTO deleted_messages_me (message_id) VALUES (?)', [messageId]);
+};
+
+// Mark a message as 'delivered' in local DB
+export const markMessageDeliveredLocally = async (db: SQLite.SQLiteDatabase, messageId: string) => {
+    try {
+        await db.runAsync(
+            `UPDATE messages SET status = 'delivered' WHERE id = ? AND status = 'sent'`,
+            [messageId]
+        );
+    } catch (error) {
+        console.error('[ERROR] Failed to mark message delivered locally:', error);
+    }
+};
+
+// Get all messages that need delivered sync (sent to me, status still 'sent')
+export const getPendingDeliveredMessages = async (db: SQLite.SQLiteDatabase, myUserId: string) => {
+    try {
+        return await db.getAllAsync<any>(
+            `SELECT id, sender_id FROM messages WHERE receiver_id = ? AND status = 'sent' AND group_id IS NULL`,
+            [myUserId]
+        );
+    } catch (error) {
+        console.error('[ERROR] Failed to get pending delivered messages:', error);
+        return [];
+    }
 };
 
 export const getLocallyDeletedMessages = async (db: SQLite.SQLiteDatabase) => {

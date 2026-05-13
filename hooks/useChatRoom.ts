@@ -4,7 +4,7 @@ import { useChatStore } from '@/store/useChatStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { decryptText } from '@/utils/chatCrypto';
 import { useDbStore } from '@/store/useDbStore';
-import { saveLocalMessage, getLocallyDeletedMessages, syncLedgerExpense } from '@/lib/localDb';
+import { saveLocalMessage, getLocallyDeletedMessages, syncLedgerExpense, markMessageDeliveredLocally, getPendingDeliveredMessages } from '@/lib/localDb';
 
 export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: boolean = false) => {
     const { user: currentUser } = useAuthStore();
@@ -275,7 +275,33 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     const { db } = useDbStore.getState();
                     if (db) saveLocalMessage(db, finalMsg);
 
-                    // Mark as read
+                    // ✅ DELIVERED FLOW: Mark message as delivered
+                    // 1. Update Local DB immediately (works offline too)
+                    if (db) {
+                        await markMessageDeliveredLocally(db, finalMsg.id);
+                    }
+
+                    // 2. Update Supabase in background (non-blocking)
+                    supabase
+                        .from('messages')
+                        .update({ status: 'delivered' })
+                        .eq('id', finalMsg.id)
+                        .eq('status', 'sent')
+                        .then(() => console.log('[DELIVERED] Supabase updated:', finalMsg.id))
+                        .catch(e => console.warn('[DELIVERED] Supabase update failed:', e));
+
+                    // 3. Broadcast 'delivered' back to the sender in real-time
+                    channel.send({
+                        type: 'broadcast',
+                        event: 'status_update',
+                        payload: {
+                            message_id: finalMsg.id,
+                            sender_id: currentUser.id,
+                            status: 'delivered',
+                        }
+                    });
+
+                    // Mark as read (if chat is open)
                     useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
                 } catch (e) {
                     console.error("Broadcast listener error:", e);

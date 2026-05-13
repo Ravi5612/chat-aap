@@ -29,7 +29,9 @@ import {
     saveLocalWallpaper, 
     getLocalWallpaper,
     saveLocalDraft,
-    getLocalDraft 
+    getLocalDraft,
+    getPendingDeliveredMessages,
+    markMessageDeliveredLocally
 } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
 
@@ -210,6 +212,35 @@ export default function ChatScreen() {
         }
     }, [safeFriendId, currentUser?.id]);
 
+    // Sync 'delivered' status for messages that arrived while app was closed
+    const syncDeliveredReceipts = useCallback(async () => {
+        const { db } = useDbStore.getState();
+        if (!db || !currentUser?.id || !safeFriendId) return;
+        try {
+            // Get messages received by me that are still 'sent' (not yet delivered)
+            const pending = await getPendingDeliveredMessages(db, currentUser.id);
+            if (pending.length === 0) return;
+
+            console.log(`[DELIVERED] Syncing ${pending.length} pending messages...`);
+
+            for (const msg of pending) {
+                // 1. Update local DB
+                await markMessageDeliveredLocally(db, msg.id);
+            }
+
+            // 2. Batch update Supabase
+            const ids = pending.map((m: any) => m.id);
+            await supabase
+                .from('messages')
+                .update({ status: 'delivered' })
+                .in('id', ids);
+
+            console.log('[DELIVERED] Batch sync complete:', ids.length, 'messages');
+        } catch (e) {
+            console.warn('[DELIVERED] Sync failed:', e);
+        }
+    }, [currentUser?.id, safeFriendId]);
+
     const syncReadReceipts = useCallback(async () => {
         const { db } = useDbStore.getState();
         if (db && safeFriendId && currentUser?.id) {
@@ -236,6 +267,7 @@ export default function ChatScreen() {
         loadWallpaper();
         loadDraft();
         markMessagesAsReadLocally();
+        syncDeliveredReceipts(); // Sync delivered for messages received while app was closed
     }, [roomId]);
 
     // Batch sync read receipts every 10 seconds
@@ -548,7 +580,11 @@ export default function ChatScreen() {
     }
 
     return (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}>
+        <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+            style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}
+        >
             {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high" />}
             {wallpaper && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.2)' }]} />}
             <StatusBar barStyle="dark-content" />

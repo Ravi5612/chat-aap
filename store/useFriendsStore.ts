@@ -74,43 +74,36 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     loadFriends: async (userId, force = false) => {
         if (!userId || userId === 'null') return;
         
-        // 0. Load instantly from SQLite cache if available
-        const cachedData = require('@/lib/database').getFromCache('home_chats');
-        if (cachedData && get().combinedItems.length === 0 && !force) {
-            set({
-                friends: cachedData.friends || [],
-                groups: cachedData.groups || [],
-                myStatuses: cachedData.myStatuses || { active: [] },
-                combinedItems: cachedData.combinedItems || [],
-                loading: false
-            });
-        }
-
-        // Silent loading: Only show loader if we have no data yet (cache empty) OR if it's a forced refresh
-        const { combinedItems } = get();
-        const shouldShowLoading = combinedItems.length === 0 || force;
-        
-        set({ loading: shouldShowLoading, error: null });
-
-        // 1. Try loading from Local DB first for instant UI
+        const { combinedItems: existingItems } = get();
         const { db } = useDbStore.getState();
-        if (db) {
 
-            const localConv = await getLocalConversations(db);
-            if (localConv.length > 0) {
-                console.log(`FriendsStore: Loaded ${localConv.length} conversations from Local DB`);
-                set({ combinedItems: localConv });
+        // 1. SILENT LOCAL LOAD FIRST (No skeleton trigger)
+        if (db && existingItems.length === 0) {
+            const [localConv, localBlocked] = await Promise.all([
+                getLocalConversations(db),
+                getLocalBlocks(db, userId)
+            ]);
+
+            if (localConv && localConv.length > 0) {
+                console.log(`FriendsStore: Instant load of ${localConv.length} chats from Local DB`);
                 set({ 
+                    combinedItems: localConv,
                     lockedChatIds: localConv.filter(c => c.isLocked).map(c => c.id),
                     loading: false 
                 });
             }
-            
-            const localBlocked = await getLocalBlocks(db, userId);
-            if (localBlocked.length > 0) {
+
+            if (localBlocked && localBlocked.length > 0) {
                 set({ blockedUserIds: localBlocked });
             }
         }
+
+        // 2. Determine if we REALLY need a skeleton
+        // Only show loading if we have NO items yet AND it's not a background sync
+        const currentItems = get().combinedItems;
+        const shouldShowLoading = (currentItems.length === 0 || force);
+        
+        set({ loading: shouldShowLoading, error: null });
 
 
 
