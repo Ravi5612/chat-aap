@@ -5,7 +5,7 @@ import { getChatKey, decryptText, encryptText } from '@/utils/chatCrypto';
 import { uploadChatMessageMedia } from '../utils/uploadHelper';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { useDbStore } from './useDbStore';
-import { saveLocalMessage, getLocalMessages, getChatClearTimestamp, markMessageAsDeletedLocally, getLocallyDeletedMessages } from '@/lib/localDb';
+import { saveLocalMessage, getLocalMessages, getChatClearTimestamp, markMessageAsDeletedLocally, getLocallyDeletedMessages, syncLedgerExpense } from '@/lib/localDb';
 
 interface ChatState {
     messages: any[];
@@ -24,7 +24,7 @@ interface ChatState {
     initChat: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMoreMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>; // ✅ Pagination
-    sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string) => Promise<void>;
+    sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string) => Promise<void>;
     reactToMessage: (messageId: string, emoji: string, currentUser: any) => Promise<void>;
     saveEdit: (messageId: string, newText: string, currentUser: any) => Promise<void>;
     deleteMessage: (messageId: string, forEveryone: boolean) => Promise<void>;
@@ -250,7 +250,13 @@ export const useChatStore = create<ChatState>((set, get) => {
                     // 2. Save fetched messages to Local DB for next time
                     const { db } = useDbStore.getState();
                     if (db) {
-                        finalMessages.forEach(msg => saveLocalMessage(db, msg));
+                        finalMessages.forEach(msg => {
+                            saveLocalMessage(db, msg);
+                            // Also sync ledger if needed
+                            const { useAuthStore } = require('./useAuthStore');
+                            const currentUserId = useAuthStore.getState().user?.id;
+                            if (currentUserId) syncLedgerExpense(db, msg, currentUserId);
+                        });
                     }
                 }
 
@@ -408,11 +414,10 @@ export const useChatStore = create<ChatState>((set, get) => {
             }
         },
 
-        sendMessage: async (text, friendId, currentUser, isGroup, replyToId) => {
+        sendMessage: async (text, friendId, currentUser, isGroup, replyToId, messageType) => {
             const { chatKey, activeChannel, messages, cache } = get();
             if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !friendId || !currentUser || !chatKey) return;
 
-            // 🛡️ Security Check: Verify Group Membership
             // 🛡️ Security Check: Verify Group Membership
             if (isGroup) {
                 console.log(`Checking membership for Group: ${friendId}, User: ${currentUser.id}`);
@@ -458,6 +463,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 status: 'sending',
                 reply_to_id: replyToId,
                 reply: replyObject,
+                message_type: messageType || 'text',
                 created_at: new Date().toISOString(),
                 file_url: text.startsWith('[Voice Message]') ? text.split(' ')[2] : (text.startsWith('[Image]') ? text.split(' ')[1] : (text.startsWith('[Document]') ? text.split(' | ')[0].replace('[Document] ', '').trim() : null)),
                 file_type: text.startsWith('[Voice Message]') ? 'audio/m4a' : (text.startsWith('[Image]') ? 'image/jpeg' : (text.startsWith('[Document]') ? text.split(' | ')[2].trim() : null)),
@@ -511,7 +517,8 @@ export const useChatStore = create<ChatState>((set, get) => {
                     file_url: encryptedFileUrl,
                     file_name: fileData?.name || null,
                     file_type: fileData?.type || null,
-                    file_size: fileData?.size || null
+                    file_size: fileData?.size || null,
+                    message_type: messageType || 'text'
                 };
                 if (isGroup) insertData.group_id = friendId;
                 else insertData.receiver_id = friendId;
@@ -534,6 +541,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const { db } = useDbStore.getState();
                 if (db) {
                     saveLocalMessage(db, finalMsg);
+                    syncLedgerExpense(db, finalMsg, currentUser.id);
                 }
 
                 if (activeChannel) {

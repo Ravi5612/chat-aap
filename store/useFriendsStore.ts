@@ -116,10 +116,9 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
         try {
             // 1. Fetch Blocked Users & Friendships in parallel
-            const [blockedRes, friendshipsSent, friendshipsRecd] = await Promise.all([
+            const [blockedRes, friendshipsSent] = await Promise.all([
                 supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId),
-                supabase.from('friendships').select(`is_favorite, is_archived, is_locked, friend_id, friend:profiles!friendships_friend_id_fkey(id, username, email, avatar_url, is_online)`).eq('user_id', userId),
-                supabase.from('friendships').select(`is_favorite, is_archived, is_locked, user_id, user:profiles!friendships_user_id_fkey(id, username, email, avatar_url, is_online)`).eq('friend_id', userId)
+                supabase.from('friendships').select(`is_favorite, is_archived, is_locked, friend_id, friend:profiles!friendships_friend_id_fkey(id, username, email, avatar_url, is_online)`).eq('user_id', userId)
             ]);
 
             const blockedIds = blockedRes.data?.map(b => b.blocked_id) || [];
@@ -130,10 +129,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                 await syncLocalBlocks(db, userId, blockedIds);
             }
 
-            const friendships = [
-                ...(friendshipsSent.data || []).map(f => ({ ...f, type: 'sent' })),
-                ...(friendshipsRecd.data || []).map(f => ({ ...f, type: 'recd' }))
-            ];
+            const friendships = (friendshipsSent.data || []).map(f => ({ ...f, type: 'sent' }));
 
 
 
@@ -500,7 +496,6 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         const currentUserId = (require('./useAuthStore').useAuthStore.getState()).user?.id;
         if (currentUserId) {
             await supabase.from('friendships').update({ is_locked: true }).match({ user_id: currentUserId, friend_id: chatId });
-            await supabase.from('friendships').update({ is_locked: true }).match({ user_id: chatId, friend_id: currentUserId });
         }
     },
 
@@ -528,7 +523,6 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         const currentUserId = (require('./useAuthStore').useAuthStore.getState()).user?.id;
         if (currentUserId) {
             await supabase.from('friendships').update({ is_locked: false }).match({ user_id: currentUserId, friend_id: chatId });
-            await supabase.from('friendships').update({ is_locked: false }).match({ user_id: chatId, friend_id: currentUserId });
         }
     },
 

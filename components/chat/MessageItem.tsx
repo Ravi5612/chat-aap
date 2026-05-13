@@ -42,7 +42,6 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
             },
             onPanResponderRelease: (_, gestureState) => {
                 if (gestureState.dx > 60) {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     if (onReply) onReply(message);
                 }
                 Animated.spring(swipeX, {
@@ -340,6 +339,72 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                         </TouchableOpacity>
                     )}
 
+                    {/* Ledger Entry UI */}
+                    {message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:') && (
+                        <View style={{ padding: 12, width: 220 }}>
+                            {(() => {
+                                try {
+                                    const data = JSON.parse(message.message.replace('SYSTEM_LEDGER:', ''));
+                                    const isDeneHain = data.type === 'gave' ? !isCurrentUser : isCurrentUser;
+                                    const themeColor = isDeneHain ? '#EF4444' : '#F68537';
+                                    const label = isDeneHain ? 'Dene Hain' : 'Lene Hain';
+
+                                    return (
+                                        <>
+                                            <View style={{ 
+                                                flexDirection: 'row', 
+                                                alignItems: 'center', 
+                                                marginBottom: 12, 
+                                                paddingBottom: 12, 
+                                                borderBottomWidth: 1, 
+                                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' 
+                                            }}>
+                                                <View style={{ 
+                                                    width: 40, 
+                                                    height: 40, 
+                                                    borderRadius: 20, 
+                                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}10`, 
+                                                    alignItems: 'center', 
+                                                    justifyContent: 'center', 
+                                                    marginRight: 12 
+                                                }}>
+                                                    <Ionicons name="receipt" size={20} color={isCurrentUser ? 'white' : themeColor} />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }}>Hisab-Kitab</Text>
+                                                </View>
+                                            </View>
+                                            <View>
+                                                <Text style={{ fontSize: 24, fontWeight: '900', color: isCurrentUser ? 'white' : themeColor }}>
+                                                    ₹{data.amount}
+                                                </Text>
+                                                <Text style={{ fontSize: 14, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#64748B', marginTop: 4 }}>
+                                                    {data.description}
+                                                </Text>
+                                                <View style={{ 
+                                                    marginTop: 10,
+                                                    paddingHorizontal: 10, 
+                                                    paddingVertical: 5, 
+                                                    borderRadius: 10, 
+                                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}20`,
+                                                    alignSelf: 'flex-start',
+                                                    borderWidth: isCurrentUser ? 0 : 1,
+                                                    borderColor: `${themeColor}40`
+                                                }}>
+                                                    <Text style={{ fontSize: 11, fontWeight: '900', color: isCurrentUser ? 'white' : themeColor, textTransform: 'uppercase' }}>
+                                                        {label}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </>
+                                    );
+                                } catch (e) {
+                                    return <Text style={{ color: 'red' }}>Error parsing ledger entry</Text>;
+                                }
+                            })()}
+                        </View>
+                    )}
+
                     {/* Image Content */}
                     {imageUrl && (
                         <TouchableOpacity onPress={() => {
@@ -512,7 +577,10 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     )}
 
                     <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                        {textContent && textContent.trim() !== '' && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && (
+                        {textContent && textContent.trim() !== '' && 
+                         !(hasImage && textContent.startsWith('Sent ')) && 
+                         !(isVoiceMessage && textContent.startsWith('Sent ')) && 
+                         message.message_type !== 'ledger' && (
                             <Text style={{
                                 fontSize: 15,
                                 lineHeight: 22,

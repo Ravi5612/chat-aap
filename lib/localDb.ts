@@ -189,7 +189,32 @@ export const initDatabase = async () => {
             // Columns probably already exist, ignore
         }
 
+        // Migration: Ensure message_type exists in messages
+        try {
+            await db.execAsync('ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT \'text\';');
+            console.log('[DB] Migration: Added message_type to messages');
+        } catch (e) {
+            // Column probably already exists, ignore
+        }
 
+        // 14. Expenses Table (Hard Reset to fix schema issues)
+        try {
+            // Re-creating the table with the correct schema
+            await db.execAsync(`
+                CREATE TABLE IF NOT EXISTS expenses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    friend_id TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    description TEXT,
+                    type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    sync_id TEXT UNIQUE
+                );
+            `);
+            console.log('[DB] Expenses table initialized');
+        } catch (e) {
+            console.error('[DB] Expenses table init failed:', e);
+        }
 
         console.log('[SUCCESS] Local DB Initialized');
         return db;
@@ -204,8 +229,8 @@ export const saveLocalMessage = async (db: SQLite.SQLiteDatabase, msg: any) => {
     try {
         await db.runAsync(
             `INSERT OR REPLACE INTO messages 
-            (id, sender_id, receiver_id, group_id, message, file_url, file_type, file_name, status, is_read, reply_to_id, created_at, reactions) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, sender_id, receiver_id, group_id, message, file_url, file_type, file_name, status, is_read, reply_to_id, created_at, reactions, message_type) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 msg.id,
                 msg.sender_id,
@@ -219,11 +244,83 @@ export const saveLocalMessage = async (db: SQLite.SQLiteDatabase, msg: any) => {
                 msg.is_read ? 1 : 0,
                 msg.reply_to_id || null,
                 msg.created_at,
-                JSON.stringify(msg.reactions || {})
+                JSON.stringify(msg.reactions || {}),
+                msg.message_type || 'text'
             ]
         );
+
+        // ✅ Automatically process Ledger Sync if message is type 'ledger'
+        if (msg.message_type === 'ledger' && msg.message?.startsWith('SYSTEM_LEDGER:')) {
+            try {
+                const rawData = msg.message.replace('SYSTEM_LEDGER:', '');
+                const ledgerData = JSON.parse(rawData);
+                
+                // Use useAuthStore to get current user ID
+                const { useAuthStore } = require('@/store/useAuthStore');
+                const currentUserId = useAuthStore.getState().user?.id;
+                
+                const isMe = msg.sender_id === currentUserId;
+                const friendId = isMe ? msg.receiver_id : msg.sender_id;
+                
+                // Flip type ONLY if we are the receiver
+                const finalType = isMe ? ledgerData.type : (ledgerData.type === 'gave' ? 'took' : 'gave');
+                
+                if (friendId) {
+                    await addLocalExpense(
+                        db, 
+                        friendId, 
+                        ledgerData.amount, 
+                        ledgerData.description, 
+                        finalType,
+                        msg.id // Use message ID as sync_id
+                    );
+                    console.log(`[DB] Ledger sync successful. Type: ${finalType}, isMe: ${isMe}`);
+                }
+            } catch (e) {
+                console.warn('[DB] Ledger auto-sync failed:', e);
+            }
+        }
     } catch (error) {
         console.error('[ERROR] Failed to save local message:', error);
+    }
+};
+
+// ✅ Dedicated Ledger Sync Function
+export const syncLedgerExpense = async (db: SQLite.SQLiteDatabase, msg: any, currentUserId: string) => {
+    if (msg.message_type !== 'ledger' || !msg.message?.startsWith('SYSTEM_LEDGER:')) return;
+
+    try {
+        const rawData = msg.message.replace('SYSTEM_LEDGER:', '');
+        const ledgerData = JSON.parse(rawData);
+        
+        // Ensure IDs are strings and lowercased for safe comparison
+        const senderId = msg.sender_id?.toString().toLowerCase();
+        const myId = currentUserId?.toString().toLowerCase();
+        
+        const isMe = senderId === myId;
+        const friendId = isMe ? msg.receiver_id : msg.sender_id;
+        
+        // Flip type ONLY if we are the receiver
+        let finalType = ledgerData.type;
+        if (!isMe) {
+            finalType = ledgerData.type === 'gave' ? 'took' : 'gave';
+        }
+        
+        const syncId = ledgerData.syncId || msg.id;
+
+        if (friendId) {
+            await addLocalExpense(
+                db, 
+                friendId, 
+                ledgerData.amount, 
+                ledgerData.description, 
+                finalType,
+                syncId
+            );
+            console.log(`[LEDGER] Sync processed. FinalType: ${finalType}, isMe: ${isMe}, friendId: ${friendId}`);
+        }
+    } catch (e) {
+        console.error('[LEDGER] Sync failed:', e);
     }
 };
 
@@ -501,14 +598,48 @@ export const getPendingProfileSync = async (db: SQLite.SQLiteDatabase) => {
 };
 
 // Helper functions for Expenses (Hisab-Kitab)
-export const addLocalExpense = async (db: SQLite.SQLiteDatabase, friendId: string, amount: number, description: string, type: 'gave' | 'took') => {
+export const addLocalExpense = async (db: SQLite.SQLiteDatabase, friendId: string, amount: number, description: string, type: 'gave' | 'took', syncId?: string) => {
     try {
+        // Try with sync_id first (deduplication)
         await db.runAsync(
-            'INSERT INTO expenses (friend_id, amount, description, type, created_at) VALUES (?, ?, ?, ?, ?)',
-            [friendId, amount, description, type, new Date().toISOString()]
+            `INSERT OR IGNORE INTO expenses (friend_id, amount, description, type, created_at, sync_id) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [friendId, amount, description, type, new Date().toISOString(), syncId || null]
         );
+        console.log(`[LEDGER] Added with syncId: ${syncId}`);
     } catch (error) {
-        console.error('[ERROR] Failed to add expense:', error);
+        console.warn('[LEDGER] Insert with sync_id failed, trying fallback...', error);
+        try {
+            // Fallback: Save without sync_id constraint if something is wrong
+            await db.runAsync(
+                `INSERT INTO expenses (friend_id, amount, description, type, created_at) VALUES (?, ?, ?, ?, ?)`,
+                [friendId, amount, description, type, new Date().toISOString()]
+            );
+            console.log('[LEDGER] Added with fallback (no syncId)');
+        } catch (innerError) {
+            console.error('[LEDGER] Critical failure adding expense:', innerError);
+        }
+    }
+
+    // ✅ NEW: Push to Supabase Cloud
+    try {
+        const { supabase } = require('./supabase');
+        const { useAuthStore } = require('@/store/useAuthStore');
+        const user = useAuthStore.getState().user;
+        
+        if (user) {
+            await supabase.from('ledger').upsert({
+                user_id: user.id,
+                friend_id: friendId,
+                amount: amount,
+                description: description,
+                type: type,
+                sync_id: syncId || `legacy-${Date.now()}`
+            });
+            console.log('[LEDGER] Pushed to Supabase');
+        }
+    } catch (e) {
+        console.warn('[LEDGER] Supabase sync skipped/failed:', e);
     }
 };
 

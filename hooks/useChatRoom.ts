@@ -4,7 +4,7 @@ import { useChatStore } from '@/store/useChatStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { decryptText } from '@/utils/chatCrypto';
 import { useDbStore } from '@/store/useDbStore';
-import { saveLocalMessage, getLocallyDeletedMessages } from '@/lib/localDb';
+import { saveLocalMessage, getLocallyDeletedMessages, syncLedgerExpense } from '@/lib/localDb';
 
 export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: boolean = false) => {
     const { user: currentUser } = useAuthStore();
@@ -130,21 +130,49 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                             decryptedFileUrl = await decryptText(newMsg.file_url, currentKey);
                         }
 
+                        let decryptedReply = null;
+                        if (newMsg.reply_to_id) {
+                            const { data: replyData } = await supabase
+                                .from('messages')
+                                .select('id, message, sender_id, created_at')
+                                .eq('id', newMsg.reply_to_id)
+                                .single();
+                            
+                            if (replyData) {
+                                try {
+                                    const replyText = await decryptText(replyData.message, currentKey);
+                                    decryptedReply = { ...replyData, message: replyText };
+                                } catch (e) {
+                                    decryptedReply = replyData;
+                                }
+                            }
+                        }
+
                         const finalMsg = { 
                             ...newMsg, 
                             message: decryptedText,
                             file_url: decryptedFileUrl,
+                            reply: decryptedReply,
                             sender: { id: newMsg.sender_id } 
                         };
 
                         useChatStore.setState((state) => {
-                            if (state.messages.some(m => m.id === finalMsg.id)) return state;
+                            const existingIdx = state.messages.findIndex(m => m.id === finalMsg.id);
+                            if (existingIdx !== -1) {
+                                // Update existing message if it was incomplete (e.g. from broadcast vs insert race)
+                                const newMessages = [...state.messages];
+                                newMessages[existingIdx] = { ...newMessages[existingIdx], ...finalMsg };
+                                return { messages: newMessages };
+                            }
                             return { messages: [...state.messages, finalMsg] };
                         });
 
                         // Save to Local DB
                         const { db } = useDbStore.getState();
-                        if (db) saveLocalMessage(db, finalMsg);
+                        if (db) {
+                            saveLocalMessage(db, finalMsg);
+                            syncLedgerExpense(db, finalMsg, currentUser.id);
+                        }
                     } catch (e) {
                         console.error("ChatRoom: Realtime decryption failed", e);
                         // Silently reload messages to fix the UI
@@ -233,8 +261,13 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     }
 
                     useChatStore.setState((state) => {
-                        // Strict deduplication
-                        if (state.messages.some(m => m.id === finalMsg.id)) return state;
+                        const existingIdx = state.messages.findIndex(m => m.id === finalMsg.id);
+                        if (existingIdx !== -1) {
+                            // Update existing message with potentially more complete data from broadcast
+                            const newMessages = [...state.messages];
+                            newMessages[existingIdx] = { ...newMessages[existingIdx], ...finalMsg };
+                            return { messages: newMessages };
+                        }
                         return { messages: [...state.messages, finalMsg] };
                     });
 

@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDbStore } from '@/store/useDbStore';
 import { addLocalExpense, getLocalExpenses, getExpenseBalance, deleteLocalExpense } from '@/lib/localDb';
 import * as Haptics from 'expo-haptics';
+import { useChatStore } from '@/store/useChatStore';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface LedgerModalProps {
     visible: boolean;
@@ -23,13 +25,40 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
         try {
             const { db } = useDbStore.getState();
             if (db && friendId) {
-                const data = await getLocalExpenses(db, friendId);
+                // 1. Load Local first (fast)
+                const localData = await getLocalExpenses(db, friendId);
                 const bal = await getExpenseBalance(db, friendId);
-                setExpenses(data || []);
+                setExpenses(localData || []);
                 setBalance(bal || 0);
+
+                // 2. Sync with Supabase (Cloud backup)
+                const { supabase } = require('@/lib/supabase');
+                const { user } = useAuthStore.getState();
+                if (user) {
+                    const { data: cloudData, error } = await supabase
+                        .from('ledger')
+                        .select('*')
+                        .or(`and(user_id.eq.${user.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${user.id})`)
+                        .order('created_at', { ascending: false });
+
+                    if (cloudData && !error && cloudData.length > 0) {
+                        for (const item of cloudData) {
+                            const isMe = item.user_id === user.id;
+                            const finalType = isMe ? item.type : (item.type === 'gave' ? 'took' : 'gave');
+                            const targetFriendId = isMe ? item.friend_id : item.user_id;
+                            
+                            await addLocalExpense(db, targetFriendId, item.amount, item.description, finalType, item.sync_id);
+                        }
+                        // Re-load local after sync
+                        const updatedData = await getLocalExpenses(db, friendId);
+                        const updatedBal = await getExpenseBalance(db, friendId);
+                        setExpenses(updatedData || []);
+                        setBalance(updatedBal || 0);
+                    }
+                }
             }
         } catch (e) {
-            console.warn('[LEDGER] Load failed:', e);
+            console.warn('[LEDGER] Load/Sync failed:', e);
         }
     };
 
@@ -44,15 +73,36 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
         }
         try {
             const { db } = useDbStore.getState();
-            if (db) {
-                await addLocalExpense(db, friendId, Number(amount), description, type);
+            const { user } = useAuthStore.getState();
+            if (db && user) {
+                // 1. Save Locally first with a temp sync ID
+                const syncId = `ledger-${Date.now()}`;
+                await addLocalExpense(db, friendId, Number(amount), description, type, syncId);
+                
+                // 2. Sync with Friend
+                const ledgerData = {
+                    amount: Number(amount),
+                    description: description || (type === 'gave' ? 'Paisa Diya' : 'Paisa Liya'),
+                    type: type, // 'gave' or 'took'
+                    syncId: syncId // Pass the same ID to prevent duplicates
+                };
+                
+                const syncMsg = `SYSTEM_LEDGER:${JSON.stringify(ledgerData)}`;
+                await useChatStore.getState().sendMessage(syncMsg, friendId, user, false, undefined, 'ledger');
+
                 setAmount('');
                 setDescription('');
-                loadData();
+                
+                // Wait for DB to settle
+                setTimeout(() => {
+                    loadData();
+                }, 300);
+                
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
         } catch (e) {
-            console.warn('[LEDGER] Add failed:', e);
+            console.error('[LEDGER] Add error:', e);
+            Alert.alert('Error', 'Entry add nahi ho payi. Dobara koshish karein.');
         }
     };
 
@@ -133,11 +183,17 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
                         </View>
 
                         {/* History List */}
-                        <Text style={styles.historyTitle}>RECENT ENTRIES</Text>
+                        <Text style={styles.historyTitle}>RECENT ENTRIES (HISTORY)</Text>
                         <FlatList
                             data={expenses}
                             keyExtractor={(item) => item.id.toString()}
                             contentContainerStyle={{ paddingBottom: 40 }}
+                            ListEmptyComponent={() => (
+                                <View style={styles.emptyState}>
+                                    <Ionicons name="receipt-outline" size={48} color="#E2E8F0" />
+                                    <Text style={styles.emptyText}>No entries yet</Text>
+                                </View>
+                            )}
                             renderItem={({ item }) => (
                                 <View style={styles.expenseItem}>
                                     <View style={[styles.iconContainer, { backgroundColor: item.type === 'gave' ? '#D1FAE5' : '#FEE2E2' }]}>
@@ -279,12 +335,37 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    historyHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
     historyTitle: {
         fontSize: 12,
         fontWeight: 'bold',
         color: '#94A3B8',
         letterSpacing: 1.5,
-        marginBottom: 16,
+    },
+    countBadge: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#64748B',
+    },
+    emptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 40,
+        opacity: 0.5,
+    },
+    emptyText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#64748B',
     },
     expenseItem: {
         flexDirection: 'row',
