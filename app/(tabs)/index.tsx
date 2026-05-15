@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNotifications } from '@/hooks/useNotifications';
 import FilterTabs from '@/components/chat/FilterTabs';
 import ContactSuggestions from '@/components/chat/ContactSuggestions';
+import NearbySuggestions from '@/components/chat/NearbySuggestions';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import FriendContextMenu from '@/components/chat/FriendContextMenu';
 import { useReceivedRequests } from '@/hooks/useReceivedRequests';
@@ -363,7 +364,12 @@ export default function HomeScreen() {
                 counts={tabCounts}
                 onSearchChange={setSearchQuery}
               />
-              {activeTab === 'all' && !searchQuery && <ContactSuggestions />}
+              {activeTab === 'all' && !searchQuery && (
+                <>
+                  <ContactSuggestions />
+                  <NearbySuggestions />
+                </>
+              )}
             </View>
           }
           renderItem={({ item }) => (

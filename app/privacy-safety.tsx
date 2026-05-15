@@ -70,6 +70,33 @@ export default function PrivacySafetyScreen() {
                         </Text>
                     </View>
 
+                    <Text style={styles.sectionLabel}>DISCOVERY & NOTIFICATIONS</Text>
+
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#10B98110' }]}>
+                            <MaterialCommunityIcons name="radar" size={26} color="#10B981" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Nearby Discovery</Text>
+                            <Text style={styles.tipDesc}>Get notified when other warriors are within 1KM of you.</Text>
+                        </View>
+                        <TouchableOpacity 
+                            onPress={async () => {
+                                const newValue = !useAuthStore.getState().profile?.nearby_notifications_enabled;
+                                await useAuthStore.getState().updateProfile({
+                                    nearby_notifications_enabled: newValue
+                                });
+                            }}
+                            style={{ alignSelf: 'center' }}
+                        >
+                            <Ionicons 
+                                name={useAuthStore.getState().profile?.nearby_notifications_enabled ? "toggle" : "toggle-outline"} 
+                                size={44} 
+                                color={useAuthStore.getState().profile?.nearby_notifications_enabled ? "#10B981" : "#D1D5DB"} 
+                            />
+                        </TouchableOpacity>
+                    </View>
+
                     <Text style={styles.sectionLabel}>ACCOUNT SECURITY</Text>
 
                     <TouchableOpacity 

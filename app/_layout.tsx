@@ -19,9 +19,13 @@ import { SplashScreen } from '@/components/SplashScreen';
 import { BackgroundServices } from '@/components/BackgroundServices';
 import * as Updates from 'expo-updates';
 import { setupDatabase } from '@/lib/database';
+import { useNearbyNotifications } from '@/hooks/useNearbyNotifications';
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
+  
+  // Activate Nearby Tracking & Notifications
+  useNearbyNotifications();
 
   useEffect(() => {
     async function onFetchUpdateAsync() {
