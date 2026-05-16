@@ -11,113 +11,69 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function ContactSuggestions() {
     const { suggestions, loading, permissionGranted, loadSuggestions, sendRequest } = useContactSuggestions();
-    const [isExpanded, setIsExpanded] = useState(false);
 
-    const toggleExpand = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setIsExpanded(!isExpanded);
-    };
-
-    if (permissionGranted === false) {
+    if (permissionGranted === false || suggestions.length === 0) {
         return null;
     }
 
     if (loading && suggestions.length === 0) {
         return (
             <View style={{ padding: 16 }}>
-                <Text style={styles.headerText}>Suggested from Contacts</Text>
-                <ActivityIndicator color="#F68537" style={{ alignSelf: 'flex-start', marginLeft: 20, marginTop: 10 }} />
+                <ActivityIndicator color="#F68537" />
             </View>
         );
     }
 
-    if (suggestions.length === 0) {
-        return null;
-    }
-
     return (
         <View style={styles.container}>
-            <TouchableOpacity 
-                onPress={toggleExpand}
-                activeOpacity={0.7}
-                style={styles.header}
-            >
-                <View style={styles.headerLeft}>
-                    <View style={styles.iconCircle}>
-                        <Ionicons name="people" size={16} color="#F68537" />
-                    </View>
-                    <Text style={styles.headerText}>Suggested from Contacts</Text>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{suggestions.length}</Text>
-                    </View>
-                </View>
-                <View style={styles.headerRight}>
-                    <TouchableOpacity onPress={() => loadSuggestions(true)} style={{ marginRight: 15 }}>
-                        <Ionicons name="refresh" size={18} color="#94A3B8" />
-                    </TouchableOpacity>
-                    <Ionicons 
-                        name={isExpanded ? "chevron-up" : "chevron-down"} 
-                        size={20} 
-                        color="#6B7280" 
-                    />
-                </View>
-            </TouchableOpacity>
-
-            {isExpanded && (
-                <View style={styles.listWrapper}>
-                    <ScrollView 
-                        style={styles.scrollView}
-                        nestedScrollEnabled={true}
-                        showsVerticalScrollIndicator={true}
-                    >
-                        {suggestions.map((user) => (
-                            <View 
-                                key={user.id} 
-                                style={styles.userRow}
-                            >
-                                {user.avatar_url ? (
-                                    <Image 
-                                        source={{ uri: user.avatar_url }} 
-                                        style={styles.avatar}
-                                    />
-                                ) : (
-                                    <View style={styles.initialsAvatar}>
-                                        <Text style={styles.initialsText}>
-                                            {user.username?.substring(0, 2).toUpperCase() || 'UN'}
-                                        </Text>
-                                    </View>
-                                )}
-
-                                <View style={styles.userInfo}>
-                                    <View style={styles.userDetails}>
-                                        <Text style={styles.userName}>{user.username}</Text>
-                                        <Text style={styles.userSubtitle} numberOfLines={1}>
-                                            From your contacts
-                                        </Text>
-                                    </View>
-
-                                    {user.requestStatus === 'pending' ? (
-                                        <View style={styles.pendingBadge}>
-                                            <Text style={styles.pendingText}>Pending</Text>
-                                        </View>
-                                    ) : (
-                                        <TouchableOpacity 
-                                            onPress={() => {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                                sendRequest(user.id);
-                                            }}
-                                            style={styles.addButton}
-                                        >
-                                            <Text style={styles.addButtonText}>Add</Text>
-                                        </TouchableOpacity>
-                                    )}
+            <View style={styles.listWrapper}>
+                <View style={styles.listView}>
+                    {suggestions.map((user) => (
+                        <View 
+                            key={user.id} 
+                            style={styles.userRow}
+                        >
+                            {user.avatar_url ? (
+                                <Image 
+                                    source={{ uri: user.avatar_url }} 
+                                    style={styles.avatar}
+                                />
+                            ) : (
+                                <View style={styles.initialsAvatar}>
+                                    <Text style={styles.initialsText}>
+                                        {user.username?.substring(0, 2).toUpperCase() || 'UN'}
+                                    </Text>
                                 </View>
+                            )}
+
+                            <View style={styles.userInfo}>
+                                <View style={styles.userDetails}>
+                                    <Text style={styles.userName}>{user.username}</Text>
+                                    <Text style={styles.userSubtitle} numberOfLines={1}>
+                                        From your contacts
+                                    </Text>
+                                </View>
+
+                                {user.requestStatus === 'pending' ? (
+                                    <View style={styles.pendingBadge}>
+                                        <Text style={styles.pendingText}>Pending</Text>
+                                    </View>
+                                ) : (
+                                    <TouchableOpacity 
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            sendRequest(user.id);
+                                        }}
+                                        style={styles.addButton}
+                                    >
+                                        <Text style={styles.addButtonText}>Add</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
-                        ))}
-                    </ScrollView>
+                        </View>
+                    ))}
                 </View>
-            )}
+            </View>
         </View>
     );
 }
@@ -178,8 +134,8 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: 'rgba(0,0,0,0.05)'
     },
-    scrollView: {
-        maxHeight: 280, // Shows about 4-5 items before scrolling
+    listView: {
+        paddingBottom: 8
     },
     userRow: {
         flexDirection: 'row',

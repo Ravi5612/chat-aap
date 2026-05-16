@@ -216,21 +216,23 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     }
 
     if (isSystemMsg) {
+        const isScreenshot = message.message === 'SYSTEM_MSG: SCREENSHOT_TAKEN';
+        
         return (
             <View style={{ 
                 flexDirection: 'row', 
-                justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', 
-                marginVertical: 4,
+                justifyContent: 'center', 
+                marginVertical: 12,
                 paddingHorizontal: 16,
                 width: '100%'
             }}>
                 <View style={{ 
-                    backgroundColor: isCurrentUser ? '#FFF7ED' : '#F9FAFB', 
+                    backgroundColor: isScreenshot ? '#FEF2F2' : (isCurrentUser ? '#FFF7ED' : '#F9FAFB'), 
                     paddingHorizontal: 14, 
                     paddingVertical: 8, 
                     borderRadius: 12, 
                     borderWidth: 1, 
-                    borderColor: isCurrentUser ? '#FFEDD5' : '#F3F4F6',
+                    borderColor: isScreenshot ? '#FECACA' : (isCurrentUser ? '#FFEDD5' : '#F3F4F6'),
                     flexDirection: 'row', 
                     alignItems: 'center', 
                     gap: 8,
@@ -241,14 +243,20 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     shadowRadius: 1,
                     elevation: 1
                 }}>
-                    <Ionicons name="ban-outline" size={16} color={isCurrentUser ? '#F97316' : '#6B7280'} />
+                    <Ionicons 
+                        name={isScreenshot ? "scan-outline" : "ban-outline"} 
+                        size={16} 
+                        color={isScreenshot ? '#EF4444' : (isCurrentUser ? '#F97316' : '#6B7280')} 
+                    />
                     <Text style={{ 
                         fontSize: 12, 
                         fontWeight: '700', 
-                        color: isCurrentUser ? '#C2410C' : '#374151',
+                        color: isScreenshot ? '#DC2626' : (isCurrentUser ? '#C2410C' : '#374151'),
                         fontStyle: 'italic'
                     }}>
-                        {isCurrentUser ? 'You deleted this message' : 'This message was deleted'}
+                        {isScreenshot 
+                            ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend') 
+                            : (isCurrentUser ? 'You deleted this message' : 'This message was deleted')}
                     </Text>
                 </View>
             </View>

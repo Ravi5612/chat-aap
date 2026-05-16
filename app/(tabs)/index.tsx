@@ -42,6 +42,9 @@ export default function HomeScreen() {
   const [lockModalMode, setLockModalMode] = useState<'verify' | 'setup'>('verify');
   const [lockModalTask, setLockModalTask] = useState<'open' | 'unlock'>('open');
   const [pendingLockedFriend, setPendingLockedFriend] = useState<any>(null);
+  const [showContactSuggestions, setShowContactSuggestions] = useState(true);
+  const [showNearbySuggestions, setShowNearbySuggestions] = useState(true);
+  const [suggestionTab, setSuggestionTab] = useState<'contacts' | 'nearby'>('contacts');
 
 
   // Ensure profile is loaded when Home screen mounts
@@ -353,6 +356,7 @@ export default function HomeScreen() {
         </GlassHeader>
 
         <FlatList
+          style={{ flex: 1 }}
           data={filteredItems}
           keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
           contentContainerStyle={{ paddingBottom: 110 }}
@@ -364,11 +368,54 @@ export default function HomeScreen() {
                 counts={tabCounts}
                 onSearchChange={setSearchQuery}
               />
-              {activeTab === 'all' && !searchQuery && (
-                <>
-                  <ContactSuggestions />
-                  <NearbySuggestions />
-                </>
+              {activeTab === 'all' && !searchQuery && (showContactSuggestions || showNearbySuggestions) && (
+                <View style={{ marginTop: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '900', color: '#64748B', letterSpacing: 0.5 }}>SUGGESTIONS FROM</Text>
+                      <View style={{ flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 20, padding: 2 }}>
+                        {showContactSuggestions && (
+                          <TouchableOpacity 
+                            onPress={() => setSuggestionTab('contacts')}
+                            style={{ 
+                              paddingHorizontal: 12, 
+                              paddingVertical: 4, 
+                              borderRadius: 18, 
+                              backgroundColor: suggestionTab === 'contacts' ? '#F68537' : 'transparent' 
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: suggestionTab === 'contacts' ? 'white' : '#64748B' }}>CONTACTS</Text>
+                          </TouchableOpacity>
+                        )}
+                        {showNearbySuggestions && (
+                          <TouchableOpacity 
+                            onPress={() => setSuggestionTab('nearby')}
+                            style={{ 
+                              paddingHorizontal: 12, 
+                              paddingVertical: 4, 
+                              borderRadius: 18, 
+                              backgroundColor: suggestionTab === 'nearby' ? '#F68537' : 'transparent' 
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: suggestionTab === 'nearby' ? 'white' : '#64748B' }}>NEARBY</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => {
+                      setShowContactSuggestions(false);
+                      setShowNearbySuggestions(false);
+                    }}>
+                      <Ionicons name="close-circle" size={20} color="#94A3B8" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {suggestionTab === 'contacts' && showContactSuggestions ? (
+                    <ContactSuggestions />
+                  ) : (
+                    showNearbySuggestions && <NearbySuggestions />
+                  )}
+                </View>
               )}
             </View>
           }

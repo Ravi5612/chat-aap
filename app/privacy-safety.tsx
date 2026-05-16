@@ -97,6 +97,35 @@ export default function PrivacySafetyScreen() {
                         </TouchableOpacity>
                     </View>
 
+                    <Text style={styles.sectionLabel}>PRIVACY SETTINGS</Text>
+
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#8B5CF610' }]}>
+                            <Ionicons name="scan-outline" size={26} color="#8B5CF6" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Allow Screenshots</Text>
+                            <Text style={styles.tipDesc}>Let others take screenshots of your chat. We'll still notify you.</Text>
+                        </View>
+                        <TouchableOpacity 
+                            onPress={async () => {
+                                // Default to true if undefined
+                                const current = useAuthStore.getState().profile?.allow_screenshot;
+                                const newValue = current === false ? true : false;
+                                await useAuthStore.getState().updateProfile({
+                                    allow_screenshot: newValue
+                                });
+                            }}
+                            style={{ alignSelf: 'center' }}
+                        >
+                            <Ionicons 
+                                name={useAuthStore.getState().profile?.allow_screenshot !== false ? "toggle" : "toggle-outline"} 
+                                size={44} 
+                                color={useAuthStore.getState().profile?.allow_screenshot !== false ? "#8B5CF6" : "#D1D5DB"} 
+                            />
+                        </TouchableOpacity>
+                    </View>
+
                     <Text style={styles.sectionLabel}>ACCOUNT SECURITY</Text>
 
                     <TouchableOpacity 

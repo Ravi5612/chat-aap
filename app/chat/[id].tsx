@@ -21,6 +21,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useChatStore } from '@/store/useChatStore';
 import * as Haptics from 'expo-haptics';
+import * as ScreenCapture from 'expo-screen-capture';
 import { 
     saveLocalMessage, 
     getLocalMessages, 
@@ -269,6 +270,47 @@ export default function ChatScreen() {
         markMessagesAsReadLocally();
         syncDeliveredReceipts(); // Sync delivered for messages received while app was closed
     }, [roomId]);
+
+    // Screenshot Detection and Prevention
+    useEffect(() => {
+        let subscription: ScreenCapture.Subscription | null = null;
+        let isPrevented = false;
+
+        const setupScreenshotRules = async () => {
+            if (isGroup === 'true') return; // Group chat screenshot logic can be different or disabled
+
+            // Check if the friend has explicitly disabled screenshots
+            // We assume true if not set, meaning they allow screenshots by default
+            const friendAllowsScreenshot = friendData?.allow_screenshot !== false;
+            
+            try {
+                if (!friendAllowsScreenshot) {
+                    await ScreenCapture.preventScreenCaptureAsync();
+                    isPrevented = true;
+                } else {
+                    await ScreenCapture.allowScreenCaptureAsync();
+                }
+
+                subscription = ScreenCapture.addScreenshotListener(() => {
+                    // Send system message when screenshot is taken
+                    if (handleSendMessageOriginal) {
+                        handleSendMessageOriginal('SYSTEM_MSG: SCREENSHOT_TAKEN');
+                    }
+                });
+            } catch (e) {
+                console.warn('[SCREENSHOT] Error setting up rules:', e);
+            }
+        };
+
+        setupScreenshotRules();
+
+        return () => {
+            if (subscription) subscription.remove();
+            if (isPrevented) {
+                ScreenCapture.allowScreenCaptureAsync().catch(() => {});
+            }
+        };
+    }, [friendData?.allow_screenshot, isGroup, handleSendMessageOriginal]);
 
     // Batch sync read receipts every 10 seconds
     useEffect(() => {

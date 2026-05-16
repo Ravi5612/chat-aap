@@ -23,6 +23,7 @@ export default function EditProfileScreen() {
         phone: profile?.phone || '',
         bio: profile?.bio || '',
         avatar_url: profile?.avatar_url || '',
+        gender: profile?.gender || '',
         show_email: profile?.show_email ?? false,
         show_phone: profile?.show_phone ?? false,
         show_bio: profile?.show_bio ?? true,
@@ -113,6 +114,7 @@ export default function EditProfileScreen() {
             username: formData.username,
             phone: formData.phone,
             bio: formData.bio,
+            gender: formData.gender || null,
             show_email: formData.show_email,
             show_phone: formData.show_phone,
             show_bio: formData.show_bio,
@@ -236,6 +238,43 @@ export default function EditProfileScreen() {
                                 multiline
                                 textAlignVertical="top"
                             />
+                        </View>
+
+                        {/* Gender Selection */}
+                        <View>
+                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>Gender</Text>
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                {[
+                                    { label: 'Male', value: 'male', icon: 'male', color: '#3B82F6', bg: '#EFF6FF' },
+                                    { label: 'Female', value: 'female', icon: 'female', color: '#EC4899', bg: '#FDF2F8' },
+                                    { label: 'Other', value: 'other', icon: 'person', color: '#8B5CF6', bg: '#F5F3FF' },
+                                ].map((option) => (
+                                    <TouchableOpacity
+                                        key={option.value}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            setFormData(prev => ({ ...prev, gender: option.value }));
+                                        }}
+                                        style={{
+                                            flex: 1,
+                                            alignItems: 'center',
+                                            paddingVertical: 16,
+                                            borderRadius: 16,
+                                            borderWidth: 2,
+                                            borderColor: formData.gender === option.value ? option.color : '#E5E7EB',
+                                            backgroundColor: formData.gender === option.value ? option.bg : 'white',
+                                        }}
+                                    >
+                                        <Ionicons name={option.icon as any} size={26} color={formData.gender === option.value ? option.color : '#9CA3AF'} />
+                                        <Text style={{
+                                            marginTop: 6,
+                                            fontSize: 13,
+                                            fontWeight: 'bold',
+                                            color: formData.gender === option.value ? option.color : '#9CA3AF'
+                                        }}>{option.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
                         </View>
 
                         {/* Other Privacy Settings */}
