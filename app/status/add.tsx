@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StyleSheet, Image, Alert, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StyleSheet, Image, Alert, Dimensions, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -25,6 +25,9 @@ export default function AddStatus() {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [showFriendPicker, setShowFriendPicker] = useState(false);
     const { friends } = (require('@/hooks/useFriends').useFriends)();
+
+    const mediaInputRef = React.useRef<TextInput>(null);
+    const textInputRef = React.useRef<TextInput>(null);
 
     // Custom Video playback preview state
     const videoRef = React.useRef<any>(null);
@@ -302,7 +305,16 @@ export default function AddStatus() {
                         )}
                         
                         {/* Premium Bottom Input Bar for Media */}
-                        <View style={[styles.mediaInputContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                        <View 
+                            style={[
+                                styles.mediaInputContainer, 
+                                { 
+                                    bottom: showEmojiPicker ? 280 : 0,
+                                    paddingBottom: showEmojiPicker ? 10 : Math.max(insets.bottom, 20) 
+                                }
+                            ]}
+                            onStartShouldSetResponder={() => true}
+                        >
                             {/* Visual Video Trimmer Slider */}
                             {(selectedMedia.type === 'video' || (selectedMedia.uri && selectedMedia.uri.toLowerCase().endsWith('.mp4'))) && duration > 0 && (
                                 <View style={{ marginBottom: 15 }}>
@@ -318,7 +330,7 @@ export default function AddStatus() {
                                         </Text>
                                     </View>
                                     <View 
-                                        style={{ height: 26, justifyContent: 'center' }}
+                                        style={{ height: 40, justifyContent: 'center' }}
                                         onStartShouldSetResponder={() => true}
                                         onResponderGrant={handleTouch}
                                         onResponderMove={handleTouch}
@@ -376,18 +388,28 @@ export default function AddStatus() {
                             )}
                             <View style={styles.inputWrapper}>
                                 <TouchableOpacity 
-                                    onPress={() => setShowEmojiPicker(true)}
+                                    onPress={() => {
+                                        if (showEmojiPicker) {
+                                            setShowEmojiPicker(false);
+                                            mediaInputRef.current?.focus();
+                                        } else {
+                                            Keyboard.dismiss();
+                                            setShowEmojiPicker(true);
+                                        }
+                                    }}
                                     style={styles.iconBtn}
                                 >
-                                    <Ionicons name="happy-outline" size={24} color="white" />
+                                    <Ionicons name={showEmojiPicker ? "keyboard-outline" : "happy-outline"} size={24} color="white" />
                                 </TouchableOpacity>
                                 
                                 <TextInput
+                                    ref={mediaInputRef}
                                     placeholder="Add a caption..."
                                     placeholderTextColor="rgba(255,255,255,0.6)"
                                     style={styles.mediaTextInput}
                                     value={content}
                                     onChangeText={setContent}
+                                    onFocus={() => setShowEmojiPicker(false)}
                                     multiline
                                 />
 
@@ -412,25 +434,35 @@ export default function AddStatus() {
                             keyboardShouldPersistTaps="handled"
                         >
                             <TextInput
+                                ref={textInputRef}
                                 multiline
                                 placeholder="Type your status..."
                                 placeholderTextColor="rgba(255,255,255,0.4)"
                                 style={styles.textInput}
                                 value={content}
                                 onChangeText={setContent}
+                                onFocus={() => setShowEmojiPicker(false)}
                                 autoFocus
                                 maxLength={250}
                             />
                         </ScrollView>
 
                         {/* Color Selection & Footer */}
-                        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 10 }]}>
+                        <View style={[styles.footer, { paddingBottom: showEmojiPicker ? 290 : Math.max(insets.bottom, 20) + 10 }]}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 15 }}>
                                 <TouchableOpacity 
-                                    onPress={() => setShowEmojiPicker(true)}
+                                    onPress={() => {
+                                        if (showEmojiPicker) {
+                                            setShowEmojiPicker(false);
+                                            textInputRef.current?.focus();
+                                        } else {
+                                            Keyboard.dismiss();
+                                            setShowEmojiPicker(true);
+                                        }
+                                    }}
                                     style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: 10, borderRadius: 20 }}
                                 >
-                                    <Ionicons name="happy-outline" size={24} color="white" />
+                                    <Ionicons name={showEmojiPicker ? "keyboard-outline" : "happy-outline"} size={24} color="white" />
                                 </TouchableOpacity>
                             </View>
 
@@ -460,13 +492,28 @@ export default function AddStatus() {
                 )}
             </KeyboardAvoidingView>
 
-            <EmojiPickerModal 
-                visible={showEmojiPicker}
-                onClose={() => setShowEmojiPicker(false)}
-                onSelect={(emoji) => {
-                    onEmojiSelect(emoji);
-                }}
-            />
+            {showEmojiPicker && (
+                <View style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 280,
+                    backgroundColor: 'white',
+                    zIndex: 99,
+                    borderTopWidth: 1,
+                    borderTopColor: '#E2E8F0'
+                }}>
+                    <EmojiPickerModal 
+                        visible={showEmojiPicker}
+                        onClose={() => setShowEmojiPicker(false)}
+                        onSelect={(emoji) => {
+                            onEmojiSelect(emoji);
+                        }}
+                        isInline={true}
+                    />
+                </View>
+            )}
 
             {/* Privacy Modal */}
             {showPrivacyModal && (
