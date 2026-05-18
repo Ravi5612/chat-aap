@@ -5,9 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { ResizeMode, Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFriendsStore } from '@/store/useFriendsStore';
 
 const { width, height } = Dimensions.get('window');
 const BG_COLORS = ['#F68537', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#1E293B', '#FF4E50', '#000000'];
@@ -18,6 +19,7 @@ export default function AddStatus() {
     const [content, setContent] = useState('');
     const [bgColor, setBgColor] = useState(BG_COLORS[0]);
     const [loading, setLoading] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [selectedMedia, setSelectedMedia] = useState<any>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [privacy, setPrivacy] = useState<'all' | 'selected'>('all');
@@ -104,59 +106,111 @@ export default function AddStatus() {
 
     const handlePost = async () => {
         if (!content.trim() && !selectedMedia) return;
-        setLoading(true);
+        if (isSubmittingRef.current) return;
+        
+        isSubmittingRef.current = true;
 
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not logged in');
 
-            let mediaUrl = null;
-            let mediaType = 'text';
-
-            if (selectedMedia) {
-                const isVideo = selectedMedia.type === 'video' || (selectedMedia.uri && selectedMedia.uri.toLowerCase().endsWith('.mp4'));
-                const uploadResult = await uploadChatMessageMedia(
-                    selectedMedia.uri,
-                    isVideo ? 'video' : 'image',
-                    user.id
-                );
-
-                let finalUrl = uploadResult.url;
-                if (isVideo && duration > 0) {
-                    finalUrl += `?trim_start=${trimStart}&trim_end=${trimEnd}`;
-                }
-
-                mediaUrl = finalUrl;
-                mediaType = isVideo ? 'video' : 'image';
-            }
-
-            const { encryptText, getChatKey } = await import('@/utils/chatCrypto');
-            // For status, we use a self-encryption key so only authorized clients can read it
-            const statusKey = await getChatKey(user.id, user.id);
-
-            const encryptedContent = content.trim() ? await encryptText(content.trim(), statusKey) : null;
-            const encryptedMediaUrl = mediaUrl ? await encryptText(mediaUrl, statusKey) : null;
-
-            const statusData = {
+            const tempId = 'temp-' + Date.now();
+            const mediaType = selectedMedia ? (selectedMedia.type === 'video' || selectedMedia.uri.toLowerCase().endsWith('.mp4') ? 'video' : 'image') : 'text';
+            
+            // Create a gorgeous optimistic status object
+            const tempStatus = {
+                id: tempId,
                 user_id: user.id,
-                content: encryptedContent,
+                content: content.trim() || null,
                 media_type: mediaType,
-                media_url: encryptedMediaUrl,
+                media_url: selectedMedia?.uri || null,
                 background_color: selectedMedia ? null : bgColor,
+                created_at: new Date().toISOString(),
                 expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
                 is_deleted: false,
-                privacy_type: privacy,
-                viewer_ids: privacy === 'selected' ? selectedViewerIds : null
+                isUploading: true
             };
 
-            const { error } = await supabase.from('statuses').insert([statusData]);
-            if (error) throw error;
+            // Retrieve the friends store and update local myStatuses state
+            const friendsStore = useFriendsStore.getState();
+            const currentMyStatuses = friendsStore.myStatuses || { active: [] };
+            
+            friendsStore.setOnlineUsers(friendsStore.onlineUsers); // Refresh listeners
+            useFriendsStore.setState({
+                myStatuses: {
+                    ...currentMyStatuses,
+                    active: [tempStatus, ...(currentMyStatuses.active || [])]
+                }
+            });
+
+            // Go back instantly! No delay, no spinner!
             router.back();
+
+            // Run the actual media uploading & Supabase posting in the background asynchronously
+            (async () => {
+                try {
+                    let mediaUrl = null;
+
+                    if (selectedMedia) {
+                        const uploadResult = await uploadChatMessageMedia(
+                            selectedMedia.uri, 
+                            mediaType,
+                            user.id
+                        );
+                        
+                        let finalUrl = uploadResult.url;
+                        if (mediaType === 'video' && duration > 0) {
+                            finalUrl += `?trim_start=${trimStart}&trim_end=${trimEnd}`;
+                        }
+                        mediaUrl = finalUrl;
+                    }
+
+                    const { encryptText, getChatKey } = await import('@/utils/chatCrypto');
+                    const statusKey = await getChatKey(user.id, user.id); 
+
+                    const encryptedContent = content.trim() ? await encryptText(content.trim(), statusKey) : null;
+                    const encryptedMediaUrl = mediaUrl ? await encryptText(mediaUrl, statusKey) : null;
+
+                    const statusData = {
+                        user_id: user.id,
+                        content: encryptedContent,
+                        media_type: mediaType,
+                        media_url: encryptedMediaUrl,
+                        background_color: selectedMedia ? null : bgColor,
+                        expires_at: tempStatus.expires_at,
+                        is_deleted: false,
+                        privacy_type: privacy,
+                        viewer_ids: privacy === 'selected' ? selectedViewerIds : null
+                    };
+
+                    const { error } = await supabase.from('statuses').insert([statusData]);
+                    if (error) throw error;
+
+                    // Sync friends and statuses from Supabase to correctly replace the temporary status
+                    await friendsStore.loadFriends(user.id, true);
+
+                } catch (error: any) {
+                    console.error('Background status upload failed:', error);
+                    Alert.alert('Status Failed', 'Failed to upload your status. Please try again.');
+
+                    // Remove failed optimistic status
+                    const refreshedStore = useFriendsStore.getState();
+                    const currentActive = refreshedStore.myStatuses?.active || [];
+                    useFriendsStore.setState({
+                        myStatuses: {
+                            ...refreshedStore.myStatuses,
+                            active: currentActive.filter((s: any) => s.id !== tempId)
+                        }
+                    });
+                } finally {
+                    isSubmittingRef.current = false;
+                }
+            })();
+
         } catch (error: any) {
-            console.error('AddStatus Error:', error);
-            Alert.alert('Error', 'Failed to post status');
-        } finally {
-            setLoading(false);
+            console.error('AddStatus Initialization Error:', error);
+            Alert.alert('Error', error.message || 'Failed to initialize status post');
+            isSubmittingRef.current = false;
         }
     };
 
