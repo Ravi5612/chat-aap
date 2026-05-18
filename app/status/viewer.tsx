@@ -39,98 +39,120 @@ export default function StatusViewer() {
             return;
         }
 
-        console.log('StatusViewer: Fetching statuses for user:', userId, 'isArchive:', isArchive, 'date:', date);
+        try {
+            console.log('StatusViewer: Fetching statuses for user:', userId, 'isArchive:', isArchive, 'date:', date);
 
-        const now = new Date();
-        const nowIso = now.toISOString();
-
-        // 1. Fetch statuses only (robust against join errors)
-        let query = supabase
-            .from('statuses')
-            .select('*')
-            .eq('user_id', userId)
-            .or('is_deleted.is.null,is_deleted.eq.false');
-
-        if (isArchive === 'true') {
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            query = query.gt('created_at', sevenDaysAgo.toISOString());
-        } else {
-            query = query.gt('expires_at', nowIso);
-        }
-
-        const { data: statusData, error: statusError } = await query.order('created_at', { ascending: true });
-
-        if (statusError) {
-            console.error('StatusViewer: Status Fetch Error:', statusError);
-        }
-
-        // Filter by privacy (since RLS might be complex, we do it here)
-        let accessibleStatuses = statusData || [];
-        if (accessibleStatuses.length > 0 && currentUser) {
-            accessibleStatuses = accessibleStatuses.filter((s: any) => {
-                if (s.user_id === currentUser.id) return true;
-                if (s.privacy_type === 'all' || !s.privacy_type) return true;
-                if (s.privacy_type === 'selected' && s.viewer_ids?.includes(currentUser.id)) return true;
-                return false;
-            });
-        }
-
-        // 2. Fetch profile separately (ensure header info is available)
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('username, avatar_url')
-            .eq('id', userId)
-            .single();
-
-        if (accessibleStatuses.length > 0) {
-            const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
-            // Use owner's self-key for status decryption
-            const statusKey = await getChatKey(userId as string, userId as string);
-
-            const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
-                let decryptedContent = s.content;
-                let decryptedMediaUrl = s.media_url;
-
-                if (s.content && s.content.trim().startsWith('{')) {
-                    try { decryptedContent = await decryptText(s.content, statusKey); } catch (e) {}
+            // 1. Connection to Local Optimistic DB: If own status, load instantly from local store!
+            if (currentUser && userId === currentUser.id) {
+                const localActive = useFriendsStore.getState().myStatuses?.active || [];
+                if (localActive.length > 0) {
+                    const enriched = localActive.map((s: any) => ({
+                        ...s,
+                        profiles: s.profiles || {
+                            username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Me',
+                            avatar_url: currentUser.user_metadata?.avatar_url || null
+                        }
+                    }));
+                    console.log('StatusViewer: Loaded', enriched.length, 'own statuses instantly from local optimistic store.');
+                    setStatuses(enriched);
+                    setLoading(false);
+                    return;
                 }
-                if (s.media_url && s.media_url.trim().startsWith('{')) {
-                    try { decryptedMediaUrl = await decryptText(s.media_url, statusKey); } catch (e) {}
-                }
+            }
 
-                return {
-                    ...s,
-                    content: decryptedContent,
-                    media_url: decryptedMediaUrl,
-                    profiles: profile || { username: 'User', avatar_url: null }
-                };
-            }));
+            const now = new Date();
+            const nowIso = now.toISOString();
 
-            let filteredData = enrichedData;
-            
-            // If specific date requested (History bundle)
-            if (isArchive === 'true' && date) {
-                const now = new Date();
-                filteredData = enrichedData.filter(s => {
-                    const sDate = new Date(s.created_at);
-                    const diffDays = Math.floor((now.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+            // 2. Fallback / Friends: Fetch statuses from Supabase
+            let query = supabase
+                .from('statuses')
+                .select('*')
+                .eq('user_id', userId)
+                .or('is_deleted.is.null,is_deleted.eq.false');
 
-                    let dKey = '';
-                    if (diffDays === 0) dKey = 'Today';
-                    else if (diffDays === 1) dKey = 'Yesterday';
-                    else dKey = sDate.toLocaleDateString('en-US', { weekday: 'long' });
+            if (isArchive === 'true') {
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                query = query.gt('created_at', sevenDaysAgo.toISOString());
+            } else {
+                query = query.gt('expires_at', nowIso);
+            }
 
-                    return dKey === date;
+            const { data: statusData, error: statusError } = await query.order('created_at', { ascending: true });
+
+            if (statusError) {
+                console.error('StatusViewer: Status Fetch Error:', statusError);
+            }
+
+            // Filter by privacy
+            let accessibleStatuses = statusData || [];
+            if (accessibleStatuses.length > 0 && currentUser) {
+                accessibleStatuses = accessibleStatuses.filter((s: any) => {
+                    if (s.user_id === currentUser.id) return true;
+                    if (s.privacy_type === 'all' || !s.privacy_type) return true;
+                    if (s.privacy_type === 'selected' && s.viewer_ids?.includes(currentUser.id)) return true;
+                    return false;
                 });
             }
 
-            console.log('StatusViewer: Status Data count:', accessibleStatuses.length, 'Filtered:', filteredData.length);
-            setStatuses(filteredData);
-        } else {
+            // Fetch profile separately
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('username, avatar_url')
+                .eq('id', userId)
+                .single();
+
+            if (accessibleStatuses.length > 0) {
+                const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
+                const statusKey = await getChatKey(userId as string, userId as string);
+
+                const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
+                    let decryptedContent = s.content;
+                    let decryptedMediaUrl = s.media_url;
+
+                    if (s.content && s.content.trim().startsWith('{')) {
+                        try { decryptedContent = await decryptText(s.content, statusKey); } catch (e) {}
+                    }
+                    if (s.media_url && s.media_url.trim().startsWith('{')) {
+                        try { decryptedMediaUrl = await decryptText(s.media_url, statusKey); } catch (e) {}
+                    }
+
+                    return {
+                        ...s,
+                        content: decryptedContent,
+                        media_url: decryptedMediaUrl,
+                        profiles: profile || { username: 'User', avatar_url: null }
+                    };
+                }));
+
+                let filteredData = enrichedData;
+                
+                if (isArchive === 'true' && date) {
+                    const nowRef = new Date();
+                    filteredData = enrichedData.filter(s => {
+                        const sDate = new Date(s.created_at);
+                        const diffDays = Math.floor((nowRef.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+
+                        let dKey = '';
+                        if (diffDays === 0) dKey = 'Today';
+                        else if (diffDays === 1) dKey = 'Yesterday';
+                        else dKey = sDate.toLocaleDateString('en-US', { weekday: 'long' });
+
+                        return dKey === date;
+                    });
+                }
+
+                console.log('StatusViewer: Status Data count:', accessibleStatuses.length, 'Filtered:', filteredData.length);
+                setStatuses(filteredData);
+            } else {
+                setStatuses([]);
+            }
+        } catch (error) {
+            console.error('StatusViewer: Critical Fetch Error:', error);
             setStatuses([]);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     useEffect(() => {
@@ -138,7 +160,7 @@ export default function StatusViewer() {
         setProgress(0);
         setPaused(false);
         fetchStatuses();
-    }, [userId, isArchive, date, initialIndex]);
+    }, [userId, isArchive, date, initialIndex, currentUser]);
 
     // Mark as seen and fetch viewers (if owner)
     const currentStatus = statuses[currentIndex];
@@ -655,16 +677,6 @@ export default function StatusViewer() {
                                 <Text style={{ fontSize: 12, color: '#94A3B8' }}>Only you can see this</Text>
                             </View>
                             <View style={{ flexDirection: 'row', gap: 12 }}>
-                                <TouchableOpacity 
-                                    onPress={() => {
-                                        setShowViewers(false);
-                                        handleDeleteStatus();
-                                    }}
-                                    style={{ backgroundColor: '#FEF2F2', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                                >
-                                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                                    <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>Delete</Text>
-                                </TouchableOpacity>
                                 <TouchableOpacity onPress={() => setShowViewers(false)}>
                                     <Ionicons name="close-circle" size={28} color="#94A3B8" />
                                 </TouchableOpacity>
