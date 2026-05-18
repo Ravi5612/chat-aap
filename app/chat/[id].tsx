@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
+import { View, KeyboardAvoidingView, Platform, Text, TouchableOpacity, ActivityIndicator, Alert, Clipboard, Keyboard, StatusBar, StyleSheet, ScrollView, NativeModules } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -21,7 +22,6 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useChatStore } from '@/store/useChatStore';
 import * as Haptics from 'expo-haptics';
-import * as ScreenCapture from 'expo-screen-capture';
 import { 
     saveLocalMessage, 
     getLocalMessages, 
@@ -36,7 +36,19 @@ import {
 } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
 
-export default function ChatScreen() {
+function ChatScreen() {
+    const [debugLogs, setDebugLogs] = useState<string[]>([]);
+    const [showVisualLogs, setShowVisualLogs] = useState(false);
+
+    const logDebug = useCallback((msg: string) => {
+        console.log(`[DEBUG_CHAT] ${msg}`);
+        setDebugLogs(prev => {
+            const next = [...prev.slice(-29), `${new Date().toLocaleTimeString()}: ${msg}`];
+            SecureStore.setItemAsync('CHAT_DEBUG_LOGS', JSON.stringify(next)).catch(() => {});
+            return next;
+        });
+    }, []);
+
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
     const insets = useSafeAreaInsets();
     const headerHeight = 0;
@@ -152,15 +164,19 @@ export default function ChatScreen() {
 
     const loadDraft = async () => {
         try {
+            logDebug("Loading local draft for room: " + roomId);
             const { db } = useDbStore.getState();
             if (db && roomId) {
                 const savedDraft = await getLocalDraft(db, roomId);
                 setDraft(savedDraft || '');
+                logDebug("Draft loaded: " + (savedDraft ? savedDraft.substring(0, 15) : "empty"));
                 setIsDraftLoaded(true);
             } else {
+                logDebug("DB not ready for draft loading");
                 setIsDraftLoaded(true); // Don't block UI if DB not ready
             }
-        } catch (e) {
+        } catch (e: any) {
+            logDebug("Draft load error: " + e.message);
             console.error('[DRAFT] Load failed:', e);
             setIsDraftLoaded(true);
         }
@@ -178,7 +194,7 @@ export default function ChatScreen() {
         try {
             const { db } = useDbStore.getState();
             if (db && roomId) {
-                console.log(`[DB] Loading shared wallpaper for room: ${roomId}`);
+                logDebug(`Loading shared wallpaper for room: ${roomId}`);
                 let uri = await getLocalWallpaper(db, roomId);
                 
                 // Only fetch from Supabase if we don't have it locally or just to sync
@@ -193,22 +209,31 @@ export default function ChatScreen() {
                     await saveLocalWallpaper(db, roomId, uri);
                 }
                 setWallpaper(uri);
+                logDebug("Wallpaper loaded successfully: " + (uri ? "Yes" : "No"));
+            } else {
+                logDebug("DB not ready for wallpaper loading");
             }
-        } catch (e) {
+        } catch (e: any) {
+            logDebug("Wallpaper load error: " + e.message);
             console.error('[WALLPAPER] Load failed:', e);
         }
     };
 
     const markMessagesAsReadLocally = useCallback(async () => {
         try {
+            logDebug("Marking messages as read locally...");
             const { db } = useDbStore.getState();
             if (db && safeFriendId && currentUser?.id) {
                 await db.runAsync(
                     'UPDATE messages SET status = ? WHERE receiver_id = ? AND sender_id = ? AND status != ?',
                     ['read', currentUser.id, safeFriendId, 'read']
                 );
+                logDebug("Messages marked as read locally");
+            } else {
+                logDebug("DB/Ids not ready for marking read");
             }
-        } catch (e) {
+        } catch (e: any) {
+            logDebug("Mark read failed: " + e.message);
             console.warn('[DB] Mark read failed:', e);
         }
     }, [safeFriendId, currentUser?.id]);
@@ -264,53 +289,45 @@ export default function ChatScreen() {
     }, [safeFriendId, currentUser?.id]);
 
     useEffect(() => {
+        SecureStore.getItemAsync('CHAT_DEBUG_LOGS').then(saved => {
+            let initialLogs: string[] = [];
+            if (saved) {
+                try {
+                    initialLogs = JSON.parse(saved);
+                } catch {}
+            }
+            const nextLogs = [...initialLogs.slice(-29), `--- MOUNT ---`];
+            setDebugLogs(nextLogs);
+            SecureStore.setItemAsync('CHAT_DEBUG_LOGS', JSON.stringify(nextLogs)).catch(() => {});
+
+            // Run logs with delay to ensure state hydration completes
+            setTimeout(() => {
+                logDebug("--- CHAT SCREEN MOUNTED/CHANGED ---");
+                logDebug("Room ID: " + roomId);
+                logDebug("Friend ID: " + safeFriendId);
+                logDebug("Is Group Chat: " + isGroup);
+                logDebug("Current User: " + (currentUser?.email || currentUser?.id || "None"));
+            }, 100);
+        }).catch(() => {
+            logDebug("--- CHAT SCREEN MOUNTED/CHANGED ---");
+            logDebug("Room ID: " + roomId);
+            logDebug("Friend ID: " + safeFriendId);
+            logDebug("Is Group Chat: " + isGroup);
+            logDebug("Current User: " + (currentUser?.email || currentUser?.id || "None"));
+        });
+        
         setWallpaper(null);
+        logDebug("Triggering loadWallpaper()...");
         loadWallpaper();
+        logDebug("Triggering loadDraft()...");
         loadDraft();
+        logDebug("Triggering markMessagesAsReadLocally()...");
         markMessagesAsReadLocally();
+        logDebug("Triggering syncDeliveredReceipts()...");
         syncDeliveredReceipts(); // Sync delivered for messages received while app was closed
     }, [roomId]);
 
-    // Screenshot Detection and Prevention
-    useEffect(() => {
-        let subscription: ScreenCapture.Subscription | null = null;
-        let isPrevented = false;
 
-        const setupScreenshotRules = async () => {
-            if (isGroup === 'true') return; // Group chat screenshot logic can be different or disabled
-
-            // Check if the friend has explicitly disabled screenshots
-            // We assume true if not set, meaning they allow screenshots by default
-            const friendAllowsScreenshot = friendData?.allow_screenshot !== false;
-            
-            try {
-                if (!friendAllowsScreenshot) {
-                    await ScreenCapture.preventScreenCaptureAsync();
-                    isPrevented = true;
-                } else {
-                    await ScreenCapture.allowScreenCaptureAsync();
-                }
-
-                subscription = ScreenCapture.addScreenshotListener(() => {
-                    // Send system message when screenshot is taken
-                    if (handleSendMessageOriginal) {
-                        handleSendMessageOriginal('SYSTEM_MSG: SCREENSHOT_TAKEN');
-                    }
-                });
-            } catch (e) {
-                console.warn('[SCREENSHOT] Error setting up rules:', e);
-            }
-        };
-
-        setupScreenshotRules();
-
-        return () => {
-            if (subscription) subscription.remove();
-            if (isPrevented) {
-                ScreenCapture.allowScreenCaptureAsync().catch(() => {});
-            }
-        };
-    }, [friendData?.allow_screenshot, isGroup, handleSendMessageOriginal]);
 
     // Batch sync read receipts every 10 seconds
     useEffect(() => {
@@ -638,9 +655,9 @@ export default function ChatScreen() {
                         <Ionicons name="chevron-back" size={28} color="#F68537" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={isGroup === 'true' ? () => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any) : handleViewProfile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        <Image source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName)}&backgroundColor=F68537` }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }} contentFit="cover" />
+                        <Image source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName || 'User')}&backgroundColor=F68537` }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }} contentFit="cover" />
                         <View>
-                            <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName}</Text>
+                            <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName || 'User'}</Text>
                             <Text style={{ fontSize: 10, color: isTyping ? '#10B981' : (isUserOnline ? '#10B981' : '#94A3B8'), fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                 {isTyping || friendData?.isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(friendData?.lastSeen))}
                             </Text>
@@ -669,6 +686,9 @@ export default function ChatScreen() {
                         disabled={isBlocked || iAmBlocked}
                     >
                         <Ionicons name="call" size={18} color="white" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setShowVisualLogs(!showVisualLogs)} style={{ padding: 8, backgroundColor: '#FFF5E6', borderRadius: 8, marginRight: 4 }}>
+                        <Ionicons name="bug" size={16} color="#F68537" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 4 }}>
                         <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
@@ -787,6 +807,52 @@ export default function ChatScreen() {
                 friendId={safeFriendId}
                 friendName={friendName || 'Friend'}
             />
+
+            {showVisualLogs && (
+                <View style={{ position: 'absolute', top: insets.top + 60, left: 10, right: 10, backgroundColor: 'rgba(30, 41, 59, 0.98)', padding: 12, borderRadius: 12, zIndex: 9999, height: 260, borderWidth: 1.5, borderColor: '#F68537', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingBottom: 6, marginBottom: 6 }}>
+                        <Text style={{ color: '#F68537', fontWeight: 'bold', fontSize: 13 }}>🛠️ Live Chat Debug Console</Text>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    if (debugLogs.length === 0) {
+                                        Alert.alert("Empty", "No logs to copy!");
+                                        return;
+                                    }
+                                    Clipboard.setString(debugLogs.join('\n'));
+                                    Alert.alert("Copied", "Chat logs copied to clipboard!");
+                                }} 
+                                style={{ backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+                            >
+                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>COPY</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    setDebugLogs([]);
+                                    SecureStore.deleteItemAsync('CHAT_DEBUG_LOGS').catch(() => {});
+                                }} 
+                                style={{ backgroundColor: '#475569', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+                            >
+                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLEAR</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setShowVisualLogs(false)} style={{ backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLOSE</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                    <ScrollView style={{ flex: 1 }}>
+                        {debugLogs.length === 0 ? (
+                            <Text style={{ color: '#94A3B8', fontSize: 11, fontStyle: 'italic' }}>No logs yet...</Text>
+                        ) : (
+                            debugLogs.map((log, index) => (
+                                <Text key={index} style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginBottom: 4 }}>
+                                    {log}
+                                </Text>
+                            ))
+                        )}
+                    </ScrollView>
+                </View>
+            )}
         </KeyboardAvoidingView>
     );
 }
@@ -822,3 +888,60 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     }
 });
+
+class ChatErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null, errorInfo: any }> {
+    constructor(props: any) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+    }
+
+    static getDerivedStateFromError(error: Error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error, errorInfo: any) {
+        console.error("[CRITICAL_SCREEN_ERROR]", error, errorInfo);
+        this.setState({ errorInfo });
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF5E6', padding: 20, justifyContent: 'center' }}>
+                    <View style={{ backgroundColor: '#FEE2E2', borderLeftWidth: 5, borderColor: '#EF4444', padding: 15, borderRadius: 8, marginBottom: 15 }}>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#991B1B', marginBottom: 5 }}>⚠️ Chat Screen Error Caught!</Text>
+                        <Text style={{ fontSize: 14, color: '#B91C1C', fontWeight: '600' }}>Error: {this.state.error?.message}</Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#4B5563', fontWeight: 'bold', marginBottom: 5 }}>STACK TRACE:</Text>
+                    <View style={{ backgroundColor: '#1E293B', padding: 12, borderRadius: 8, flex: 0.8 }}>
+                        <ScrollView>
+                            <Text style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10 }}>
+                                {this.state.error?.stack || "No stack trace available"}
+                            </Text>
+                            {this.state.errorInfo && (
+                                <Text style={{ color: '#94A3B8', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginTop: 10 }}>
+                                    Component Stack: {this.state.errorInfo.componentStack}
+                                </Text>
+                            )}
+                        </ScrollView>
+                    </View>
+                    <TouchableOpacity 
+                        onPress={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+                        style={{ backgroundColor: '#F68537', padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 15 }}
+                    >
+                        <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Reloading Chat</Text>
+                    </TouchableOpacity>
+                </SafeAreaView>
+            );
+        }
+        return this.props.children;
+    }
+}
+
+export default function ChatScreenWithErrorBoundary() {
+    return (
+        <ChatErrorBoundary>
+            <ChatScreen />
+        </ChatErrorBoundary>
+    );
+}

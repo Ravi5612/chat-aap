@@ -37,6 +37,10 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                                 resizeMode={ResizeMode.COVER}
                                 shouldPlay={false}
                                 isMuted={true}
+                                status={{
+                                    shouldPlay: false,
+                                    positionMillis: 1000
+                                }}
                             />
                             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
                                 <Ionicons name="play" size={14} color="white" />
@@ -80,6 +84,10 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                             resizeMode={ResizeMode.COVER}
                             shouldPlay={false}
                             isMuted={true}
+                            status={{
+                                shouldPlay: false,
+                                positionMillis: 1000
+                            }}
                         />
                         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
                             <Ionicons name="play" size={14} color="white" />
@@ -116,14 +124,17 @@ export default function StatusScreen() {
     } = useStatusActions(currentUser, loadFriends);
 
     const friendsWithStatus = useMemo(() => {
-        return combinedItems.filter(item => item.statusCount > 0).map(item => ({
-            ...item,
-            thumbnail: statusInfo[item.id]?.thumbnail,
-            mediaType: statusInfo[item.id]?.mediaType,
-            text: statusInfo[item.id]?.text,
-            bgColor: statusInfo[item.id]?.bgColor
-        }));
-    }, [combinedItems, statusInfo]);
+        if (!currentUser) return [];
+        return combinedItems
+            .filter(item => item.id !== currentUser.id && item.statusCount > 0)
+            .map(item => ({
+                ...item,
+                thumbnail: statusInfo[item.id]?.thumbnail,
+                mediaType: statusInfo[item.id]?.mediaType,
+                text: statusInfo[item.id]?.text,
+                bgColor: statusInfo[item.id]?.bgColor
+            }));
+    }, [combinedItems, statusInfo, currentUser]);
 
     const renderHeader = () => {
         return (

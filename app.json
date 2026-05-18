@@ -104,11 +104,11 @@
         "origin": false
       },
       "eas": {
-        "projectId": "94a9828d-0fc5-4ba7-83e5-82c4bcd82670"
+        "projectId": "59997737-3f33-4aaa-9c28-577a452f06d6"
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/94a9828d-0fc5-4ba7-83e5-82c4bcd82670",
+      "url": "https://u.expo.dev/59997737-3f33-4aaa-9c28-577a452f06d6",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0

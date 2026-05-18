@@ -1,11 +1,11 @@
-import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet, Platform, Modal } from 'react-native';
+import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet, Platform, Modal, ScrollView, Clipboard } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
 import FriendListItem from '@/components/chat/FriendListItem';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useStatusActions } from '@/hooks/useStatusActions';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +25,19 @@ import { useFriendsStore } from '@/store/useFriendsStore';
 import ChatLockModal from '@/components/chat/ChatLockModal';
 import * as SecureStore from 'expo-secure-store';
 
-export default function HomeScreen() {
+function HomeScreen() {
+  const [homeDebugLogs, setHomeDebugLogs] = useState<string[]>([]);
+  const [showHomeDebug, setShowHomeDebug] = useState(false);
+
+  const logHomeDebug = useCallback((msg: string) => {
+    console.log(`[DEBUG_HOME] ${msg}`);
+    setHomeDebugLogs(prev => {
+      const next = [...prev.slice(-29), `${new Date().toLocaleTimeString()}: ${msg}`];
+      SecureStore.setItemAsync('HOME_DEBUG_LOGS', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const router = useRouter();
   const swipeHandlers = useSwipeNavigation();
   const { user: currentUser, profile } = useAuthStore();
@@ -45,10 +57,26 @@ export default function HomeScreen() {
   const [showContactSuggestions, setShowContactSuggestions] = useState(true);
   const [showNearbySuggestions, setShowNearbySuggestions] = useState(true);
   const [suggestionTab, setSuggestionTab] = useState<'contacts' | 'nearby'>('contacts');
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
 
 
-  // Ensure profile is loaded when Home screen mounts
+  // Ensure profile is loaded when Home screen mounts and load persistent logs
   useEffect(() => {
+    SecureStore.getItemAsync('HOME_DEBUG_LOGS').then(saved => {
+      let initialLogs: string[] = [];
+      if (saved) {
+        try {
+          initialLogs = JSON.parse(saved);
+        } catch {}
+      }
+      const newMsg = `HomeScreen mounted. Combined items: ${combinedItems.length}, currentUser: ${currentUser?.id || 'none'}`;
+      const nextLogs = [...initialLogs.slice(-29), `--- MOUNT ---`, `${new Date().toLocaleTimeString()}: ${newMsg}`];
+      setHomeDebugLogs(nextLogs);
+      SecureStore.setItemAsync('HOME_DEBUG_LOGS', JSON.stringify(nextLogs)).catch(() => {});
+    }).catch(() => {
+      logHomeDebug("HomeScreen mounted. Combined items: " + combinedItems.length + ", currentUser: " + (currentUser?.id || "none"));
+    });
+
     if (currentUser && !profile) {
       useAuthStore.getState().syncProfile();
     }
@@ -173,9 +201,15 @@ export default function HomeScreen() {
   } = useStatusActions(currentUser, loadFriends);
 
   const handleSelectFriend = (friend: any) => {
-    if (!friend?.id) return;
+    if (!friend?.id) {
+        logHomeDebug("SelectFriend: Failed, no friend ID");
+        return;
+    }
+    
+    logHomeDebug(`SelectFriend: Clicked ${friend.name || 'User'} (ID: ${friend.id})`);
 
     if (friend.isLocked) {
+        logHomeDebug("SelectFriend: Friend is locked, displaying lock modal");
         setPendingLockedFriend(friend);
         setLockModalMode('verify');
         setLockModalTask('open');
@@ -183,11 +217,19 @@ export default function HomeScreen() {
         return;
     }
 
-    const nameParam = encodeURIComponent(friend.name || 'Chat');
-    const groupParam = friend.isGroup ? 'true' : 'false';
-    const imageParam = encodeURIComponent(friend.img || '');
-    const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
-    router.push(url as any);
+    try {
+        const nameParam = encodeURIComponent(friend.name || 'Chat');
+        const groupParam = friend.isGroup ? 'true' : 'false';
+        const imageParam = encodeURIComponent(friend.img || '');
+        const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
+        
+        logHomeDebug("SelectFriend: Navigating to URL -> " + url);
+        router.push(url as any);
+        logHomeDebug("SelectFriend: router.push executed successfully");
+    } catch (err: any) {
+        logHomeDebug("SelectFriend ERROR: " + err.message);
+        Alert.alert("Nav Error", err.message);
+    }
   };
 
 
@@ -281,6 +323,20 @@ export default function HomeScreen() {
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {/* Live Debug Toggle */}
+            <TouchableOpacity
+              onPress={() => setShowHomeDebug(!showHomeDebug)}
+              style={{
+                backgroundColor: Platform.OS === 'android' ? 'white' : '#F68537',
+                borderRadius: 9999,
+                padding: 6,
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Ionicons name="bug" size={16} color={Platform.OS === 'android' ? '#F68537' : 'white'} />
+            </TouchableOpacity>
+
             {/* Search Button */}
             <TouchableOpacity
               onPress={() => {
@@ -402,18 +458,17 @@ export default function HomeScreen() {
                         )}
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => {
-                      setShowContactSuggestions(false);
-                      setShowNearbySuggestions(false);
-                    }}>
-                      <Ionicons name="close-circle" size={20} color="#94A3B8" />
+                    <TouchableOpacity onPress={() => setSuggestionsExpanded(prev => !prev)} style={{ padding: 4 }}>
+                      <Ionicons name={suggestionsExpanded ? "chevron-up" : "chevron-down"} size={22} color="#F68537" />
                     </TouchableOpacity>
                   </View>
 
-                  {suggestionTab === 'contacts' && showContactSuggestions ? (
-                    <ContactSuggestions />
-                  ) : (
-                    showNearbySuggestions && <NearbySuggestions />
+                  {suggestionsExpanded && (
+                    suggestionTab === 'contacts' && showContactSuggestions ? (
+                      <ContactSuggestions />
+                    ) : (
+                      showNearbySuggestions && <NearbySuggestions />
+                    )
                   )}
                 </View>
               )}
@@ -511,7 +566,110 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         </Modal>
+
+        {showHomeDebug && (
+            <View style={{ position: 'absolute', bottom: 10, left: 10, right: 10, backgroundColor: 'rgba(30, 41, 59, 0.98)', padding: 12, borderRadius: 12, zIndex: 9999, height: 260, borderWidth: 1.5, borderColor: '#F68537', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingBottom: 6, marginBottom: 6 }}>
+                    <Text style={{ color: '#F68537', fontWeight: 'bold', fontSize: 13 }}>🛠️ Home screen Debug Console</Text>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <TouchableOpacity 
+                            onPress={() => {
+                                if (homeDebugLogs.length === 0) {
+                                    Alert.alert("Empty", "No logs to copy!");
+                                    return;
+                                }
+                                Clipboard.setString(homeDebugLogs.join('\n'));
+                                Alert.alert("Copied", "Home logs copied to clipboard!");
+                            }} 
+                            style={{ backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+                        >
+                            <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>COPY</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            onPress={() => {
+                                setHomeDebugLogs([]);
+                                SecureStore.deleteItemAsync('HOME_DEBUG_LOGS').catch(() => {});
+                            }} 
+                            style={{ backgroundColor: '#475569', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+                        >
+                            <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLEAR</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setShowHomeDebug(false)} style={{ backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                            <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLOSE</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+                <ScrollView style={{ flex: 1 }}>
+                    {homeDebugLogs.length === 0 ? (
+                        <Text style={{ color: '#94A3B8', fontSize: 11, fontStyle: 'italic' }}>No logs yet...</Text>
+                    ) : (
+                        homeDebugLogs.map((log, index) => (
+                            <Text key={index} style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginBottom: 4 }}>
+                                {log}
+                            </Text>
+                        ))
+                    )}
+                </ScrollView>
+            </View>
+        )}
       </View>
     </View>
   );
+}
+
+class HomeErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null, errorInfo: any }> {
+    constructor(props: any) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+    }
+
+    static getDerivedStateFromError(error: Error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error, errorInfo: any) {
+        console.error("[CRITICAL_HOME_ERROR]", error, errorInfo);
+        this.setState({ errorInfo });
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF5E6', padding: 20, justifyContent: 'center' }}>
+                    <View style={{ backgroundColor: '#FEE2E2', borderLeftWidth: 5, borderColor: '#EF4444', padding: 15, borderRadius: 8, marginBottom: 15 }}>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#991B1B', marginBottom: 5 }}>⚠️ Home Screen Error Caught!</Text>
+                        <Text style={{ fontSize: 14, color: '#B91C1C', fontWeight: '600' }}>Error: {this.state.error?.message}</Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#4B5563', fontWeight: 'bold', marginBottom: 5 }}>STACK TRACE:</Text>
+                    <View style={{ backgroundColor: '#1E293B', padding: 12, borderRadius: 8, flex: 0.8 }}>
+                        <ScrollView>
+                            <Text style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10 }}>
+                                {this.state.error?.stack || "No stack trace available"}
+                            </Text>
+                            {this.state.errorInfo && (
+                                <Text style={{ color: '#94A3B8', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginTop: 10 }}>
+                                    Component Stack: {this.state.errorInfo.componentStack}
+                                </Text>
+                            )}
+                        </ScrollView>
+                    </View>
+                    <TouchableOpacity 
+                        onPress={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+                        style={{ backgroundColor: '#F68537', padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 15 }}
+                    >
+                        <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Reloading Home</Text>
+                    </TouchableOpacity>
+                </SafeAreaView>
+            );
+        }
+        return this.props.children;
+    }
+}
+
+export default function HomeScreenWithErrorBoundary() {
+    return (
+        <HomeErrorBoundary>
+            <HomeScreen />
+        </HomeErrorBoundary>
+    );
 }

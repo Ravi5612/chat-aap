@@ -73,7 +73,6 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, isInline 
                     <TouchableOpacity
                         style={styles.emojiItem}
                         onPress={() => {
-                            Haptics.selectionAsync();
                             onSelect(item);
                         }}
                     >

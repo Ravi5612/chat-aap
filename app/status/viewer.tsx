@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, Image, TouchableOpacity, Dimensions, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList, Alert } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
+import { useFriendsStore } from '@/store/useFriendsStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -21,6 +22,12 @@ export default function StatusViewer() {
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [showViewers, setShowViewers] = useState(false);
     const [statusViewers, setStatusViewers] = useState<any[]>([]);
+
+    // Premium progress and holds
+    const [progress, setProgress] = useState(0);
+    const [paused, setPaused] = useState(false);
+    const STORY_DURATION = 5000; // 5 seconds
+    const touchStartRef = useRef<number>(0);
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
@@ -127,8 +134,11 @@ export default function StatusViewer() {
     };
 
     useEffect(() => {
+        setCurrentIndex(parseInt(initialIndex as string || '0'));
+        setProgress(0);
+        setPaused(false);
         fetchStatuses();
-    }, [userId, isArchive, date]);
+    }, [userId, isArchive, date, initialIndex]);
 
     // Mark as seen and fetch viewers (if owner)
     const currentStatus = statuses[currentIndex];
@@ -210,19 +220,119 @@ export default function StatusViewer() {
         };
     }, [currentStatus?.id, isOwner, fetchViewers]);
 
+    // Helper to get active status users list
+    const getActiveUsersList = () => {
+        const friendsStore = useFriendsStore.getState();
+        const myActiveStatuses = friendsStore.myStatuses?.active || [];
+        const friendsWithStatus = friendsStore.combinedItems.filter((f: any) => f.statusCount > 0);
+        
+        const allUsersList: string[] = [];
+        
+        // 1. Current user status bundle first
+        if (myActiveStatuses.length > 0 && currentUser) {
+            allUsersList.push(currentUser.id);
+        }
+        
+        // 2. Friends' status bundles
+        friendsWithStatus.forEach((f: any) => {
+            if (!allUsersList.includes(f.id)) {
+                allUsersList.push(f.id);
+            }
+        });
+        
+        return allUsersList;
+    };
+
+    const getNextFriendWithStatus = () => {
+        const allUsers = getActiveUsersList();
+        const curPos = allUsers.indexOf(userId as string);
+        if (curPos !== -1 && curPos < allUsers.length - 1) {
+            return allUsers[curPos + 1];
+        }
+        return null;
+    };
+
+    const getPrevFriendWithStatus = () => {
+        const allUsers = getActiveUsersList();
+        const curPos = allUsers.indexOf(userId as string);
+        if (curPos > 0) {
+            return allUsers[curPos - 1];
+        }
+        return null;
+    };
+
     const handleNext = () => {
         if (currentIndex < statuses.length - 1) {
             setCurrentIndex(currentIndex + 1);
         } else {
-            router.back();
+            // Auto transition to the next friend's status!
+            const nextUserId = getNextFriendWithStatus();
+            if (nextUserId) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.setParams({ userId: nextUserId, initialIndex: '0' });
+            } else {
+                router.back();
+            }
         }
     };
 
     const handlePrev = () => {
         if (currentIndex > 0) {
             setCurrentIndex(currentIndex - 1);
+        } else {
+            // Auto transition to the previous friend's status!
+            const prevUserId = getPrevFriendWithStatus();
+            if (prevUserId) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.setParams({ userId: prevUserId, initialIndex: '0' });
+            }
         }
     };
+
+    // Auto progress timer effect for image/text statuses
+    useEffect(() => {
+        if (loading || statuses.length === 0 || paused) return;
+
+        const currentStatus = statuses[currentIndex];
+        if (currentStatus?.media_type === 'video') {
+            // Video component's onPlaybackStatusUpdate controls video progress and advancement
+            return;
+        }
+
+        setProgress(0);
+        const duration = STORY_DURATION;
+        let startTime = Date.now();
+        let elapsed = 0;
+
+        const interval = setInterval(() => {
+            if (paused) {
+                startTime = Date.now() - elapsed;
+                return;
+            }
+
+            elapsed = Date.now() - startTime;
+            const newProgress = Math.min(1, elapsed / duration);
+            setProgress(newProgress);
+
+            if (newProgress >= 1) {
+                clearInterval(interval);
+                handleNext();
+            }
+        }, 30); // 30ms interval for extremely fluid 60fps movement
+
+        return () => clearInterval(interval);
+    }, [currentIndex, statuses, loading, paused]);
+
+    // Handle video play/pause during holds
+    useEffect(() => {
+        if (statuses[currentIndex]?.media_type === 'video' && viewerVideoRef.current) {
+            if (paused) {
+                viewerVideoRef.current.pauseAsync();
+            } else {
+                viewerVideoRef.current.playAsync();
+            }
+        }
+    }, [paused, currentIndex, statuses]);
 
     const handleSendReply = async () => {
         if (!replyText.trim() || !currentUser || !currentStatusUI) return;
@@ -336,9 +446,21 @@ export default function StatusViewer() {
 
     const onViewerPlaybackStatusUpdate = (status: any) => {
         if (!status.isLoaded) return;
+        
         if (status.isPlaying) {
             if (status.positionMillis < trimStart * 1000 || status.positionMillis >= trimEnd * 1000) {
                 viewerVideoRef.current?.setStatusAsync({ positionMillis: trimStart * 1000 });
+            }
+        }
+
+        // Keep progress bar in perfect alignment with video's play position
+        if (statuses[currentIndex]?.media_type === 'video' && !paused) {
+            const totalDuration = status.durationMillis || 10000;
+            const position = status.positionMillis || 0;
+            setProgress(Math.min(1, position / totalDuration));
+
+            if (status.didJustFinish) {
+                handleNext();
             }
         }
     };
@@ -348,10 +470,20 @@ export default function StatusViewer() {
             {/* Media Content */}
             <TouchableOpacity
                 activeOpacity={1}
+                onPressIn={() => {
+                    touchStartRef.current = Date.now();
+                    setPaused(true);
+                }}
+                onPressOut={() => {
+                    setPaused(false);
+                }}
                 onPress={(e) => {
-                    const x = e.nativeEvent.locationX;
-                    if (x < width / 3) handlePrev();
-                    else if (x > (2 * width) / 3) handleNext();
+                    const touchDuration = Date.now() - touchStartRef.current;
+                    if (touchDuration < 250) {
+                        const x = e.nativeEvent.locationX;
+                        if (x < width / 3) handlePrev();
+                        else if (x > (2 * width) / 3) handleNext();
+                    }
                 }}
                 style={{ flex: 1 }}
             >
@@ -394,88 +526,113 @@ export default function StatusViewer() {
             </TouchableOpacity>
 
             {/* Header / Progress Bars */}
-            <View style={{ position: 'absolute', top: insets.top + 10, left: 0, right: 0, paddingHorizontal: 16, zIndex: 10 }}>
-                <View style={{ flexDirection: 'row', gap: 4, marginBottom: 16 }}>
-                    {statuses.map((_, index) => (
-                        <View
-                            key={index}
-                            style={{
-                                height: 3,
-                                flex: 1,
-                                borderRadius: 2,
-                                backgroundColor: index <= currentIndex ? 'white' : 'rgba(255, 255, 255, 0.3)'
-                            }}
-                        />
-                    ))}
-                </View>
+            {!paused && (
+                <View style={{ position: 'absolute', top: insets.top + 10, left: 0, right: 0, paddingHorizontal: 16, zIndex: 10 }}>
+                    <View style={{ flexDirection: 'row', gap: 6, marginBottom: 16 }}>
+                        {statuses.map((_, index) => {
+                            let barProgress = 0;
+                            if (index < currentIndex) {
+                                barProgress = 1;
+                            } else if (index === currentIndex) {
+                                barProgress = progress;
+                            } else {
+                                barProgress = 0;
+                            }
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Image
-                            source={{ uri: currentStatusUI.profiles?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentStatusUI.profiles?.username || 'User')}&backgroundColor=F68537` }}
-                            style={{ width: 42, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: 'white' }}
-                        />
-                        <View style={{ marginLeft: 12 }}>
-                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{currentStatusUI.profiles?.username || 'Unknown'}</Text>
-                            <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>
-                                {new Date(currentStatusUI.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </Text>
+                            return (
+                                <View
+                                    key={index}
+                                    style={{
+                                        height: 3,
+                                        flex: 1,
+                                        borderRadius: 2,
+                                        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                                        overflow: 'hidden'
+                                    }}
+                                >
+                                    <View
+                                        style={{
+                                            height: '100%',
+                                            width: `${barProgress * 100}%`,
+                                            backgroundColor: 'white',
+                                            borderRadius: 2
+                                        }}
+                                    />
+                                </View>
+                            );
+                        })}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Image
+                                source={{ uri: currentStatusUI.profiles?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentStatusUI.profiles?.username || 'User')}&backgroundColor=F68537` }}
+                                style={{ width: 42, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: 'white' }}
+                            />
+                            <View style={{ marginLeft: 12 }}>
+                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{currentStatusUI.profiles?.username || 'Unknown'}</Text>
+                                <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>
+                                    {new Date(currentStatusUI.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </Text>
+                            </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {isOwner && (
+                                <TouchableOpacity onPress={handleDeleteStatus} style={{ padding: 8, marginRight: 8 }}>
+                                    <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
+                                <Ionicons name="close" size={32} color="white" />
+                            </TouchableOpacity>
                         </View>
                     </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        {isOwner && (
-                            <TouchableOpacity onPress={handleDeleteStatus} style={{ padding: 8, marginRight: 8 }}>
-                                <Ionicons name="trash-outline" size={24} color="#EF4444" />
-                            </TouchableOpacity>
-                        )}
-                        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
-                            <Ionicons name="close" size={32} color="white" />
-                        </TouchableOpacity>
-                    </View>
                 </View>
-            </View>
+            )}
 
             {/* Footer / Reply or Views Pill */}
-            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Math.max(insets.bottom, 20) }}>
-                {isOwner ? (
-                    <View style={{ alignItems: 'center' }}>
-                        <TouchableOpacity
-                            onPress={() => setShowViewers(true)}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                backgroundColor: 'rgba(246, 133, 55, 0.8)',
-                                paddingHorizontal: 24,
-                                paddingVertical: 12,
-                                borderRadius: 30,
-                                gap: 8
-                            }}
-                        >
-                            <Ionicons name="eye-outline" size={20} color="white" />
-                            <Text style={{ color: 'white', fontWeight: '900', fontSize: 14 }}>{statusViewers.length} VIEWS</Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : (
-                    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)', borderRadius: 30, paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.3)' }}>
-                            <TextInput
-                                placeholder="Reply to status..."
-                                placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                                style={{ flex: 1, color: 'white', fontSize: 15 }}
-                                value={replyText}
-                                onChangeText={setReplyText}
-                            />
-                            <TouchableOpacity 
-                                style={{ marginLeft: 12 }}
-                                onPress={handleSendReply}
-                                disabled={!replyText.trim()}
+            {!paused && (
+                <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Math.max(insets.bottom, 20) }}>
+                    {isOwner ? (
+                        <View style={{ alignItems: 'center' }}>
+                            <TouchableOpacity
+                                onPress={() => setShowViewers(true)}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    backgroundColor: 'rgba(246, 133, 55, 0.8)',
+                                    paddingHorizontal: 24,
+                                    paddingVertical: 12,
+                                    borderRadius: 30,
+                                    gap: 8
+                                }}
                             >
-                                <Ionicons name="send" size={24} color={replyText.trim() ? "#F68537" : "rgba(255, 255, 255, 0.3)"} />
+                                <Ionicons name="eye-outline" size={20} color="white" />
+                                <Text style={{ color: 'white', fontWeight: '900', fontSize: 14 }}>{statusViewers.length} VIEWS</Text>
                             </TouchableOpacity>
                         </View>
-                    </KeyboardAvoidingView>
-                )}
-            </View>
+                    ) : (
+                        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)', borderRadius: 30, paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.3)' }}>
+                                <TextInput
+                                    placeholder="Reply to status..."
+                                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                                    style={{ flex: 1, color: 'white', fontSize: 15 }}
+                                    value={replyText}
+                                    onChangeText={setReplyText}
+                                />
+                                <TouchableOpacity 
+                                    style={{ marginLeft: 12 }}
+                                    onPress={handleSendReply}
+                                    disabled={!replyText.trim()}
+                                >
+                                    <Ionicons name="send" size={24} color={replyText.trim() ? "#F68537" : "rgba(255, 255, 255, 0.3)"} />
+                                </TouchableOpacity>
+                            </View>
+                        </KeyboardAvoidingView>
+                    )}
+                </View>
+            )}
 
             {/* Viewers Modal */}
             <Modal

@@ -6,6 +6,7 @@ import { uploadChatMessageMedia } from '../utils/uploadHelper';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { useDbStore } from './useDbStore';
 import { saveLocalMessage, getLocalMessages, getChatClearTimestamp, markMessageAsDeletedLocally, getLocallyDeletedMessages, syncLedgerExpense } from '@/lib/localDb';
+import { getFromCache, saveToCache } from '@/lib/database';
 
 interface ChatState {
     messages: any[];
@@ -59,7 +60,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             const { cache } = get();
 
             // 0. Load instantly from SQLite if available
-            const sqliteCache = require('@/lib/database').getFromCache(`chat_messages_${friendId}`);
+            const sqliteCache = getFromCache(`chat_messages_${friendId}`);
 
             // Restore from cache instantly if exists
             if (cache[friendId]) {
@@ -272,7 +273,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }));
 
                 // ✅ Save to SQLite Cache
-                require('@/lib/database').saveToCache(`chat_messages_${friendId}`, { messages: uniqueMessagesArray });
+                saveToCache(`chat_messages_${friendId}`, { messages: uniqueMessagesArray });
 
                 // Mark as read
                 const unreadIds = (data || [])
@@ -433,7 +434,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }));
 
                 // ✅ Save to SQLite Cache
-                require('@/lib/database').saveToCache(`chat_messages_${friendId}`, { messages: uniqueMessages });
+                saveToCache(`chat_messages_${friendId}`, { messages: uniqueMessages });
 
             } catch (error: any) {
                 console.error('ChatStore: LoadMore error:', error.message);
@@ -558,7 +559,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 set((state) => {
                     const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
                     // ✅ Save to SQLite Cache
-                    require('@/lib/database').saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
+                    saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
                     return {
                         messages: newMessages,
                         cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }

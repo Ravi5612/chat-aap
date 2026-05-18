@@ -59,6 +59,8 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
 
         checkMembership();
 
+        if (!isGroup) return;
+
         // Unique membership channel name
         const mChannelName = `membership-${friendId}-${currentUser.id}`;
         console.log('[DEBUG] ChatRoom: Subscribing to membership:', mChannelName);

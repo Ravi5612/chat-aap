@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StyleSheet, Image, Alert, Dimensions, Keyboard } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import { uploadChatMessageMedia } from '@/utils/uploadHelper';
 import EmojiPickerModal from '@/components/chat/EmojiPickerModal';
-import { Video, ResizeMode } from 'expo-av';
+import { supabase } from '@/lib/supabase';
+import { uploadChatMessageMedia } from '@/utils/uploadHelper';
+import { Ionicons } from '@expo/vector-icons';
+import { ResizeMode, Video } from 'expo-av';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 const BG_COLORS = ['#F68537', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#1E293B', '#FF4E50', '#000000'];
@@ -79,7 +79,7 @@ export default function AddStatus() {
         try {
             // Check permission first
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            
+
             if (status !== 'granted') {
                 Alert.alert('Permission Denied', 'Please allow gallery access to post a status.');
                 return;
@@ -116,23 +116,23 @@ export default function AddStatus() {
             if (selectedMedia) {
                 const isVideo = selectedMedia.type === 'video' || (selectedMedia.uri && selectedMedia.uri.toLowerCase().endsWith('.mp4'));
                 const uploadResult = await uploadChatMessageMedia(
-                    selectedMedia.uri, 
+                    selectedMedia.uri,
                     isVideo ? 'video' : 'image',
                     user.id
                 );
-                
+
                 let finalUrl = uploadResult.url;
                 if (isVideo && duration > 0) {
                     finalUrl += `?trim_start=${trimStart}&trim_end=${trimEnd}`;
                 }
-                
+
                 mediaUrl = finalUrl;
                 mediaType = isVideo ? 'video' : 'image';
             }
 
             const { encryptText, getChatKey } = await import('@/utils/chatCrypto');
             // For status, we use a self-encryption key so only authorized clients can read it
-            const statusKey = await getChatKey(user.id, user.id); 
+            const statusKey = await getChatKey(user.id, user.id);
 
             const encryptedContent = content.trim() ? await encryptText(content.trim(), statusKey) : null;
             const encryptedMediaUrl = mediaUrl ? await encryptText(mediaUrl, statusKey) : null;
@@ -167,25 +167,25 @@ export default function AddStatus() {
     return (
         <View style={{ flex: 1, backgroundColor: selectedMedia ? 'black' : bgColor }}>
             {/* Header */}
-            <View style={{ 
-                paddingTop: insets.top + 10, 
-                paddingHorizontal: 20, 
+            <View style={{
+                paddingTop: insets.top + 10,
+                paddingHorizontal: 20,
                 paddingBottom: 15,
-                flexDirection: 'row', 
-                alignItems: 'center', 
+                flexDirection: 'row',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 zIndex: 10,
                 backgroundColor: selectedMedia ? 'rgba(0,0,0,0.3)' : 'transparent'
             }}>
-                <TouchableOpacity 
-                    onPress={() => router.back()} 
+                <TouchableOpacity
+                    onPress={() => router.back()}
                     style={styles.headerIconButton}
                 >
                     <Ionicons name="close" size={28} color="white" />
                 </TouchableOpacity>
 
                 <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={() => setShowPrivacyModal(true)}
                         style={[styles.headerIconButton, { width: 'auto', paddingHorizontal: 12, gap: 6, flexDirection: 'row' }]}
                     >
@@ -196,14 +196,14 @@ export default function AddStatus() {
                     </TouchableOpacity>
 
                     {!selectedMedia && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={pickMedia}
                             style={styles.headerIconButton}
                         >
                             <Ionicons name="images-outline" size={24} color="white" />
                         </TouchableOpacity>
                     )}
-                    
+
                     {!selectedMedia && (
                         <TouchableOpacity
                             onPress={handlePost}
@@ -222,7 +222,7 @@ export default function AddStatus() {
                     )}
 
                     {selectedMedia && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => {
                                 setSelectedMedia(null);
                                 setIsPlaying(true);
@@ -245,7 +245,7 @@ export default function AddStatus() {
                 {selectedMedia ? (
                     <View style={{ flex: 1 }}>
                         {selectedMedia.type === 'video' || (selectedMedia.uri && selectedMedia.uri.toLowerCase().endsWith('.mp4')) ? (
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 activeOpacity={1}
                                 onPress={togglePlayback}
                                 style={{ flex: 1, position: 'relative' }}
@@ -298,19 +298,19 @@ export default function AddStatus() {
                                 )}
                             </TouchableOpacity>
                         ) : (
-                            <Image 
-                                source={{ uri: selectedMedia.uri }} 
+                            <Image
+                                source={{ uri: selectedMedia.uri }}
                                 style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
                             />
                         )}
-                        
+
                         {/* Premium Bottom Input Bar for Media */}
-                        <View 
+                        <View
                             style={[
-                                styles.mediaInputContainer, 
-                                { 
+                                styles.mediaInputContainer,
+                                {
                                     bottom: showEmojiPicker ? 280 : 0,
-                                    paddingBottom: showEmojiPicker ? 10 : Math.max(insets.bottom, 20) 
+                                    paddingBottom: showEmojiPicker ? 10 : Math.max(insets.bottom, 20)
                                 }
                             ]}
                             onStartShouldSetResponder={() => true}
@@ -329,7 +329,7 @@ export default function AddStatus() {
                                             End: {Math.floor(trimEnd / 60)}:{(trimEnd % 60).toString().padStart(2, '0')}
                                         </Text>
                                     </View>
-                                    <View 
+                                    <View
                                         style={{ height: 40, justifyContent: 'center' }}
                                         onStartShouldSetResponder={() => true}
                                         onResponderGrant={handleTouch}
@@ -337,7 +337,7 @@ export default function AddStatus() {
                                     >
                                         {/* Background Track */}
                                         <View style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, position: 'relative' }} />
-                                        
+
                                         {/* Selected Range Highlight */}
                                         <View style={{
                                             position: 'absolute',
@@ -387,7 +387,7 @@ export default function AddStatus() {
                                 </View>
                             )}
                             <View style={styles.inputWrapper}>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => {
                                         if (showEmojiPicker) {
                                             setShowEmojiPicker(false);
@@ -401,7 +401,7 @@ export default function AddStatus() {
                                 >
                                     <Ionicons name={showEmojiPicker ? "keyboard-outline" : "happy-outline"} size={24} color="white" />
                                 </TouchableOpacity>
-                                
+
                                 <TextInput
                                     ref={mediaInputRef}
                                     placeholder="Add a caption..."
@@ -413,7 +413,7 @@ export default function AddStatus() {
                                     multiline
                                 />
 
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={handlePost}
                                     disabled={loading}
                                     style={styles.sendBtn}
@@ -429,7 +429,7 @@ export default function AddStatus() {
                     </View>
                 ) : (
                     <>
-                        <ScrollView 
+                        <ScrollView
                             contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 30 }}
                             keyboardShouldPersistTaps="handled"
                         >
@@ -450,7 +450,7 @@ export default function AddStatus() {
                         {/* Color Selection & Footer */}
                         <View style={[styles.footer, { paddingBottom: showEmojiPicker ? 290 : Math.max(insets.bottom, 20) + 10 }]}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 15 }}>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => {
                                         if (showEmojiPicker) {
                                             setShowEmojiPicker(false);
@@ -467,8 +467,8 @@ export default function AddStatus() {
                             </View>
 
                             <Text style={styles.footerLabel}>Choose Background</Text>
-                            <ScrollView 
-                                horizontal 
+                            <ScrollView
+                                horizontal
                                 showsHorizontalScrollIndicator={false}
                                 contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 10 }}
                             >
@@ -478,7 +478,7 @@ export default function AddStatus() {
                                         onPress={() => setBgColor(color)}
                                         style={[
                                             styles.colorCircle,
-                                            { 
+                                            {
                                                 backgroundColor: color,
                                                 borderColor: bgColor === color ? 'white' : 'rgba(255,255,255,0.3)',
                                                 borderWidth: bgColor === color ? 3 : 1
@@ -504,7 +504,7 @@ export default function AddStatus() {
                     borderTopWidth: 1,
                     borderTopColor: '#E2E8F0'
                 }}>
-                    <EmojiPickerModal 
+                    <EmojiPickerModal
                         visible={showEmojiPicker}
                         onClose={() => setShowEmojiPicker(false)}
                         onSelect={(emoji) => {
@@ -522,8 +522,8 @@ export default function AddStatus() {
                     <View style={{ backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: insets.bottom + 20 }}>
                         <Text style={{ fontSize: 20, fontWeight: '900', color: '#1E293B', marginBottom: 8 }}>Status Privacy</Text>
                         <Text style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>Who can see your status updates?</Text>
-                        
-                        <TouchableOpacity 
+
+                        <TouchableOpacity
                             onPress={() => {
                                 setPrivacy('all');
                                 setShowPrivacyModal(false);
@@ -540,7 +540,7 @@ export default function AddStatus() {
                             {privacy === 'all' && <Ionicons name="checkmark-circle" size={24} color="#10B981" />}
                         </TouchableOpacity>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => {
                                 setPrivacy('selected');
                                 setShowPrivacyModal(false);
@@ -573,10 +573,10 @@ export default function AddStatus() {
                             <Text style={{ color: '#F68537', fontWeight: 'bold' }}>Done</Text>
                         </TouchableOpacity>
                     </View>
-                    
+
                     <ScrollView style={{ flex: 1 }}>
                         {friends.map((friend: any) => (
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 key={friend.id}
                                 onPress={() => {
                                     if (selectedViewerIds.includes(friend.id)) {
@@ -587,15 +587,15 @@ export default function AddStatus() {
                                 }}
                                 style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}
                             >
-                                <Image 
+                                <Image
                                     source={{ uri: friend.img }}
                                     style={{ width: 44, height: 44, borderRadius: 22 }}
                                 />
                                 <Text style={{ flex: 1, marginLeft: 16, fontSize: 16, fontWeight: '600' }}>{friend.name}</Text>
-                                <Ionicons 
-                                    name={selectedViewerIds.includes(friend.id) ? "checkbox" : "square-outline"} 
-                                    size={24} 
-                                    color={selectedViewerIds.includes(friend.id) ? "#F68537" : "#CBD5E1"} 
+                                <Ionicons
+                                    name={selectedViewerIds.includes(friend.id) ? "checkbox" : "square-outline"}
+                                    size={24}
+                                    color={selectedViewerIds.includes(friend.id) ? "#F68537" : "#CBD5E1"}
                                 />
                             </TouchableOpacity>
                         ))}
