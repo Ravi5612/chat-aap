@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import StatusBar from '@/components/chat/StatusBar';
+import { Video, ResizeMode } from 'expo-av';
 
 // Memoized Status Item for performance
 const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: any) => void }) => {
@@ -23,8 +24,23 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                     { borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537' }
                 ]}>
                     {item.mediaType === 'text' ? (
-                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F68537', borderRadius: 30 }}>
-                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>T</Text>
+                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: item.bgColor || '#F68537', borderRadius: 30, padding: 4 }}>
+                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 9, textAlign: 'center' }} numberOfLines={3}>
+                                {item.text || 'T'}
+                            </Text>
+                        </View>
+                    ) : item.mediaType === 'video' ? (
+                        <View style={{ width: '100%', height: '100%', borderRadius: 30, overflow: 'hidden', position: 'relative' }}>
+                            <Video
+                                source={{ uri: item.thumbnail }}
+                                style={{ width: '100%', height: '100%' }}
+                                resizeMode={ResizeMode.COVER}
+                                shouldPlay={false}
+                                isMuted={true}
+                            />
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                                <Ionicons name="play" size={14} color="white" />
+                            </View>
                         </View>
                     ) : (
                         <Image
@@ -48,10 +64,27 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
 
             <View style={[
                 styles.thumbnail,
-                { backgroundColor: item.mediaType === 'text' ? '#F68537' : '#FDBA74' }
+                { backgroundColor: item.mediaType === 'text' ? (item.bgColor || '#F68537') : '#FDBA74' }
             ]}>
                 {item.mediaType === 'text' ? (
-                    <Text style={styles.thumbnailText}>TEXT</Text>
+                    <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
+                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 8, textAlign: 'center' }} numberOfLines={3}>
+                            {item.text || 'TEXT'}
+                        </Text>
+                    </View>
+                ) : item.mediaType === 'video' ? (
+                    <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+                        <Video
+                            source={{ uri: item.thumbnail }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode={ResizeMode.COVER}
+                            shouldPlay={false}
+                            isMuted={true}
+                        />
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                            <Ionicons name="play" size={14} color="white" />
+                        </View>
+                    </View>
                 ) : (
                     <Image
                         source={{ uri: item.thumbnail || item.img }}
@@ -86,13 +119,13 @@ export default function StatusScreen() {
         return combinedItems.filter(item => item.statusCount > 0).map(item => ({
             ...item,
             thumbnail: statusInfo[item.id]?.thumbnail,
-            mediaType: statusInfo[item.id]?.mediaType
+            mediaType: statusInfo[item.id]?.mediaType,
+            text: statusInfo[item.id]?.text,
+            bgColor: statusInfo[item.id]?.bgColor
         }));
     }, [combinedItems, statusInfo]);
 
     const renderHeader = () => {
-        const myActiveStatusInfo = currentUser ? statusInfo[currentUser.id] : null;
-
         return (
             <>
                 {/* Header */}

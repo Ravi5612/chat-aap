@@ -4,16 +4,24 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import AuthScreen from '@/components/ui/AuthScreen';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SetupProfilePage() {
     const router = useRouter();
     const [name, setName] = useState('');
+    const [gender, setGender] = useState<'male' | 'female' | 'other' | null>(null);
     const [loading, setLoading] = useState(false);
 
     const handleSaveProfile = async () => {
         if (!name.trim()) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             Alert.alert('Error', 'Please enter your name');
+            return;
+        }
+
+        if (!gender) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert('Error', 'Please select your gender');
             return;
         }
 
@@ -24,7 +32,10 @@ export default function SetupProfilePage() {
 
             const { error } = await supabase
                 .from('profiles')
-                .update({ username: name.trim() })
+                .update({ 
+                    username: name.trim(),
+                    gender: gender
+                })
                 .eq('id', user.id);
 
             if (error) throw error;
@@ -54,7 +65,7 @@ export default function SetupProfilePage() {
         <View style={{ flex: 1 }}>
             <AuthScreen 
                 title="Profile Info" 
-                subtitle="Please provide your name" 
+                subtitle="Complete your profile to join the battle!" 
                 loading={loading}
             >
                 <View style={{ gap: 20 }}>
@@ -72,6 +83,43 @@ export default function SetupProfilePage() {
                         <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 6, paddingLeft: 4 }}>
                             This name will be visible to your contacts.
                         </Text>
+                    </View>
+
+                    {/* Gender Selection Section */}
+                    <View>
+                        <Text style={styles.label}>Select Gender</Text>
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                            {[
+                                { label: 'Male', value: 'male', icon: 'male', color: '#3B82F6', bg: '#EFF6FF' },
+                                { label: 'Female', value: 'female', icon: 'female', color: '#EC4899', bg: '#FDF2F8' },
+                                { label: 'Other', value: 'other', icon: 'person', color: '#8B5CF6', bg: '#F5F3FF' },
+                            ].map((option) => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    onPress={() => {
+                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                        setGender(option.value as any);
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        alignItems: 'center',
+                                        paddingVertical: 14,
+                                        borderRadius: 16,
+                                        borderWidth: 2,
+                                        borderColor: gender === option.value ? option.color : '#E5E7EB',
+                                        backgroundColor: gender === option.value ? option.bg : 'white',
+                                    }}
+                                >
+                                    <Ionicons name={option.icon as any} size={22} color={gender === option.value ? option.color : '#9CA3AF'} />
+                                    <Text style={{
+                                        marginTop: 4,
+                                        fontSize: 12,
+                                        fontWeight: 'bold',
+                                        color: gender === option.value ? option.color : '#9CA3AF'
+                                    }}>{option.label}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
 
                     <TouchableOpacity

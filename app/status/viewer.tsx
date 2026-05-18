@@ -14,6 +14,7 @@ export default function StatusViewer() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const [statuses, setStatuses] = useState<any[]>([]);
+    const viewerVideoRef = React.useRef<Video>(null);
     const [currentIndex, setCurrentIndex] = useState(parseInt(initialIndex as string || '0'));
     const [loading, setLoading] = useState(true);
     const [replyText, setReplyText] = useState('');
@@ -322,6 +323,26 @@ export default function StatusViewer() {
 
     const currentStatusUI = statuses[currentIndex];
 
+    // Parse trim parameters
+    let trimStart = 0;
+    let trimEnd = 999999;
+    if (currentStatusUI?.media_url) {
+        const url = currentStatusUI.media_url;
+        const matchStart = url.match(/trim_start=(\d+)/);
+        const matchEnd = url.match(/trim_end=(\d+)/);
+        if (matchStart) trimStart = parseInt(matchStart[1]);
+        if (matchEnd) trimEnd = parseInt(matchEnd[1]);
+    }
+
+    const onViewerPlaybackStatusUpdate = (status: any) => {
+        if (!status.isLoaded) return;
+        if (status.isPlaying) {
+            if (status.positionMillis < trimStart * 1000 || status.positionMillis >= trimEnd * 1000) {
+                viewerVideoRef.current?.setStatusAsync({ positionMillis: trimStart * 1000 });
+            }
+        }
+    };
+
     return (
         <View style={{ flex: 1, backgroundColor: 'black' }}>
             {/* Media Content */}
@@ -338,6 +359,7 @@ export default function StatusViewer() {
                     <View style={{ flex: 1 }}>
                         {currentStatusUI.media_type === 'video' ? (
                             <Video
+                                ref={viewerVideoRef}
                                 source={{ uri: currentStatusUI.media_url }}
                                 rate={1.0}
                                 volume={1.0}
@@ -345,6 +367,7 @@ export default function StatusViewer() {
                                 resizeMode={ResizeMode.CONTAIN}
                                 shouldPlay={true}
                                 isLooping={true}
+                                onPlaybackStatusUpdate={onViewerPlaybackStatusUpdate}
                                 style={{ width: '100%', height: '100%' }}
                             />
                         ) : (

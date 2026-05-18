@@ -19,18 +19,56 @@ export const useNearbySuggestions = () => {
             // 1KM Radius rough approximation (approx 0.009 degrees per KM)
             const range = 0.01;
 
+            // 1. Parallelly fetch relationships (friends, sent requests, received requests) to exclude them
+            const [friendsRes, sentRequestsRes, receivedRequestsRes] = await Promise.all([
+                supabase
+                    .from('friendships')
+                    .select('user_id, friend_id')
+                    .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`),
+                supabase
+                    .from('friend_requests')
+                    .select('receiver_id')
+                    .eq('sender_id', currentUser.id)
+                    .in('status', ['pending', 'accepted']),
+                supabase
+                    .from('friend_requests')
+                    .select('sender_id')
+                    .eq('receiver_id', currentUser.id)
+                    .in('status', ['pending', 'accepted'])
+            ]);
+
+            // Create set of all IDs to filter out (including current user)
+            const excludeIds = new Set<string>([currentUser.id]);
+            
+            friendsRes.data?.forEach(f => {
+                if (f.user_id === currentUser.id) excludeIds.add(f.friend_id);
+                else excludeIds.add(f.user_id);
+            });
+            receivedRequestsRes.data?.forEach(r => excludeIds.add(r.sender_id));
+
+            const sentRequestIds = new Set(sentRequestsRes.data?.map(r => r.receiver_id) || []);
+
+            // 2. Fetch profiles within 1KM radius that are currently online
             const { data, error } = await supabase
                 .from('profiles')
-                .select('id, username, avatar_url, last_lat, last_long, gender')
+                .select('id, username, avatar_url, last_lat, last_long, gender, is_online')
+                .eq('is_online', true)
                 .neq('id', currentUser.id)
                 .gte('last_lat', latitude - range)
                 .lte('last_lat', latitude + range)
                 .gte('last_long', longitude - range)
                 .lte('last_long', longitude + range)
-                .limit(10);
+                .limit(50); // Fetch more so we have plenty after filtering client-side
 
             if (!error && data) {
-                setNearbyPeople(data);
+                // 3. Filter out existing friends, incoming requests, and self client-side
+                const filtered = data
+                    .filter(person => !excludeIds.has(person.id))
+                    .map(person => ({
+                        ...person,
+                        requestStatus: sentRequestIds.has(person.id) ? 'pending' : null
+                    }));
+                setNearbyPeople(filtered.slice(0, 10)); // limit to top 10
             }
         } catch (e) {
             console.error('Nearby fetch error:', e);

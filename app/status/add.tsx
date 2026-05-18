@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadChatMessageMedia } from '@/utils/uploadHelper';
 import EmojiPickerModal from '@/components/chat/EmojiPickerModal';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
 const BG_COLORS = ['#F68537', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#1E293B', '#FF4E50', '#000000'];
@@ -25,6 +26,52 @@ export default function AddStatus() {
     const [showFriendPicker, setShowFriendPicker] = useState(false);
     const { friends } = (require('@/hooks/useFriends').useFriends)();
 
+    // Custom Video playback preview state
+    const videoRef = React.useRef<any>(null);
+    const [isPlaying, setIsPlaying] = useState(true);
+    const [duration, setDuration] = useState(0);
+    const [trimStart, setTrimStart] = useState(0);
+    const [trimEnd, setTrimEnd] = useState(30);
+
+    const togglePlayback = async () => {
+        if (!videoRef.current) return;
+        try {
+            if (isPlaying) {
+                await videoRef.current.pauseAsync();
+                setIsPlaying(false);
+            } else {
+                await videoRef.current.playAsync();
+                setIsPlaying(true);
+            }
+        } catch (e) {
+            console.error('Toggle Playback Error:', e);
+        }
+    };
+
+    const handleTouch = (evt: any) => {
+        if (duration <= 0) return;
+        const touchX = evt.nativeEvent.locationX;
+        const percentage = Math.max(0, Math.min(1, touchX / (width - 62)));
+        const selectedTime = percentage * duration;
+
+        // Determine which thumb is closer
+        const distToStart = Math.abs(selectedTime - trimStart);
+        const distToEnd = Math.abs(selectedTime - trimEnd);
+
+        if (distToStart < distToEnd) {
+            // Update trimStart, ensuring it is at least 0 and doesn't exceed trimEnd - 1
+            const newStart = Math.max(0, Math.min(trimEnd - 1, Math.round(selectedTime)));
+            setTrimStart(newStart);
+            videoRef.current?.setStatusAsync({ positionMillis: newStart * 1000 });
+        } else {
+            // Update trimEnd, ensuring it is at least trimStart + 1 and doesn't exceed min(duration, trimStart + 30)
+            const maxEnd = Math.min(duration, trimStart + 30);
+            const newEnd = Math.max(trimStart + 1, Math.min(maxEnd, Math.round(selectedTime)));
+            setTrimEnd(newEnd);
+            videoRef.current?.setStatusAsync({ positionMillis: newEnd * 1000 });
+        }
+    };
+
     const pickMedia = async () => {
         try {
             // Check permission first
@@ -40,6 +87,7 @@ export default function AddStatus() {
                 allowsEditing: true,
                 aspect: [9, 16],
                 quality: 0.8,
+                videoMaxDuration: 30, // Forces maximum 30 seconds native trimming in system picker!
             });
 
             if (!result.canceled) {
@@ -69,7 +117,13 @@ export default function AddStatus() {
                     isVideo ? 'video' : 'image',
                     user.id
                 );
-                mediaUrl = uploadResult.url;
+                
+                let finalUrl = uploadResult.url;
+                if (isVideo && duration > 0) {
+                    finalUrl += `?trim_start=${trimStart}&trim_end=${trimEnd}`;
+                }
+                
+                mediaUrl = finalUrl;
                 mediaType = isVideo ? 'video' : 'image';
             }
 
@@ -166,7 +220,13 @@ export default function AddStatus() {
 
                     {selectedMedia && (
                         <TouchableOpacity 
-                            onPress={() => setSelectedMedia(null)}
+                            onPress={() => {
+                                setSelectedMedia(null);
+                                setIsPlaying(true);
+                                setDuration(0);
+                                setTrimStart(0);
+                                setTrimEnd(30);
+                            }}
                             style={styles.headerIconButton}
                         >
                             <Ionicons name="trash-outline" size={24} color="#EF4444" />
@@ -181,13 +241,139 @@ export default function AddStatus() {
             >
                 {selectedMedia ? (
                     <View style={{ flex: 1 }}>
-                        <Image 
-                            source={{ uri: selectedMedia.uri }} 
-                            style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-                        />
+                        {selectedMedia.type === 'video' || (selectedMedia.uri && selectedMedia.uri.toLowerCase().endsWith('.mp4')) ? (
+                            <TouchableOpacity 
+                                activeOpacity={1}
+                                onPress={togglePlayback}
+                                style={{ flex: 1, position: 'relative' }}
+                            >
+                                <Video
+                                    ref={videoRef}
+                                    source={{ uri: selectedMedia.uri }}
+                                    style={{ width: '100%', height: '100%' }}
+                                    resizeMode={ResizeMode.CONTAIN}
+                                    shouldPlay={isPlaying}
+                                    isMuted={false}
+                                    isLooping={true}
+                                    useNativeControls={false}
+                                    onLoad={(status: any) => {
+                                        const dur = Math.round(status.durationMillis / 1000);
+                                        setDuration(dur);
+                                        setTrimEnd(Math.min(dur, 30));
+                                    }}
+                                    onPlaybackStatusUpdate={(status: any) => {
+                                        if (!status.isLoaded) return;
+                                        if (status.isPlaying && status.positionMillis >= trimEnd * 1000) {
+                                            videoRef.current?.setStatusAsync({ positionMillis: trimStart * 1000 });
+                                        }
+                                    }}
+                                />
+                                {!isPlaying && (
+                                    <View style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        backgroundColor: 'rgba(0,0,0,0.15)'
+                                    }}>
+                                        <View style={{
+                                            width: 70,
+                                            height: 70,
+                                            borderRadius: 35,
+                                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderWidth: 1,
+                                            borderColor: 'rgba(255, 255, 255, 0.3)'
+                                        }}>
+                                            <Ionicons name="play" size={36} color="white" style={{ marginLeft: 4 }} />
+                                        </View>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        ) : (
+                            <Image 
+                                source={{ uri: selectedMedia.uri }} 
+                                style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                            />
+                        )}
                         
                         {/* Premium Bottom Input Bar for Media */}
                         <View style={[styles.mediaInputContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                            {/* Visual Video Trimmer Slider */}
+                            {(selectedMedia.type === 'video' || (selectedMedia.uri && selectedMedia.uri.toLowerCase().endsWith('.mp4'))) && duration > 0 && (
+                                <View style={{ marginBottom: 15 }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                                        <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 'bold' }}>
+                                            Start: {Math.floor(trimStart / 60)}:{(trimStart % 60).toString().padStart(2, '0')}
+                                        </Text>
+                                        <Text style={{ color: '#F68537', fontSize: 12, fontWeight: '900' }}>
+                                            Trim: {trimEnd - trimStart}s chosen (Max 30s)
+                                        </Text>
+                                        <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 'bold' }}>
+                                            End: {Math.floor(trimEnd / 60)}:{(trimEnd % 60).toString().padStart(2, '0')}
+                                        </Text>
+                                    </View>
+                                    <View 
+                                        style={{ height: 26, justifyContent: 'center' }}
+                                        onStartShouldSetResponder={() => true}
+                                        onResponderGrant={handleTouch}
+                                        onResponderMove={handleTouch}
+                                    >
+                                        {/* Background Track */}
+                                        <View style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, position: 'relative' }} />
+                                        
+                                        {/* Selected Range Highlight */}
+                                        <View style={{
+                                            position: 'absolute',
+                                            left: `${(trimStart / duration) * 100}%`,
+                                            right: `${100 - (trimEnd / duration) * 100}%`,
+                                            height: 6,
+                                            backgroundColor: '#F68537',
+                                            borderRadius: 3
+                                        }} />
+
+                                        {/* Left Thumb */}
+                                        <View style={{
+                                            position: 'absolute',
+                                            left: `${(trimStart / duration) * 100}%`,
+                                            marginLeft: -10,
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: 10,
+                                            backgroundColor: 'white',
+                                            borderWidth: 2,
+                                            borderColor: '#F68537',
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 2 },
+                                            shadowOpacity: 0.3,
+                                            shadowRadius: 2,
+                                            elevation: 3
+                                        }} />
+
+                                        {/* Right Thumb */}
+                                        <View style={{
+                                            position: 'absolute',
+                                            left: `${(trimEnd / duration) * 100}%`,
+                                            marginLeft: -10,
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: 10,
+                                            backgroundColor: 'white',
+                                            borderWidth: 2,
+                                            borderColor: '#F68537',
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 2 },
+                                            shadowOpacity: 0.3,
+                                            shadowRadius: 2,
+                                            elevation: 3
+                                        }} />
+                                    </View>
+                                </View>
+                            )}
                             <View style={styles.inputWrapper}>
                                 <TouchableOpacity 
                                     onPress={() => setShowEmojiPicker(true)}

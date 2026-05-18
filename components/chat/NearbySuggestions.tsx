@@ -51,11 +51,25 @@ export default function NearbySuggestions() {
                 ) : (
                     nearbyPeople.map((person) => (
                         <View key={person.id} style={styles.card}>
-                            <Image
-                                source={{ uri: `https://api.dicebear.com/7.x/bottts/svg?seed=${person.id}&backgroundColor=F3F4F6` }}
-                                style={styles.avatar}
-                                transition={500}
-                            />
+                            <View style={{ position: 'relative' }}>
+                                <Image
+                                    source={{ uri: `https://api.dicebear.com/7.x/bottts/svg?seed=${person.id}&backgroundColor=F3F4F6` }}
+                                    style={styles.avatar}
+                                    transition={500}
+                                />
+                                <View style={{
+                                    position: 'absolute',
+                                    bottom: 8,
+                                    right: 2,
+                                    width: 14,
+                                    height: 14,
+                                    backgroundColor: '#10B981',
+                                    borderRadius: 7,
+                                    borderWidth: 2,
+                                    borderColor: 'white',
+                                    zIndex: 10
+                                }} />
+                            </View>
 
                             {/* Gender Badge */}
                             {(() => {
@@ -75,17 +89,20 @@ export default function NearbySuggestions() {
                             </Text>
 
                             <TouchableOpacity 
-                                style={[styles.addButton, requestedIds.includes(person.id) && styles.requestedButton]}
+                                style={[
+                                    styles.addButton, 
+                                    (requestedIds.includes(person.id) || person.requestStatus === 'pending') && styles.requestedButton
+                                ]}
                                 onPress={() => sendRequest(person.id)}
-                                disabled={requestedIds.includes(person.id)}
+                                disabled={requestedIds.includes(person.id) || person.requestStatus === 'pending'}
                             >
                                 <Ionicons 
-                                    name={requestedIds.includes(person.id) ? "checkmark-circle" : "person-add"} 
+                                    name={(requestedIds.includes(person.id) || person.requestStatus === 'pending') ? "checkmark-circle" : "person-add"} 
                                     size={16} 
                                     color="white" 
                                 />
                                 <Text style={styles.addText}>
-                                    {requestedIds.includes(person.id) ? "Sent" : "Connect"}
+                                    {(requestedIds.includes(person.id) || person.requestStatus === 'pending') ? "Sent" : "Connect"}
                                 </Text>
                             </TouchableOpacity>
                         </View>

@@ -175,7 +175,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             // Process Status Info
             const viewedStatusIds = new Set(viewsRes.data?.map(v => v.status_id) || []);
             const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
-            const statusInfoMap: Record<string, { count: number, viewedCount: number, thumbnail?: string, mediaType?: string }> = {};
+            const statusInfoMap: Record<string, { count: number, viewedCount: number, thumbnail?: string, mediaType?: string, text?: string, bgColor?: string }> = {};
 
             // Sort by created_at descending to get the most recent status first
             const sortedStatuses = [...filteredStatuses].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -185,18 +185,35 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                     statusInfoMap[s.user_id] = { count: 0, viewedCount: 0 };
                     
                     // Decrypt latest status media for thumbnail
-                    if (s.media_url && s.media_url.trim().startsWith('{')) {
-                        try {
-                            const statusKey = await getChatKey(s.user_id, s.user_id);
-                            const decryptedUrl = await decryptText(s.media_url, statusKey);
-                            statusInfoMap[s.user_id].thumbnail = decryptedUrl;
+                    if (s.media_url) {
+                        if (s.media_url.trim().startsWith('{')) {
+                            try {
+                                const statusKey = await getChatKey(s.user_id, s.user_id);
+                                const decryptedUrl = await decryptText(s.media_url, statusKey);
+                                statusInfoMap[s.user_id].thumbnail = decryptedUrl;
+                                statusInfoMap[s.user_id].mediaType = s.media_type;
+                            } catch (e) {
+                                console.error('Thumbnail decryption error:', e);
+                            }
+                        } else {
+                            statusInfoMap[s.user_id].thumbnail = s.media_url;
                             statusInfoMap[s.user_id].mediaType = s.media_type;
-                        } catch (e) {
-                            console.error('Thumbnail decryption error:', e);
                         }
                     } else if (s.media_type === 'text') {
-                        // For text statuses, we might want to show the text or just the background
+                        // For text statuses, decrypt and show the text
                         statusInfoMap[s.user_id].mediaType = 'text';
+                        statusInfoMap[s.user_id].bgColor = s.background_color;
+                        if (s.content && s.content.trim().startsWith('{')) {
+                            try {
+                                const statusKey = await getChatKey(s.user_id, s.user_id);
+                                const decryptedText = await decryptText(s.content, statusKey);
+                                statusInfoMap[s.user_id].text = decryptedText;
+                            } catch (e) {
+                                console.error('Text status decryption error:', e);
+                            }
+                        } else {
+                            statusInfoMap[s.user_id].text = s.content;
+                        }
                     }
                 }
                 statusInfoMap[s.user_id].count++;
@@ -297,9 +314,38 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
             const { data: myAllStatuses } = await supabase.from('statuses').select('*').eq('user_id', userId).gt('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false });
 
+            // Decrypt my own statuses for display
+            const decryptedMyStatuses = await Promise.all((myAllStatuses || []).map(async (s) => {
+                let decryptedContent = s.content;
+                let decryptedMediaUrl = s.media_url;
+
+                if (s.content && s.content.trim().startsWith('{')) {
+                    try {
+                        const statusKey = await getChatKey(userId, userId);
+                        decryptedContent = await decryptText(s.content, statusKey);
+                    } catch (e) {
+                        console.error('My status content decryption error:', e);
+                    }
+                }
+                if (s.media_url && s.media_url.trim().startsWith('{')) {
+                    try {
+                        const statusKey = await getChatKey(userId, userId);
+                        decryptedMediaUrl = await decryptText(s.media_url, statusKey);
+                    } catch (e) {
+                        console.error('My status media decryption error:', e);
+                    }
+                }
+
+                return {
+                    ...s,
+                    content: decryptedContent,
+                    media_url: decryptedMediaUrl
+                };
+            }));
+
             const groupedMyStatus: any = { active: [] };
             const now = new Date();
-            (myAllStatuses || []).forEach(status => {
+            decryptedMyStatuses.forEach(status => {
                 const expiresAt = new Date(status.expires_at);
                 if (expiresAt > now && !status.is_deleted) {
                     groupedMyStatus.active.push(status);
@@ -331,6 +377,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                 friends: formattedFriends,
                 groups: formattedGroups,
                 myStatuses: groupedMyStatus,
+                statusInfo: statusInfoMap,
                 combinedItems: sortedItems,
                 lockedChatIds: sortedItems.filter(i => i.isLocked).map(i => i.id),
                 loading: false

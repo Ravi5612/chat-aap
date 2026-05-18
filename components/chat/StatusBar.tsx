@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/useAuthStore';
+import { Video, ResizeMode } from 'expo-av';
 
 interface StatusBarProps {
     myStatuses: any;
@@ -20,7 +21,7 @@ export default function StatusBar({
     onViewStatus,
     onViewMyStatus
 }: StatusBarProps) {
-    const { user: currentUser } = useAuthStore();
+    const { user: currentUser, profile: currentProfile } = useAuthStore();
     return (
         <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
             <View style={{
@@ -91,11 +92,29 @@ export default function StatusBar({
                                             >
                                                 <View style={{ width: '100%', height: '100%', borderRadius: 32, overflow: 'hidden', backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
                                                     {statusInfo?.[currentUser?.id]?.mediaType === 'text' ? (
-                                                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F68537' }}>
-                                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>T</Text>
+                                                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: statusInfo?.[currentUser?.id]?.bgColor || '#F68537', padding: 4 }}>
+                                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 10, textAlign: 'center' }} numberOfLines={3}>
+                                                                {statusInfo?.[currentUser?.id]?.text || 'T'}
+                                                            </Text>
+                                                        </View>
+                                                    ) : statusInfo?.[currentUser?.id]?.mediaType === 'video' ? (
+                                                        <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                                            <Video
+                                                                source={{ uri: statusInfo?.[currentUser?.id]?.thumbnail }}
+                                                                style={{ width: '100%', height: '100%' }}
+                                                                resizeMode={ResizeMode.COVER}
+                                                                shouldPlay={false}
+                                                                isMuted={true}
+                                                            />
+                                                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                                                                <Ionicons name="play" size={18} color="white" />
+                                                            </View>
                                                         </View>
                                                     ) : (
-                                                        <Image source={{ uri: statusInfo?.[currentUser?.id]?.thumbnail || currentUser?.avatar_url || 'https://via.placeholder.com/150' }} style={{ width: '100%', height: '100%' }} />
+                                                        <Image 
+                                                            source={{ uri: statusInfo?.[currentUser?.id]?.thumbnail || currentProfile?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentProfile?.username || 'User')}&backgroundColor=F68537` }} 
+                                                            style={{ width: '100%', height: '100%' }} 
+                                                        />
                                                     )}
                                                 </View>
                                             </TouchableOpacity>
@@ -157,8 +176,23 @@ export default function StatusBar({
                                                 >
                                                     <View style={{ width: '100%', height: '100%', borderRadius: 28, overflow: 'hidden', backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center' }}>
                                                         {statuses[0].media_type === 'text' ? (
-                                                            <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: statuses[0].background_color || '#CBD5E1' }}>
-                                                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>{statuses[0].content?.charAt(0)}</Text>
+                                                            <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: statuses[0].background_color || '#CBD5E1', padding: 4 }}>
+                                                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 9, textAlign: 'center' }} numberOfLines={3}>
+                                                                    {statuses[0].content}
+                                                                </Text>
+                                                            </View>
+                                                        ) : statuses[0].media_type === 'video' ? (
+                                                            <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                                                <Video
+                                                                    source={{ uri: statuses[0].media_url }}
+                                                                    style={{ width: '100%', height: '100%' }}
+                                                                    resizeMode={ResizeMode.COVER}
+                                                                    shouldPlay={false}
+                                                                    isMuted={true}
+                                                                />
+                                                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                                                                    <Ionicons name="play" size={14} color="white" />
+                                                                </View>
                                                             </View>
                                                         ) : (
                                                             <Image source={{ uri: statuses[0].media_url }} style={{ width: '100%', height: '100%' }} />
@@ -231,18 +265,33 @@ export default function StatusBar({
                                                 backgroundColor: 'white'
                                             }}
                                         >
-                                        <View style={{ width: '100%', height: '100%', borderRadius: 32, overflow: 'hidden', backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
-                                            {item.mediaType === 'text' ? (
-                                                <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F68537' }}>
-                                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>T</Text>
-                                                </View>
-                                            ) : (
-                                                <Image
-                                                    source={{ uri: item.thumbnail || item.img || 'https://via.placeholder.com/150' }}
-                                                    style={{ width: '100%', height: '100%' }}
-                                                />
-                                            )}
-                                        </View>
+                                            <View style={{ width: '100%', height: '100%', borderRadius: 32, overflow: 'hidden', backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                                                {item.mediaType === 'text' ? (
+                                                    <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: statusInfo?.[item.id]?.bgColor || '#F68537', padding: 4 }}>
+                                                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 10, textAlign: 'center' }} numberOfLines={3}>
+                                                            {statusInfo?.[item.id]?.text || 'T'}
+                                                        </Text>
+                                                    </View>
+                                                ) : item.mediaType === 'video' ? (
+                                                    <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                                        <Video
+                                                            source={{ uri: item.thumbnail }}
+                                                            style={{ width: '100%', height: '100%' }}
+                                                            resizeMode={ResizeMode.COVER}
+                                                            shouldPlay={false}
+                                                            isMuted={true}
+                                                        />
+                                                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                                                            <Ionicons name="play" size={18} color="white" />
+                                                        </View>
+                                                    </View>
+                                                ) : (
+                                                    <Image
+                                                        source={{ uri: item.thumbnail || item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.name)}&backgroundColor=F68537` }}
+                                                        style={{ width: '100%', height: '100%' }}
+                                                    />
+                                                )}
+                                            </View>
                                         </TouchableOpacity>
                                         <Text style={{ fontSize: 9, fontWeight: '900', color: '#64748B', maxWidth: 64, textAlign: 'center' }} numberOfLines={1}>
                                             {item.name.toUpperCase()}
