@@ -1,20 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { Audio } from 'expo-av';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { useCallStore } from '@/store/useCallStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 
 const RINGTONE_URL = 'https://vgqasnzpnnmshclnshob.supabase.co/storage/v1/object/public/system/ringtone.mp3';
+import ringingTone from '../assets/audio/ringing_tone.mp3';
+const DIAL_TONE_URL = ringingTone;
+import callingTone from '../assets/audio/calling_tone.mp3';
+const CALLING_TONE_URL = callingTone;
 
 export const useCallManager = (currentUser: any, combinedItems: any[], isListener = true, profile: any = null) => {
-    const { callSession, setCallSession, setCallActive, endCall: endGlobalCall } = useCallStore();
+    const { callSession, setCallSession, setCallActive, setCallEnded, endCall: endGlobalCall } = useCallStore();
     const soundRef = useRef<Audio.Sound | null>(null);
 
     // Handle ringtone
     useEffect(() => {
+        let isActive = true;
+
         const manageRingtone = async () => {
             try {
-                if (callSession?.status === 'incoming') {
+                if (callSession?.status === 'incoming' || callSession?.status === 'ringing' || callSession?.status === 'outgoing') {
                     // Set Audio Mode for Call
                     await Audio.setAudioModeAsync({
                         playsInSilentModeIOS: true,
@@ -23,20 +31,35 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                         shouldDuckAndroid: true,
                     });
 
-                    const userCallTone = profile?.call_tone || RINGTONE_URL;
-                    console.log('[DEBUG] CallManager: Playing ringtone:', userCallTone);
+                    const isIncoming = callSession.status === 'incoming';
+                    const isRinging = callSession.status === 'ringing';
+                    const toneUrl = isIncoming ? (profile?.call_tone || RINGTONE_URL) : 
+                                   isRinging ? DIAL_TONE_URL : CALLING_TONE_URL;
+                    const volume = isIncoming ? 1.0 : (isRinging ? 0.4 : 0.8); // louder for calling tone
+
+                    console.log(`[DEBUG] CallManager: Playing tone:`, toneUrl);
 
                     if (soundRef.current) {
                         await soundRef.current.unloadAsync();
                     }
+                    
+                    const source = typeof toneUrl === 'string' ? { uri: toneUrl } : toneUrl;
                     const { sound } = await Audio.Sound.createAsync(
-                        { uri: userCallTone },
-                        { shouldPlay: true, isLooping: true, volume: 1.0 }
+                        source as any,
+                        { shouldPlay: true, isLooping: true, volume }
                     );
+
+                    if (!isActive) {
+                        // If the effect was cleaned up while we were loading the sound, stop it immediately
+                        await sound.stopAsync();
+                        await sound.unloadAsync();
+                        return;
+                    }
+
                     soundRef.current = sound;
                 } else {
                     if (soundRef.current) {
-                        console.log('[DEBUG] CallManager: Stopping ringtone');
+                        console.log('[DEBUG] CallManager: Stopping tone');
                         try {
                             const status = await soundRef.current.getStatusAsync();
                             if (status.isLoaded) {
@@ -44,24 +67,76 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                                 await soundRef.current.unloadAsync();
                             }
                         } catch (e) {
-                            console.log('[DEBUG] CallManager: Ringtone stop error ignored', e);
+                            console.log('[DEBUG] CallManager: Tone stop error ignored', e);
                         } finally {
                             soundRef.current = null;
                         }
                     }
                 }
             } catch (error) {
-                console.error('Error managing ringtone:', error);
+                console.error('[DEBUG] CallManager: Error in manageRingtone:', error);
             }
         };
 
         manageRingtone();
+        
         return () => {
+            isActive = false;
+            // Also attempt to clean up if unmounting
             if (soundRef.current) {
                 soundRef.current.unloadAsync().catch(() => {});
+                soundRef.current = null;
             }
         };
     }, [callSession?.status, profile?.call_tone]);
+
+    // Handle backgrounding during call setup
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', nextAppState => {
+            if (nextAppState === 'background' || nextAppState === 'inactive') {
+                // Pause calling tone if user locks screen while dialing
+                if (callSession?.status === 'outgoing' || callSession?.status === 'ringing') {
+                    if (soundRef.current) {
+                        soundRef.current.pauseAsync().catch(() => {});
+                    }
+                }
+            } else if (nextAppState === 'active') {
+                // Resume tone if we come back and it's still setting up
+                if (callSession?.status === 'outgoing' || callSession?.status === 'ringing') {
+                    if (soundRef.current) {
+                        soundRef.current.playAsync().catch(() => {});
+                    }
+                }
+            }
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, [callSession?.status]);
+
+    // Handle call timeouts (Unreachable or Unanswered)
+    useEffect(() => {
+        let timeoutId: NodeJS.Timeout;
+
+        if (callSession?.status === 'outgoing') {
+            // Wait 30 seconds for 'ringing' signal. If not received, they are offline.
+            timeoutId = setTimeout(() => {
+                console.log('[DEBUG] CallManager: Outgoing call timed out (User unreachable)');
+                setCallEnded('User is offline or unreachable');
+            }, 30000);
+        } else if (callSession?.status === 'ringing') {
+            // Wait 60 seconds for them to answer. If not, it's a missed call.
+            timeoutId = setTimeout(() => {
+                console.log('[DEBUG] CallManager: Ringing call timed out (No answer)');
+                setCallEnded('Call unanswered');
+            }, 60000);
+        }
+
+        return () => {
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+    }, [callSession?.status]);
 
     const sessionRef = useRef(callSession);
 
@@ -107,14 +182,35 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                     friend: caller,
                     isGroup: payload.is_group
                 });
+
+                // Immediately send back a 'ringing' signal so caller knows we got it
+                const ringingChannel = supabase.channel(`calls-signal-${payload.caller_id}`);
+                ringingChannel.subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        ringingChannel.send({
+                            type: 'broadcast',
+                            event: 'signal',
+                            payload: { type: 'ringing', receiver_id: currentUser.id }
+                        });
+                        setTimeout(() => supabase.removeChannel(ringingChannel).catch(() => {}), 1000);
+                    }
+                });
+            } else if (payload.type === 'ringing') {
+                console.log('[CALL_ACTION] Remote user is ringing');
+                useCallStore.getState().setCallRinging();
             } else if (payload.type === 'accepted') {
                 console.log('[CALL_ACTION] Call accepted by remote user');
                 setCallActive();
             } else if (payload.type === 'busy') {
                 console.log('[CALL_ACTION] Remote user is busy');
-                // Only show busy for 1-on-1 calls, for groups it's fine if some are busy
                 if (!sessionRef.current?.isGroup) {
-                    alert('User is busy on another call');
+                    setCallEnded('User is busy on another call');
+                }
+            } else if (payload.type === 'rejected') {
+                console.log('[CALL_ACTION] Call rejected by remote user');
+                if (!sessionRef.current?.isGroup) {
+                    setCallEnded('Call declined');
+                } else {
                     setCallSession(null);
                 }
             } else if (payload.type === 'end') {
@@ -180,6 +276,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
 
     const endCall = () => {
         console.log('[DEBUG] CallManager: Manual end call triggered');
+        const endType = callSession?.status === 'incoming' ? 'rejected' : 'end';
         if (callSession?.friend?.id) {
             const signalChannelName = `calls-signal-${callSession.friend.id}`;
             const personalChannel = supabase.channel(signalChannelName);
@@ -188,7 +285,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                     personalChannel.send({
                         type: 'broadcast',
                         event: 'signal',
-                        payload: { type: 'end' }
+                        payload: { type: endType }
                     });
                     setTimeout(() => supabase.removeChannel(personalChannel), 1000);
                 }

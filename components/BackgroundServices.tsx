@@ -6,6 +6,10 @@ import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useInitialPermissions } from '@/hooks/useInitialPermissions';
 import CallScreen from '@/components/chat/CallScreen';
+import { useCallStore } from '@/store/useCallStore';
+import { TouchableOpacity, Text, View, StatusBar } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useDbStore } from '@/store/useDbStore';
@@ -36,8 +40,11 @@ export const BackgroundServices = () => {
     const { 
         callSession, 
         setCallActive, 
-        endCall 
+        endCall,
+        handleStartCall
     } = useCallManager(session?.user, memoizedFriends, true, profile);
+    
+    const { isMinimized, setMinimized } = useCallStore();
 
     if (!session?.user) return null;
 
@@ -48,16 +55,53 @@ export const BackgroundServices = () => {
                 onClose={clearNotification} 
             />
             <CallScreen
-                visible={!!callSession}
+                visible={!!callSession && !isMinimized}
                 callState={callSession?.status}
                 onEndCall={endCall}
                 onAcceptCall={setCallActive}
+                onMinimize={() => setMinimized(true)}
+                onRetry={() => {
+                    if (callSession?.friend && callSession?.type) {
+                        // Restart the call using previous call's info
+                        handleStartCall(callSession.friend, callSession.type, callSession.isGroup || false);
+                    }
+                }}
                 currentUser={session?.user}
                 callType={callSession?.type || 'video'}
                 friend={callSession?.friend || {}}
                 offer={callSession?.offer}
                 isGroup={callSession?.isGroup}
             />
+            {isMinimized && callSession && callSession.status !== 'ended' && (
+                <>
+                    {/* Change status bar background to premium gold like the terminal text */}
+                    <StatusBar backgroundColor="#e2b13c" barStyle="light-content" />
+                    {/* Thin clickable strip exactly over the status bar area */}
+                    <TouchableOpacity 
+                        onPress={() => setMinimized(false)}
+                        activeOpacity={0.85}
+                        hitSlop={{ bottom: 25, top: 10 }}
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: Constants.statusBarHeight || 40,
+                            backgroundColor: '#e2b13c',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            elevation: 99,
+                            zIndex: 9999,
+                        }}
+                    >
+                        <Ionicons name="call" size={12} color="white" style={{ marginRight: 5 }} />
+                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.3 }}>
+                            Tap to return to call
+                        </Text>
+                    </TouchableOpacity>
+                </>
+            )}
         </>
     );
 };

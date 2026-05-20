@@ -36,45 +36,8 @@ import {
 } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
 
-function useKeyboardOffset() {
-    const [keyboardOffset, setKeyboardOffset] = useState(0);
-
-    useEffect(() => {
-        if (Platform.OS === 'ios') return;
-
-        let initialHeight = Dimensions.get('window').height;
-        
-        const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-            const currentHeight = Dimensions.get('window').height;
-            const diff = initialHeight - currentHeight;
-            
-            // If the window didn't resize by at least 100 pixels, it means the OS 
-            // failed to resize the view for the keyboard (common on Realme/Xiaomi).
-            if (diff < 100) {
-                setKeyboardOffset(e.endCoordinates.height);
-            } else {
-                setKeyboardOffset(0);
-            }
-        });
-
-        const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-            setKeyboardOffset(0);
-            // reset initial height just in case orientation changed
-            initialHeight = Dimensions.get('window').height;
-        });
-
-        return () => {
-            showSub.remove();
-            hideSub.remove();
-        };
-    }, []);
-
-    return keyboardOffset;
-}
-
 function ChatScreen() {
     const logDebug = useCallback((msg: string) => {}, []);
-    const androidKeyboardOffset = useKeyboardOffset();
 
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
     const insets = useSafeAreaInsets();
@@ -657,9 +620,9 @@ function ChatScreen() {
 
     return (
         <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-            style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7', paddingBottom: androidKeyboardOffset }}
+            style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}
         >
             {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high" />}
             {wallpaper && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.2)' }]} />}

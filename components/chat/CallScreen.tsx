@@ -8,19 +8,23 @@ import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useCallLogger } from '@/hooks/useCallLogger';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 
 interface CallScreenProps {
     visible: boolean;
-    callState: 'incoming' | 'outgoing' | 'active';
+    callState: 'incoming' | 'outgoing' | 'ringing' | 'active' | 'ended';
     onEndCall: () => void;
     onAcceptCall: () => void;
+    onRetry?: () => void; // New: retry call
+    onMinimize?: () => void; // New: minimize call
     currentUser: any;
     callType: 'audio' | 'video';
     friend: any;
     offer?: any;
     isGroup?: boolean;
+    endReason?: string;
 }
 
 export default function CallScreen({
@@ -28,12 +32,16 @@ export default function CallScreen({
     callState,
     onEndCall,
     onAcceptCall,
+    onRetry,
+    onMinimize,
     currentUser,
     callType,
     friend,
     offer: incomingOffer,
-    isGroup = false
+    isGroup = false,
+    endReason
 }: CallScreenProps) {
+    const router = useRouter();
     const [callDuration, setCallDuration] = useState(0);
     const [isSwapped, setIsSwapped] = useState(false);
     const startTimeRef = useRef<number | null>(null); // NEW: To track when the call actually started
@@ -162,6 +170,7 @@ export default function CallScreen({
                     <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
                     <Text style={styles.callStatus}>
                         {callState === 'outgoing' ? 'Calling...' :
+                            callState === 'ringing' ? 'Ringing...' :
                             callState === 'incoming' ? 'Incoming Call...' :
                                 'Waiting for participants...'}
                     </Text>
@@ -198,8 +207,25 @@ export default function CallScreen({
     if (!visible) return null;
 
     return (
-        <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onEndCall}>
+        <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={() => {
+            if (callState === 'ended') {
+                onEndCall();
+            } else if (onMinimize) {
+                onMinimize();
+            } else {
+                onEndCall();
+            }
+        }}>
             <View style={styles.container}>
+                {/* Minimize Button */}
+                {callState !== 'ended' && onMinimize && (
+                    <TouchableOpacity 
+                        style={styles.minimizeButton} 
+                        onPress={onMinimize}
+                    >
+                        <Ionicons name="chevron-down" size={32} color="white" />
+                    </TouchableOpacity>
+                )}
                 {/* Main Video Container */}
                 <View style={styles.mainVideoContainer}>
                     {callType === 'video' ? (
@@ -239,12 +265,60 @@ export default function CallScreen({
                             <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
                             <Text style={styles.callStatus}>
                                 {callState === 'outgoing' ? 'Calling...' :
+                                    callState === 'ringing' ? 'Ringing...' :
                                     callState === 'incoming' ? 'Incoming Call...' :
+                                    callState === 'ended' ? (endReason || 'Call Ended') :
                                         `On Call (${remoteUids.length} joined)`}
                             </Text>
                         </View>
                     )}
                 </View>
+
+                {/* Call Ended Overlay */}
+                {callState === 'ended' && (
+                    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#111827', zIndex: 1000 }]}>
+                        <View style={styles.placeholderContainer}>
+                            <View style={[styles.avatarContainer, { borderColor: '#EF4444' }]}>
+                                {friend.avatar_url || friend.img ? (
+                                    <Image source={{ uri: friend.avatar_url || friend.img }} style={styles.fullImage} />
+                                ) : (
+                                    <Ionicons name="person" size={64} color="#94A3B8" />
+                                )}
+                            </View>
+                            <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
+                            <Text style={[styles.callStatus, { color: '#EF4444', marginTop: 12 }]}>
+                                {endReason || 'Call Ended'}
+                            </Text>
+                            
+                            <View style={{ flexDirection: 'row', gap: 20, marginTop: 40 }}>
+                                <TouchableOpacity 
+                                    style={{ alignItems: 'center' }}
+                                    onPress={onRetry ? onRetry : onEndCall} 
+                                >
+                                    <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#4B5563', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                                        <Ionicons name="repeat" size={28} color="white" />
+                                    </View>
+                                    <Text style={{ color: 'white', fontSize: 13 }}>Retry</Text>
+                                </TouchableOpacity>
+                                
+                                <TouchableOpacity 
+                                    style={{ alignItems: 'center' }}
+                                    onPress={() => {
+                                        onEndCall();
+                                        const nameParam = encodeURIComponent(friend.name || 'User');
+                                        const groupParam = isGroup ? 'true' : 'false';
+                                        router.push(`/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}`);
+                                    }}
+                                >
+                                    <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#3B82F6', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                                        <Ionicons name="chatbubble" size={24} color="white" />
+                                    </View>
+                                    <Text style={{ color: 'white', fontSize: 13 }}>Message</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                )}
 
                 {/* Local Preview (PIP) */}
                 {callType === 'video' && (callState === 'active' || callState === 'outgoing') && isEngineReady && (
@@ -344,6 +418,18 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#111827',
+    },
+    minimizeButton: {
+        position: 'absolute',
+        top: 50,
+        left: 20,
+        zIndex: 100,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     mainVideoContainer: {
         position: 'absolute',
