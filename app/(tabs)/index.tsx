@@ -26,17 +26,7 @@ import ChatLockModal from '@/components/chat/ChatLockModal';
 import * as SecureStore from 'expo-secure-store';
 
 function HomeScreen() {
-  const [homeDebugLogs, setHomeDebugLogs] = useState<string[]>([]);
-  const [showHomeDebug, setShowHomeDebug] = useState(false);
-
-  const logHomeDebug = useCallback((msg: string) => {
-    console.log(`[DEBUG_HOME] ${msg}`);
-    setHomeDebugLogs(prev => {
-      const next = [...prev.slice(-29), `${new Date().toLocaleTimeString()}: ${msg}`];
-      SecureStore.setItemAsync('HOME_DEBUG_LOGS', JSON.stringify(next)).catch(() => {});
-      return next;
-    });
-  }, []);
+ 
 
   const router = useRouter();
   const swipeHandlers = useSwipeNavigation();
@@ -60,23 +50,8 @@ function HomeScreen() {
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
 
 
-  // Ensure profile is loaded when Home screen mounts and load persistent logs
+  // Ensure profile is loaded when Home screen mounts
   useEffect(() => {
-    SecureStore.getItemAsync('HOME_DEBUG_LOGS').then(saved => {
-      let initialLogs: string[] = [];
-      if (saved) {
-        try {
-          initialLogs = JSON.parse(saved);
-        } catch {}
-      }
-      const newMsg = `HomeScreen mounted. Combined items: ${combinedItems.length}, currentUser: ${currentUser?.id || 'none'}`;
-      const nextLogs = [...initialLogs.slice(-29), `--- MOUNT ---`, `${new Date().toLocaleTimeString()}: ${newMsg}`];
-      setHomeDebugLogs(nextLogs);
-      SecureStore.setItemAsync('HOME_DEBUG_LOGS', JSON.stringify(nextLogs)).catch(() => {});
-    }).catch(() => {
-      logHomeDebug("HomeScreen mounted. Combined items: " + combinedItems.length + ", currentUser: " + (currentUser?.id || "none"));
-    });
-
     if (currentUser && !profile) {
       useAuthStore.getState().syncProfile();
     }
@@ -201,15 +176,9 @@ function HomeScreen() {
   } = useStatusActions(currentUser, loadFriends);
 
   const handleSelectFriend = useCallback((friend: any) => {
-    if (!friend?.id) {
-        logHomeDebug("SelectFriend: Failed, no friend ID");
-        return;
-    }
-    
-    logHomeDebug(`SelectFriend: Clicked ${friend.name || 'User'} (ID: ${friend.id})`);
+    if (!friend?.id) return;
 
     if (friend.isLocked) {
-        logHomeDebug("SelectFriend: Friend is locked, displaying lock modal");
         setPendingLockedFriend(friend);
         setLockModalMode('verify');
         setLockModalTask('open');
@@ -223,14 +192,14 @@ function HomeScreen() {
         const imageParam = encodeURIComponent(friend.img || '');
         const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
         
-        logHomeDebug("SelectFriend: Navigating to URL -> " + url);
-        router.push(url as any);
-        logHomeDebug("SelectFriend: router.push executed successfully");
+        // Wrap in setTimeout to allow tap animation to render before heavy navigation
+        setTimeout(() => {
+            router.push(url as any);
+        }, 10);
     } catch (err: any) {
-        logHomeDebug("SelectFriend ERROR: " + err.message);
         Alert.alert("Nav Error", err.message);
     }
-  }, [router, logHomeDebug]);
+  }, [router]);
 
 
   const handleImageClick = useCallback((friend: any) => {
@@ -323,20 +292,6 @@ function HomeScreen() {
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {/* Live Debug Toggle */}
-            <TouchableOpacity
-              onPress={() => setShowHomeDebug(!showHomeDebug)}
-              style={{
-                backgroundColor: Platform.OS === 'android' ? 'white' : '#F68537',
-                borderRadius: 9999,
-                padding: 6,
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <Ionicons name="bug" size={16} color={Platform.OS === 'android' ? '#F68537' : 'white'} />
-            </TouchableOpacity>
-
             {/* Search Button */}
             <TouchableOpacity
               onPress={() => {
@@ -567,51 +522,7 @@ function HomeScreen() {
           </TouchableOpacity>
         </Modal>
 
-        {showHomeDebug && (
-            <View style={{ position: 'absolute', bottom: 10, left: 10, right: 10, backgroundColor: 'rgba(30, 41, 59, 0.98)', padding: 12, borderRadius: 12, zIndex: 9999, height: 260, borderWidth: 1.5, borderColor: '#F68537', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingBottom: 6, marginBottom: 6 }}>
-                    <Text style={{ color: '#F68537', fontWeight: 'bold', fontSize: 13 }}>🛠️ Home screen Debug Console</Text>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <TouchableOpacity 
-                            onPress={() => {
-                                if (homeDebugLogs.length === 0) {
-                                    Alert.alert("Empty", "No logs to copy!");
-                                    return;
-                                }
-                                Clipboard.setString(homeDebugLogs.join('\n'));
-                                Alert.alert("Copied", "Home logs copied to clipboard!");
-                            }} 
-                            style={{ backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
-                        >
-                            <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>COPY</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            onPress={() => {
-                                setHomeDebugLogs([]);
-                                SecureStore.deleteItemAsync('HOME_DEBUG_LOGS').catch(() => {});
-                            }} 
-                            style={{ backgroundColor: '#475569', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
-                        >
-                            <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLEAR</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setShowHomeDebug(false)} style={{ backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                            <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLOSE</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-                <ScrollView style={{ flex: 1 }}>
-                    {homeDebugLogs.length === 0 ? (
-                        <Text style={{ color: '#94A3B8', fontSize: 11, fontStyle: 'italic' }}>No logs yet...</Text>
-                    ) : (
-                        homeDebugLogs.map((log, index) => (
-                            <Text key={index} style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginBottom: 4 }}>
-                                {log}
-                            </Text>
-                        ))
-                    )}
-                </ScrollView>
-            </View>
-        )}
+ 
       </View>
     </View>
   );

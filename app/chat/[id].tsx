@@ -36,18 +36,45 @@ import {
 } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
 
-function ChatScreen() {
-    const [debugLogs, setDebugLogs] = useState<string[]>([]);
-    const [showVisualLogs, setShowVisualLogs] = useState(false);
+function useKeyboardOffset() {
+    const [keyboardOffset, setKeyboardOffset] = useState(0);
 
-    const logDebug = useCallback((msg: string) => {
-        console.log(`[DEBUG_CHAT] ${msg}`);
-        setDebugLogs(prev => {
-            const next = [...prev.slice(-29), `${new Date().toLocaleTimeString()}: ${msg}`];
-            SecureStore.setItemAsync('CHAT_DEBUG_LOGS', JSON.stringify(next)).catch(() => {});
-            return next;
+    useEffect(() => {
+        if (Platform.OS === 'ios') return;
+
+        let initialHeight = Dimensions.get('window').height;
+        
+        const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+            const currentHeight = Dimensions.get('window').height;
+            const diff = initialHeight - currentHeight;
+            
+            // If the window didn't resize by at least 100 pixels, it means the OS 
+            // failed to resize the view for the keyboard (common on Realme/Xiaomi).
+            if (diff < 100) {
+                setKeyboardOffset(e.endCoordinates.height);
+            } else {
+                setKeyboardOffset(0);
+            }
         });
+
+        const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+            setKeyboardOffset(0);
+            // reset initial height just in case orientation changed
+            initialHeight = Dimensions.get('window').height;
+        });
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
     }, []);
+
+    return keyboardOffset;
+}
+
+function ChatScreen() {
+    const logDebug = useCallback((msg: string) => {}, []);
+    const androidKeyboardOffset = useKeyboardOffset();
 
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
     const insets = useSafeAreaInsets();
@@ -292,33 +319,6 @@ function ChatScreen() {
     }, [safeFriendId, currentUser?.id]);
 
     useEffect(() => {
-        SecureStore.getItemAsync('CHAT_DEBUG_LOGS').then(saved => {
-            let initialLogs: string[] = [];
-            if (saved) {
-                try {
-                    initialLogs = JSON.parse(saved);
-                } catch {}
-            }
-            const nextLogs = [...initialLogs.slice(-29), `--- MOUNT ---`];
-            setDebugLogs(nextLogs);
-            SecureStore.setItemAsync('CHAT_DEBUG_LOGS', JSON.stringify(nextLogs)).catch(() => {});
-
-            // Run logs with delay to ensure state hydration completes
-            setTimeout(() => {
-                logDebug("--- CHAT SCREEN MOUNTED/CHANGED ---");
-                logDebug("Room ID: " + roomId);
-                logDebug("Friend ID: " + safeFriendId);
-                logDebug("Is Group Chat: " + isGroup);
-                logDebug("Current User: " + (currentUser?.email || currentUser?.id || "None"));
-            }, 100);
-        }).catch(() => {
-            logDebug("--- CHAT SCREEN MOUNTED/CHANGED ---");
-            logDebug("Room ID: " + roomId);
-            logDebug("Friend ID: " + safeFriendId);
-            logDebug("Is Group Chat: " + isGroup);
-            logDebug("Current User: " + (currentUser?.email || currentUser?.id || "None"));
-        });
-        
         setWallpaper(null);
         logDebug("Triggering loadWallpaper()...");
         loadWallpaper();
@@ -659,7 +659,7 @@ function ChatScreen() {
         <KeyboardAvoidingView 
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-            style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}
+            style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7', paddingBottom: androidKeyboardOffset }}
         >
             {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high" />}
             {wallpaper && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.2)' }]} />}
@@ -704,9 +704,7 @@ function ChatScreen() {
                     >
                         <Ionicons name="call" size={18} color="white" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setShowVisualLogs(!showVisualLogs)} style={{ padding: 8, backgroundColor: '#FFF5E6', borderRadius: 8, marginRight: 4 }}>
-                        <Ionicons name="bug" size={16} color="#F68537" />
-                    </TouchableOpacity>
+ 
                     <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 4 }}>
                         <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
                     </TouchableOpacity>
@@ -825,51 +823,7 @@ function ChatScreen() {
                 friendName={friendName || 'Friend'}
             />
 
-            {showVisualLogs && (
-                <View style={{ position: 'absolute', top: insets.top + 60, left: 10, right: 10, backgroundColor: 'rgba(30, 41, 59, 0.98)', padding: 12, borderRadius: 12, zIndex: 9999, height: 260, borderWidth: 1.5, borderColor: '#F68537', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingBottom: 6, marginBottom: 6 }}>
-                        <Text style={{ color: '#F68537', fontWeight: 'bold', fontSize: 13 }}>🛠️ Live Chat Debug Console</Text>
-                        <View style={{ flexDirection: 'row', gap: 6 }}>
-                            <TouchableOpacity 
-                                onPress={() => {
-                                    if (debugLogs.length === 0) {
-                                        Alert.alert("Empty", "No logs to copy!");
-                                        return;
-                                    }
-                                    Clipboard.setString(debugLogs.join('\n'));
-                                    Alert.alert("Copied", "Chat logs copied to clipboard!");
-                                }} 
-                                style={{ backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
-                            >
-                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>COPY</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                onPress={() => {
-                                    setDebugLogs([]);
-                                    SecureStore.deleteItemAsync('CHAT_DEBUG_LOGS').catch(() => {});
-                                }} 
-                                style={{ backgroundColor: '#475569', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
-                            >
-                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLEAR</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setShowVisualLogs(false)} style={{ backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>CLOSE</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                    <ScrollView style={{ flex: 1 }}>
-                        {debugLogs.length === 0 ? (
-                            <Text style={{ color: '#94A3B8', fontSize: 11, fontStyle: 'italic' }}>No logs yet...</Text>
-                        ) : (
-                            debugLogs.map((log, index) => (
-                                <Text key={index} style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginBottom: 4 }}>
-                                    {log}
-                                </Text>
-                            ))
-                        )}
-                    </ScrollView>
-                </View>
-            )}
+ 
         </KeyboardAvoidingView>
     );
 }

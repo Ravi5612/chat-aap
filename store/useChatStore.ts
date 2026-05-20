@@ -34,6 +34,7 @@ interface ChatState {
     cleanupChat: () => void;
     setFlyingEmoji: (emoji: any) => void;
     markAsRead: (messageId: string, currentUser: any, friendId: string, isGroup: boolean) => Promise<void>;
+    loadMessagesUpToId: (friendId: string, currentUser: any, isGroup: boolean, targetMsgId: string, targetCreatedAt: string) => Promise<boolean>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => {
@@ -97,9 +98,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             if (!friendId || !currentUser || !chatKey) return;
 
             const PAGE_SIZE = 20;
-            const isFirstLoad = !cache[friendId] || cache[friendId].messages.length === 0;
-            // Only show skeleton loader if we have NO messages from anywhere (neither memory nor SQLite)
-            if (isFirstLoad && messages.length === 0) set({ loading: true });
+            let hasLocalMessages = false;
 
             // 1. Try loading from Local DB first for instant UI (Last 20)
             try {
@@ -122,6 +121,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
 
                     if (localMsgs && localMsgs.length > 0) {
+                        hasLocalMessages = true;
                         console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB (Paginated)`);
                         set({
                             messages: localMsgs,
@@ -133,6 +133,12 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }
             } catch (dbErr) {
                 console.warn('[DB] Local load failed, falling back to network:', dbErr);
+            }
+
+            const isFirstLoad = !cache[friendId] || cache[friendId].messages.length === 0;
+            // Only show skeleton loader if we have NO messages from anywhere (neither memory nor SQLite)
+            if (isFirstLoad && get().messages.length === 0 && !hasLocalMessages) {
+                set({ loading: true });
             }
 
             try {
@@ -441,6 +447,147 @@ export const useChatStore = create<ChatState>((set, get) => {
                 set({ loadingMore: false });
                 logErrorToDB(error, 'ChatStore: Load More Messages', currentUser.id, currentUser.username);
             }
+        },
+
+        loadMessagesUpToId: async (friendId, currentUser, isGroup, targetMsgId, targetCreatedAt) => {
+            const { chatKey, messages } = get();
+            if (!friendId || !currentUser || !chatKey || !targetMsgId || !targetCreatedAt) return false;
+
+            try {
+                // 1. Try loading from SQLite DB
+                const { db } = useDbStore.getState();
+                if (db) {
+                    const clearTimestamp = await getChatClearTimestamp(db, friendId);
+                    const localDeletedIds = await getLocallyDeletedMessages(db);
+
+                    const query = isGroup 
+                        ? 'SELECT * FROM messages WHERE group_id = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 150'
+                        : 'SELECT * FROM messages WHERE (sender_id = ? OR receiver_id = ?) AND group_id IS NULL AND created_at >= ? ORDER BY created_at DESC LIMIT 150';
+                    
+                    const params = isGroup 
+                        ? [friendId, targetCreatedAt] 
+                        : [friendId, friendId, targetCreatedAt];
+
+                    const results = await db.getAllAsync<any>(query, params);
+                    let fetchedMsgs = results.map(row => ({
+                        ...row,
+                        is_read: row.is_read === 1,
+                        reactions: JSON.parse(row.reactions || '{}')
+                    }));
+
+                    fetchedMsgs = fetchedMsgs.reverse();
+
+                    if (clearTimestamp) {
+                        fetchedMsgs = fetchedMsgs.filter(m => m && m.created_at && new Date(m.created_at) > new Date(clearTimestamp));
+                    }
+
+                    if (localDeletedIds && localDeletedIds.length > 0) {
+                        fetchedMsgs = fetchedMsgs.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                    }
+
+                    const hasTarget = fetchedMsgs.some(m => m.id === targetMsgId);
+                    if (hasTarget && fetchedMsgs.length > 0) {
+                        console.log(`[Store] loadMessagesUpToId: Found target message in SQLite. Loaded ${fetchedMsgs.length} messages.`);
+                        const combined = [...fetchedMsgs, ...messages];
+                        const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
+                        unique.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+                        set({
+                            messages: unique,
+                            cache: { ...get().cache, [friendId]: { messages: unique, key: chatKey } }
+                        });
+                        saveToCache(`chat_messages_${friendId}`, { messages: unique });
+                        return true;
+                    }
+                }
+            } catch (dbErr) {
+                console.warn('[DB] loadMessagesUpToId local load failed:', dbErr);
+            }
+
+            // 2. Fallback to Supabase if not found in SQLite
+            try {
+                console.log(`[Store] loadMessagesUpToId: Target not in SQLite. Fetching from Supabase starting from ${targetCreatedAt}`);
+                let query = supabase
+                    .from('messages')
+                    .select(`
+                        *,
+                        sender:profiles!sender_id(id, username, avatar_url),
+                        reply:reply_to_id(id, message, sender_id, created_at),
+                        status_context:status_id(id, user_id, media_type, media_url, content)
+                    `);
+
+                if (isGroup) {
+                    query = query.eq('group_id', friendId);
+                } else {
+                    query = query.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
+                }
+
+                query = query.gte('created_at', targetCreatedAt);
+
+                const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    const decryptedMessages = await Promise.all((data || []).map(async (msg) => {
+                        try {
+                            let decryptedText = msg.message;
+                            if (msg.message && typeof msg.message === 'string') {
+                                const trimmed = msg.message.trim();
+                                if (trimmed.startsWith('{') && trimmed.includes('"iv"') && trimmed.includes('"content"')) {
+                                    decryptedText = await decryptText(msg.message, chatKey);
+                                }
+                            }
+                            let decryptedReply = null;
+                            if (msg.reply && msg.reply.id) {
+                                try {
+                                    const replyText = await decryptText(msg.reply.message, chatKey);
+                                    decryptedReply = { ...msg.reply, message: replyText };
+                                } catch (e) {
+                                    decryptedReply = { ...msg.reply, message: msg.reply.message };
+                                }
+                            }
+                            let decryptedFileUrl = msg.file_url;
+                            if (msg.file_url && msg.file_url.trim().startsWith('{')) {
+                                try {
+                                    decryptedFileUrl = await decryptText(msg.file_url, chatKey);
+                                } catch (e) {
+                                    decryptedFileUrl = msg.file_url;
+                                }
+                            }
+                            return { ...msg, message: decryptedText, reply: decryptedReply, file_url: decryptedFileUrl };
+                        } catch (e) {
+                            return { ...msg };
+                        }
+                    }));
+
+                    let filtered = decryptedMessages;
+                    try {
+                        const { db } = useDbStore.getState();
+                        const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
+                        if (localDeletedIds && localDeletedIds.length > 0) {
+                            filtered = decryptedMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                        }
+                    } catch (e) {
+                        console.warn('[ChatStore] loadMessagesUpToId filter failed:', e);
+                    }
+
+                    const combined = [...filtered, ...messages];
+                    const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
+                    unique.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+                    set({
+                        messages: unique,
+                        cache: { ...get().cache, [friendId]: { messages: unique, key: chatKey } }
+                    });
+                    saveToCache(`chat_messages_${friendId}`, { messages: unique });
+                    return true;
+                }
+            } catch (err: any) {
+                console.error('ChatStore: loadMessagesUpToId supabase fallback error:', err.message);
+                logErrorToDB(err, 'ChatStore: loadMessagesUpToId Fallback', currentUser.id, currentUser.username);
+            }
+
+            return false;
         },
 
         sendMessage: async (text, friendId, currentUser, isGroup, replyToId, messageType) => {

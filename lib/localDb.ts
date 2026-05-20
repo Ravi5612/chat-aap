@@ -327,19 +327,44 @@ export const syncLedgerExpense = async (db: SQLite.SQLiteDatabase, msg: any, cur
 export const getLocalMessages = async (db: SQLite.SQLiteDatabase, friendId: string, isGroup: boolean = false, limit: number = 20, offset: number = 0) => {
     try {
         const query = isGroup 
-            ? 'SELECT * FROM messages WHERE group_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-            : 'SELECT * FROM messages WHERE (sender_id = ? OR receiver_id = ?) AND group_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?';
+            ? `SELECT m.*, 
+                      r.id as reply_id, r.message as reply_message, r.sender_id as reply_sender_id, r.file_url as reply_file_url, r.file_type as reply_file_type
+               FROM messages m 
+               LEFT JOIN messages r ON m.reply_to_id = r.id 
+               WHERE m.group_id = ? 
+               ORDER BY m.created_at DESC LIMIT ? OFFSET ?`
+            : `SELECT m.*, 
+                      r.id as reply_id, r.message as reply_message, r.sender_id as reply_sender_id, r.file_url as reply_file_url, r.file_type as reply_file_type
+               FROM messages m 
+               LEFT JOIN messages r ON m.reply_to_id = r.id 
+               WHERE (m.sender_id = ? OR m.receiver_id = ?) AND m.group_id IS NULL 
+               ORDER BY m.created_at DESC LIMIT ? OFFSET ?`;
         
         const params = isGroup ? [friendId, limit, offset] : [friendId, friendId, limit, offset];
         const results = await db.getAllAsync<any>(query, params);
         
-        // Since we fetch DESC for pagination, but UI might expect ASC or handles it itself.
-        // We'll return them as they are (newest first) and let the store/UI handle sorting.
-        return results.map(row => ({
-            ...row,
-            is_read: row.is_read === 1,
-            reactions: JSON.parse(row.reactions || '{}')
-        }));
+        return results.map(row => {
+            let reply = null;
+            if (row.reply_id) {
+                reply = {
+                    id: row.reply_id,
+                    message: row.reply_message,
+                    sender_id: row.reply_sender_id,
+                    file_url: row.reply_file_url,
+                    file_type: row.reply_file_type
+                };
+            }
+            
+            // Clean up the row object
+            const { reply_id, reply_message, reply_sender_id, reply_file_url, reply_file_type, ...cleanRow } = row;
+            
+            return {
+                ...cleanRow,
+                is_read: cleanRow.is_read === 1,
+                reactions: JSON.parse(cleanRow.reactions || '{}'),
+                reply: reply
+            };
+        });
     } catch (error) {
         console.error('[ERROR] Failed to get local messages:', error);
         return [];

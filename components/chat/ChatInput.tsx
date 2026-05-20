@@ -78,8 +78,14 @@ export default function ChatInput({
         }
     }, [initialMessage]);
 
+    const lastSentTimeRef = useRef(0);
+
     const handleSubmit = () => {
+        // Prevent accidental double taps on the mic button just after sending
         if (!message.trim() && !selectedImage) {
+            if (Date.now() - lastSentTimeRef.current < 500) {
+                return; // Ignore accidental mic taps immediately after sending
+            }
             setIsRecording(true);
             return;
         }
@@ -95,9 +101,14 @@ export default function ChatInput({
             onSendMessage(finalMessage);
         }
 
+        lastSentTimeRef.current = Date.now();
         setMessage('');
         setSelectedImage(null);
-        if (onDraftChange) onDraftChange(''); // Clear draft on send
+        
+        // Clear draft timeout to prevent ghost draft restoring
+        if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
+        if (onDraftChange) onDraftChange(''); 
+        
         if (onTyping) {
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             onTyping(false);

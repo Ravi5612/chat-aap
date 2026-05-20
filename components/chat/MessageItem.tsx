@@ -4,8 +4,18 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Animated, PanResponder, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
+import Animated, { 
+    useSharedValue, 
+    useAnimatedStyle, 
+    withSpring, 
+    runOnJS,
+    interpolate,
+    Extrapolation
+} from 'react-native-reanimated';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import FlyingReaction from './FlyingReaction';
 import MessageStatus from './MessageStatus';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
@@ -38,34 +48,77 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
 };
 
 const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
-    const swipeX = useRef(new Animated.Value(0)).current;
+    const router = useRouter();
+    const swipeX = useSharedValue(0);
+    const hasVibrated = useSharedValue(false);
 
-    const panResponder = useRef(
-        PanResponder.create({
-            onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-                // Ensure horizontal swipe takes priority over vertical scroll and child presses
-                return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 15;
-            },
-            onPanResponderGrant: () => {
-                // Potential haptic on start of swipe
-            },
-            onPanResponderMove: (_, gestureState) => {
-                if (gestureState.dx > 0) {
-                    swipeX.setValue(Math.min(gestureState.dx, 100));
+    const panGesture = Gesture.Pan()
+        .activeOffsetX(isCurrentUser ? [-15, 0] : [0, 15]) // Left swipe for me, right swipe for friend
+        .onUpdate((event) => {
+            if (isCurrentUser) {
+                // Swipe left (negative translationX)
+                if (event.translationX < 0) {
+                    swipeX.value = Math.max(event.translationX, -100);
+                    
+                    if (swipeX.value < -60 && !hasVibrated.value) {
+                        hasVibrated.value = true;
+                        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
+                    } else if (swipeX.value >= -60 && hasVibrated.value) {
+                        hasVibrated.value = false;
+                    }
+                } else {
+                    swipeX.value = 0;
                 }
-            },
-            onPanResponderRelease: (_, gestureState) => {
-                if (gestureState.dx > 60) {
-                    if (onReply) onReply(message);
+            } else {
+                // Swipe right (positive translationX)
+                if (event.translationX > 0) {
+                    swipeX.value = Math.min(event.translationX, 100);
+                    
+                    if (swipeX.value > 60 && !hasVibrated.value) {
+                        hasVibrated.value = true;
+                        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
+                    } else if (swipeX.value <= 60 && hasVibrated.value) {
+                        hasVibrated.value = false;
+                    }
+                } else {
+                    swipeX.value = 0;
                 }
-                Animated.spring(swipeX, {
-                    toValue: 0,
-                    useNativeDriver: true,
-                    friction: 5
-                }).start();
-            },
+            }
         })
-    ).current;
+        .onEnd((event) => {
+            const triggered = isCurrentUser ? (event.translationX < -60) : (event.translationX > 60);
+            if (triggered) {
+                if (onReply) {
+                    runOnJS(onReply)(message);
+                }
+            }
+            swipeX.value = withSpring(0, { damping: 15, stiffness: 150 });
+            hasVibrated.value = false;
+        });
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: swipeX.value }],
+    }));
+
+    const iconAnimatedStyle = useAnimatedStyle(() => {
+        const absSwipeX = Math.abs(swipeX.value);
+        const opacity = interpolate(
+            absSwipeX,
+            [30, 60],
+            [0, 1],
+            Extrapolation.CLAMP
+        );
+        const scale = interpolate(
+            absSwipeX,
+            [40, 70],
+            [0.8, 1.2],
+            Extrapolation.CLAMP
+        );
+        return {
+            opacity,
+            transform: [{ scale }],
+        };
+    });
 
     const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
     const [localVoiceUrl, setLocalVoiceUrl] = useState<string | null>(null);
@@ -280,28 +333,31 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     return (
         <View style={{ position: 'relative', width: '100%', overflow: 'visible' }}>
             <Animated.View
-                style={{
-                    position: 'absolute',
-                    left: 10,
-                    top: '40%',
-                    opacity: swipeX.interpolate({ inputRange: [30, 60], outputRange: [0, 1] }),
-                    transform: [{ scale: swipeX.interpolate({ inputRange: [40, 70], outputRange: [0.8, 1.2], extrapolate: 'clamp' }) }]
-                }}
+                style={[
+                    {
+                        position: 'absolute',
+                        top: '40%',
+                        ...(isCurrentUser ? { right: 10 } : { left: 10 })
+                    },
+                    iconAnimatedStyle
+                ]}
             >
                 <Ionicons name="arrow-undo-circle" size={28} color="#F68537" />
             </Animated.View>
 
-            <Animated.View
-                {...panResponder.panHandlers}
-                style={{
-                    transform: [{ translateX: swipeX }],
-                    width: '100%',
-                    marginBottom: 12,
-                    paddingHorizontal: 16,
-                    flexDirection: 'column',
-                    alignItems: isCurrentUser ? 'flex-end' : 'flex-start'
-                }}
-            >
+            <GestureDetector gesture={panGesture}>
+                <Animated.View
+                    style={[
+                        {
+                            width: '100%',
+                            marginBottom: 12,
+                            paddingHorizontal: 16,
+                            flexDirection: 'column',
+                            alignItems: isCurrentUser ? 'flex-end' : 'flex-start'
+                        },
+                        animatedStyle
+                    ]}
+                >
                 <TouchableOpacity
                     onLongPress={handleLongPress}
                     activeOpacity={0.9}
@@ -329,7 +385,13 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
                     {/* Status Context */}
                     {message.status_context && (
-                        <View
+                        <TouchableOpacity
+                            onPress={(e) => {
+                                e.stopPropagation(); // prevent long press or other clicks
+                                Haptics.selectionAsync();
+                                router.push(`/status/viewer?userId=${message.status_context.user_id}`);
+                            }}
+                            activeOpacity={0.7}
                             style={{
                                 margin: 6,
                                 padding: 8,
@@ -360,16 +422,18 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                                     contentFit="cover"
                                 />
                             )}
-                        </View>
+                        </TouchableOpacity>
                     )}
 
                     {/* Reply Context */}
                     {message.reply && message.reply.id && !message.status_context && (
                         <TouchableOpacity
-                            onPress={() => {
+                            onPress={(e) => {
+                                e.stopPropagation();
                                 Haptics.selectionAsync();
                                 onReplyClick?.(message.reply);
                             }}
+                            activeOpacity={0.7}
                             style={{
                                 margin: 6,
                                 padding: 8,
@@ -692,7 +756,8 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                 {flyingEmoji && flyingEmoji.messageId === message.id && (
                     <FlyingReaction key={flyingEmoji.id} emoji={flyingEmoji.emoji} />
                 )}
-            </Animated.View>
+                </Animated.View>
+            </GestureDetector>
         </View>
     );
 }, areEqual);

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,79 +13,60 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [position, setPosition] = useState(0);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        return sound
-            ? () => {
-                sound.unloadAsync();
-            }
-            : undefined;
-    }, [sound]);
-
-    // Preload total duration silently on mount
+    // On mount, load the sound and keep it ready for instant playback
     useEffect(() => {
         let active = true;
-        let preloadedSound: Audio.Sound | null = null;
-
-        const preloadDuration = async () => {
+        
+        const initSound = async () => {
             if (!uri) return;
             try {
-                const { sound: soundObj, status } = await Audio.Sound.createAsync(
+                const { sound: newSound, status } = await Audio.Sound.createAsync(
                     { uri },
-                    { shouldPlay: false }
+                    { shouldPlay: false },
+                    onPlaybackStatusUpdate
                 );
-                preloadedSound = soundObj;
-                if (status.isLoaded && active) {
-                    setDuration(status.durationMillis || 0);
+                
+                if (active) {
+                    setSound(newSound);
+                    setIsLoading(false);
+                    if (status.isLoaded) {
+                        setDuration(status.durationMillis || 0);
+                    }
+                } else {
+                    newSound.unloadAsync();
                 }
             } catch (error) {
-                console.warn('[VOICE_PLAYER] Preload duration failed:', error);
-            } finally {
-                if (preloadedSound) {
-                    try {
-                        await preloadedSound.unloadAsync();
-                    } catch (e) {}
-                }
+                console.warn('[VOICE_PLAYER] Init failed:', error);
+                if (active) setIsLoading(false);
             }
         };
 
-        preloadDuration();
+        initSound();
 
         return () => {
             active = false;
+            if (sound) {
+                sound.unloadAsync();
+            }
         };
     }, [uri]);
 
     const playPause = async () => {
-        if (isLoading) return;
+        if (isLoading || !sound) return;
 
-        if (sound === null) {
-            setIsLoading(true);
-            try {
-                const { sound: newSound } = await Audio.Sound.createAsync(
-                    { uri },
-                    { shouldPlay: true },
-                    onPlaybackStatusUpdate
-                );
-                setSound(newSound);
-                setIsPlaying(true);
-            } catch (error) {
-                console.error('Error loading sound', error);
-            } finally {
-                setIsLoading(false);
-            }
-        } else {
+        try {
             if (isPlaying) {
                 await sound.pauseAsync();
-                setIsPlaying(false);
             } else {
-                if (position >= duration) {
+                if (position >= duration && duration > 0) {
                     await sound.setPositionAsync(0);
                 }
                 await sound.playAsync();
-                setIsPlaying(true);
             }
+        } catch (error) {
+            console.error('[VOICE_PLAYER] Play/Pause error:', error);
         }
     };
 
@@ -93,6 +74,8 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
         if (status.isLoaded) {
             setDuration(status.durationMillis || 0);
             setPosition(status.positionMillis || 0);
+            setIsPlaying(status.isPlaying);
+            
             if (status.didJustFinish) {
                 setIsPlaying(false);
                 setPosition(status.durationMillis || 0);
@@ -110,19 +93,17 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
     const progress = duration > 0 ? (position / duration) * 100 : 0;
 
     // Symmetrical, premium voice note soundwave levels
-    const waveHeights = [6, 12, 18, 24, 16, 10, 14, 20, 28, 22, 14, 18, 26, 20, 14, 10, 16, 22, 18, 12, 8, 4];
+    const waveHeights = [4, 8, 14, 20, 16, 10, 14, 22, 28, 20, 12, 18, 24, 18, 12, 8, 14, 20, 16, 10, 6, 4];
 
     return (
-        <View className="flex-row items-center gap-3.5 py-1.5 pr-2 min-w-[200px]">
-            {/* Elegant Glassmorphic Play/Pause Trigger */}
+        <View style={styles.container}>
+            {/* Play/Pause Button */}
             <TouchableOpacity
                 onPress={playPause}
-                className={`w-11 h-11 rounded-full items-center justify-center border ${
-                    isCurrentUser 
-                        ? 'bg-white/20 border-white/20 shadow-sm' 
-                        : 'bg-[#F68537]/10 border-[#F68537]/20 shadow-sm'
-                }`}
-                style={{ elevation: 2 }}
+                style={[
+                    styles.playBtn,
+                    isCurrentUser ? styles.playBtnUser : styles.playBtnOther
+                ]}
                 activeOpacity={0.8}
             >
                 {isLoading ? (
@@ -130,48 +111,47 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
                 ) : (
                     <Ionicons
                         name={isPlaying ? "pause" : "play"}
-                        size={22}
-                        color={isCurrentUser ? "white" : "#F68537"}
+                        size={20}
+                        color={isCurrentUser ? "white" : "#FFFFFF"}
                         style={{ marginLeft: isPlaying ? 0 : 2 }}
                     />
                 )}
             </TouchableOpacity>
 
-            <View className="flex-1 justify-center">
-                {/* Modern Symmetrical Interactive Audio Soundwave */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2.5, height: 32, paddingLeft: 2 }}>
+            <View style={styles.rightContent}>
+                {/* Waveform */}
+                <View style={styles.waveContainer}>
                     {waveHeights.map((h, i) => {
                         const barProgress = (i / waveHeights.length) * 100;
                         const isActive = progress >= barProgress;
+                        
+                        let bgColor = 'rgba(0,0,0,0.2)';
+                        if (isCurrentUser) {
+                            bgColor = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.4)';
+                        } else {
+                            bgColor = isActive ? '#F68537' : 'rgba(246,133,55,0.2)';
+                        }
+
                         return (
                             <View
                                 key={i}
-                                style={{
-                                    width: 3.2,
-                                    height: h,
-                                    borderRadius: 1.6,
-                                    backgroundColor: isActive
-                                        ? (isCurrentUser ? '#FFFFFF' : '#F68537')
-                                        : (isCurrentUser ? 'rgba(255,255,255,0.35)' : 'rgba(246,133,55,0.18)')
-                                }}
+                                style={[
+                                    styles.waveBar,
+                                    { height: h, backgroundColor: bgColor }
+                                ]}
                             />
                         );
                     })}
                 </View>
 
-                {/* Subtitle details: Time Badges & Mic Indicator */}
-                <View className="flex-row justify-between items-center mt-1 px-0.5">
-                    <View className="flex-row items-center gap-1">
-                        <Ionicons 
-                            name="mic-outline" 
-                            size={10.5} 
-                            color={isCurrentUser ? "rgba(255,255,255,0.7)" : "#F68537"} 
-                        />
-                        <Text className={`text-[10px] font-medium ${isCurrentUser ? 'text-white/80' : 'text-[#F68537]'}`}>
+                {/* Timers & Indicators */}
+                <View style={styles.metaContainer}>
+                    <View style={styles.timeWrap}>
+                        <Text style={[styles.timeText, isCurrentUser ? styles.textLight : styles.textDark]}>
                             {formatTime(position)}
                         </Text>
                     </View>
-                    <Text className={`text-[10px] font-medium ${isCurrentUser ? 'text-white/60' : 'text-gray-400'}`}>
+                    <Text style={[styles.durationText, isCurrentUser ? styles.textDimLight : styles.textDimDark]}>
                         {formatTime(duration || 0)}
                     </Text>
                 </View>
@@ -179,3 +159,79 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 6,
+        paddingHorizontal: 2,
+        width: 230,
+        gap: 12,
+    },
+    playBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.15,
+        shadowRadius: 2,
+    },
+    playBtnUser: {
+        backgroundColor: 'rgba(255,255,255,0.25)',
+    },
+    playBtnOther: {
+        backgroundColor: '#F68537',
+    },
+    rightContent: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    waveContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 30,
+        gap: 2.5,
+    },
+    waveBar: {
+        width: 3,
+        borderRadius: 1.5,
+    },
+    metaContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    timeWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    timeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        fontVariant: ['tabular-nums'],
+    },
+    durationText: {
+        fontSize: 11,
+        fontWeight: '500',
+        fontVariant: ['tabular-nums'],
+    },
+    textLight: {
+        color: '#FFFFFF',
+    },
+    textDark: {
+        color: '#1F2937',
+    },
+    textDimLight: {
+        color: 'rgba(255,255,255,0.7)',
+    },
+    textDimDark: {
+        color: '#9CA3AF',
+    },
+});

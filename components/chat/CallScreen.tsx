@@ -101,7 +101,8 @@ export default function CallScreen({
         toggleMute,
         toggleVideo,
         switchCamera,
-        channelId
+        channelId,
+        isEngineReady
     } = useAgora({
         currentUser,
         friend,
@@ -117,9 +118,10 @@ export default function CallScreen({
     const acceptCall = () => {
         console.log('[CALL_ACTION] Accept button pressed');
         // Signaling: Tell the caller (or group) we accepted
-        const targetId = isGroup ? friend.id : friend.id;
+        const targetId = friend.id;
         const signalChannelName = `calls-signal-${targetId}`;
         const personalChannel = supabase.channel(signalChannelName);
+        
         personalChannel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
                 personalChannel.send({
@@ -132,7 +134,9 @@ export default function CallScreen({
                         group_id: isGroup ? friend.id : null
                     }
                 });
-                setTimeout(() => supabase.removeChannel(personalChannel), 2000);
+                setTimeout(() => {
+                    supabase.removeChannel(personalChannel).catch(() => {});
+                }, 1000);
             }
         });
         onAcceptCall();
@@ -170,7 +174,9 @@ export default function CallScreen({
                 <View style={styles.groupVideoGrid}>
                     {remoteUids.map((uid) => (
                         <View key={uid} style={styles.gridVideoItem}>
-                            <AgoraVideoView uid={uid} style={styles.gridVideo} channelId={channelId} />
+                            {isEngineReady && (
+                                <AgoraVideoView uid={uid} style={styles.gridVideo} channelId={channelId} />
+                            )}
                         </View>
                     ))}
                 </View>
@@ -178,12 +184,14 @@ export default function CallScreen({
         }
 
         const remoteUid = remoteUids[0];
-        return (
+        return isEngineReady ? (
             <AgoraVideoView
                 uid={remoteUid}
                 style={styles.fullVideo}
                 channelId={channelId}
             />
+        ) : (
+            <View style={[styles.fullVideo, { backgroundColor: '#111827' }]} />
         );
     };
 
@@ -196,7 +204,7 @@ export default function CallScreen({
                 <View style={styles.mainVideoContainer}>
                     {callType === 'video' ? (
                         <>
-                            {isSwapped ? (
+                            {isSwapped && isEngineReady ? (
                                 <AgoraVideoView uid={0} style={styles.fullVideo} channelId={channelId} />
                             ) : renderRemoteVideos()}
 
@@ -239,7 +247,7 @@ export default function CallScreen({
                 </View>
 
                 {/* Local Preview (PIP) */}
-                {callType === 'video' && (callState === 'active' || callState === 'outgoing') && (
+                {callType === 'video' && (callState === 'active' || callState === 'outgoing') && isEngineReady && (
                     <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
                         <Animated.View style={[styles.pipContainer, animatedStyle]}>
                             <TouchableOpacity activeOpacity={0.8} onPress={handleSwap} style={{ flex: 1 }}>

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { FlatList, View, Platform, LayoutAnimation, UIManager, ActivityIndicator, Text } from 'react-native';
 import MessageItem from './MessageItem';
+import { useChatStore } from '@/store/useChatStore';
 
 interface MessageListProps {
     messages: any[];
@@ -60,18 +61,63 @@ export default function MessageList({
     }, [messages]);
 
     // ✅ useCallback - scroll to message memoize
-    const handleScrollToMessage = useCallback((replyMsg: any) => {
+    const handleScrollToMessage = useCallback(async (replyMsg: any) => {
         if (!replyMsg?.id) return;
         // Search in groupedMessages which contains both dates and messages
-        const index = groupedMessages.findIndex(m => m.id === replyMsg.id);
+        let index = groupedMessages.findIndex(m => m.id === replyMsg.id);
         if (index !== -1) {
             flatListRef.current?.scrollToIndex({
                 index,
                 animated: true,
                 viewPosition: 0.5
             });
+            return;
         }
-    }, [groupedMessages]);
+
+        // Fallback: If target message isn't loaded in memory yet
+        const firstMessage = messages.find(m => m.id && !m.id.startsWith('date-') && m.file_type !== 'system');
+        if (!firstMessage) return;
+
+        const isGroup = !!firstMessage.group_id;
+        const friendId = isGroup ? firstMessage.group_id : (firstMessage.sender_id === currentUser?.id ? firstMessage.receiver_id : firstMessage.sender_id);
+
+        if (!friendId || !currentUser) return;
+
+        const success = await useChatStore.getState().loadMessagesUpToId(
+            friendId,
+            currentUser,
+            isGroup,
+            replyMsg.id,
+            replyMsg.created_at
+        );
+
+        if (success) {
+            setTimeout(() => {
+                const latestMessages = useChatStore.getState().messages;
+                const sortedMessages = [...latestMessages].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                const items: any[] = [];
+                sortedMessages.forEach((msg, idx) => {
+                    items.push(msg);
+                    const date = new Date(msg.created_at).toDateString();
+                    const nextMsg = sortedMessages[idx + 1];
+                    const nextDate = nextMsg ? new Date(nextMsg.created_at).toDateString() : '';
+
+                    if (date !== nextDate) {
+                        items.push({ id: `date-${date}`, type: 'date', date });
+                    }
+                });
+
+                const newIndex = items.findIndex(m => m.id === replyMsg.id);
+                if (newIndex !== -1) {
+                    flatListRef.current?.scrollToIndex({
+                        index: newIndex,
+                        animated: true,
+                        viewPosition: 0.5
+                    });
+                }
+            }, 300);
+        }
+    }, [groupedMessages, messages, currentUser]);
 
     // ✅ useCallback - renderItem function baar baar recreate nahi hoga
     const renderItem = useCallback(({ item }: { item: any }) => {
@@ -156,6 +202,7 @@ export default function MessageList({
                 showsVerticalScrollIndicator={false}
                 onEndReached={onLoadMore}
                 onEndReachedThreshold={0.2}
+                keyboardShouldPersistTaps="handled"
                 onScrollToIndexFailed={(info) => {
                     flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
                     setTimeout(() => {

@@ -35,6 +35,7 @@ export const useAgora = ({
     const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
     const [remoteVideoMuted, setRemoteVideoMuted] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('Initializing...');
+    const [isEngineReady, setIsEngineReady] = useState(false);
     
     const engine = useRef<IRtcEngine | null>(null);
     const channelName = useRef<string>('');
@@ -128,9 +129,11 @@ export const useAgora = ({
             rtcEngine.enableAudio();
             rtcEngine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
             rtcEngine.startPreview();
+            setIsEngineReady(true);
             console.log('[CALL_ACTION] Agora Engine Initialized Successfully');
         } catch (e) {
             console.error('[CALL_ACTION] Failed to initialize Agora:', e);
+            setIsEngineReady(false);
         }
     };
 
@@ -168,6 +171,7 @@ export const useAgora = ({
             engine.current.leaveChannel();
             engine.current.stopPreview();
             setJoined(false);
+            setIsEngineReady(false); // Reset ready state
             setRemoteUids([]);
             isJoining.current = false;
             setConnectionStatus('Disconnected');
@@ -253,6 +257,7 @@ export const useAgora = ({
         toggleVideo,
         switchCamera,
         leave,
-        channelId: channelName.current
+        channelId: channelName.current,
+        isEngineReady
     };
 };

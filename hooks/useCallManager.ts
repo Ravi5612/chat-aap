@@ -37,9 +37,17 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                 } else {
                     if (soundRef.current) {
                         console.log('[DEBUG] CallManager: Stopping ringtone');
-                        await soundRef.current.stopAsync();
-                        await soundRef.current.unloadAsync();
-                        soundRef.current = null;
+                        try {
+                            const status = await soundRef.current.getStatusAsync();
+                            if (status.isLoaded) {
+                                await soundRef.current.stopAsync();
+                                await soundRef.current.unloadAsync();
+                            }
+                        } catch (e) {
+                            console.log('[DEBUG] CallManager: Ringtone stop error ignored', e);
+                        } finally {
+                            soundRef.current = null;
+                        }
                     }
                 }
             } catch (error) {
@@ -55,6 +63,13 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         };
     }, [callSession?.status, profile?.call_tone]);
 
+    const sessionRef = useRef(callSession);
+
+    // Keep ref updated without triggering re-renders of the effect
+    useEffect(() => {
+        sessionRef.current = callSession;
+    }, [callSession]);
+
     // Setup Global Realtime Listener for calls
     useEffect(() => {
         if (!currentUser?.id || !isListener) return;
@@ -67,7 +82,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
             console.log('[CALL_ACTION] Signal received:', payload.type, 'from:', payload.caller_id);
             if (payload.type === 'offer') {
                 // If already in a call, send BUSY signal back to the caller
-                if (callSession) {
+                if (sessionRef.current) {
                     console.log('[CALL_ACTION] Already in a call, sending BUSY to:', payload.caller_id);
                     const busyChannel = supabase.channel(`calls-signal-${payload.caller_id}`);
                     busyChannel.subscribe((status) => {
@@ -98,7 +113,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
             } else if (payload.type === 'busy') {
                 console.log('[CALL_ACTION] Remote user is busy');
                 // Only show busy for 1-on-1 calls, for groups it's fine if some are busy
-                if (!callSession?.isGroup) {
+                if (!sessionRef.current?.isGroup) {
                     alert('User is busy on another call');
                     setCallSession(null);
                 }
@@ -113,7 +128,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [currentUser?.id, combinedItems, callSession]);
+    }, [currentUser?.id, combinedItems]); // Removed callSession to prevent unmounting!
 
     const handleStartCall = async (friend: any, type: 'audio' | 'video' = 'video', isGroup: boolean = false) => {
         console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type, 'IsGroup:', isGroup);

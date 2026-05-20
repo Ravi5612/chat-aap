@@ -37,20 +37,17 @@ const WaveBar = memo(({ anim }: { anim: Animated.SharedValue<number> }) => {
 export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRecorderProps) {
     const [recording, setRecording] = useState<Audio.Recording | null>(null);
     const [seconds, setSeconds] = useState(0);
+    const [isPreparing, setIsPreparing] = useState(true);
     const timerRef = useRef<any>(null);
     const isMounted = useRef(true);
     const activeRecordingRef = useRef<Audio.Recording | null>(null);
 
     // Animation shared values
     const metering = useSharedValue(-160);
-    const translateX = useSharedValue(0);
     const opacity = useSharedValue(0);
 
     // Glowing dot pulse animation
     const dotPulse = useSharedValue(1);
-
-    // Sliding cancel hint chevron animation
-    const chevronSlide = useSharedValue(0);
 
     // 20 waveform bars for high fidelity visualization
     const waveAnims = [
@@ -74,13 +71,6 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
             true // reverse
         );
 
-        // Loop sliding cancel arrow hint
-        chevronSlide.value = withRepeat(
-            withTiming(-12, { duration: 1200 }),
-            -1, // infinite
-            false // do not reverse, reset to 0 to simulate slide gesture direction
-        );
-
         return () => {
             isMounted.current = false;
             if (timerRef.current) clearInterval(timerRef.current);
@@ -95,14 +85,13 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
 
     const startRecording = async () => {
         try {
-            // ⚡ Instant startup optimization 1: Check permissions without calling slow request API if already granted
+            setIsPreparing(true);
             const permissionStatus = await Audio.getPermissionsAsync();
             if (permissionStatus.status !== 'granted') {
                 const requested = await Audio.requestPermissionsAsync();
                 if (requested.status !== 'granted') return onCancel();
             }
 
-            // ⚡ Instant startup optimization 2: Run setAudioModeAsync without awaiting to avoid locking thread for 150ms
             Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
                 playsInSilentModeIOS: true,
@@ -110,7 +99,6 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
                 shouldDuckAndroid: true,
             }).catch(() => {});
 
-            // 3. Create and Prepare Recording (runs directly after fast precheck)
             const { recording: newRecording } = await Audio.Recording.createAsync(
                 {
                     ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
@@ -135,14 +123,13 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
                 (status) => {
                     if (status.metering !== undefined) {
                         metering.value = status.metering;
-                        // Dynamically update 20 wave bar heights based on audio input levels
                         const val = interpolate(status.metering, [-60, 0], [6, 32], Extrapolate.CLAMP);
                         waveAnims.forEach((anim) => {
                             anim.value = withSpring(val * (0.3 + Math.random() * 0.7));
                         });
                     }
                 },
-                80 // Check frequency (faster response rate)
+                80
             );
 
             activeRecordingRef.current = newRecording;
@@ -153,6 +140,7 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
             }
 
             setRecording(newRecording);
+            setIsPreparing(false);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
             timerRef.current = setInterval(() => {
@@ -194,31 +182,9 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Swipe to cancel gesture layout binding
-    const gesture = Gesture.Pan()
-        .activeOffsetX([-10, 10])
-        .onUpdate((event) => {
-            if (event.translationX < 0) {
-                translateX.value = event.translationX;
-            }
-        })
-        .onEnd((event) => {
-            if (event.translationX < -110) {
-                translateX.value = withTiming(-SCREEN_WIDTH, { duration: 180 }, () => {
-                    runOnJS(handleDiscard)();
-                });
-            } else {
-                translateX.value = withSpring(0);
-            }
-        });
-
     const animatedContainerStyle = useAnimatedStyle(() => ({
         opacity: opacity.value,
         transform: [{ translateY: interpolate(opacity.value, [0, 1], [30, 0]) }]
-    }));
-
-    const slideStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: translateX.value }]
     }));
 
     const dotAnimatedStyle = useAnimatedStyle(() => ({
@@ -226,83 +192,78 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
         transform: [{ scale: interpolate(dotPulse.value, [0.3, 1], [0.85, 1.1]) }]
     }));
 
-    const chevronAnimatedStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: chevronSlide.value }],
-        opacity: interpolate(chevronSlide.value, [0, -12], [1, 0.15])
-    }));
-
     return (
-        <GestureHandlerRootView style={StyleSheet.absoluteFillObject}>
-            <Animated.View style={[styles.container, animatedContainerStyle]}>
-                <View style={styles.glassBackground} />
+        <Animated.View style={[styles.container, animatedContainerStyle]}>
+            {/* Left: Discard Button */}
+            <TouchableOpacity onPress={handleDiscard} style={styles.iconBtn}>
+                <Ionicons name="trash" size={24} color="#EF4444" />
+            </TouchableOpacity>
 
-                <View style={styles.metaRow}>
-                    <Animated.View style={[styles.dot, dotAnimatedStyle]} />
-                    <Text style={styles.timerText}>{formatTime(seconds)}</Text>
+            {/* Center: Timer + Waveform */}
+            <View style={styles.centerSection}>
+                <View style={styles.timerContainer}>
+                    <Animated.View style={[styles.dot, dotAnimatedStyle, { opacity: isPreparing ? 0.3 : 1 }]} />
+                    <Text style={[styles.timerText, isPreparing && { fontSize: 13, color: '#9CA3AF' }]} numberOfLines={1}>
+                        {isPreparing ? "Preparing..." : formatTime(seconds)}
+                    </Text>
                 </View>
+                
+                {!isPreparing && (
+                    <View style={styles.waveContainer}>
+                        {waveAnims.map((anim, i) => <WaveBar key={i} anim={anim} />)}
+                    </View>
+                )}
+            </View>
 
-                {/* High fidelity waveform visualization */}
-                <View style={styles.waveContainer}>
-                    {waveAnims.map((anim, i) => <WaveBar key={i} anim={anim} />)}
-                </View>
-
-                <GestureDetector gesture={gesture}>
-                    <Animated.View style={[styles.controlsRow, slideStyle]}>
-                        <TouchableOpacity onPress={handleDiscard} style={styles.discardBtn}>
-                            <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                        </TouchableOpacity>
-
-                        <View style={styles.cancelHintContainer}>
-                            <Animated.View style={chevronAnimatedStyle}>
-                                <Ionicons name="chevron-back" size={15} color="#94A3B8" />
-                            </Animated.View>
-                            <Text style={styles.cancelText}>Swipe to cancel</Text>
-                        </View>
-
-                        <TouchableOpacity onPress={handleStop} style={styles.sendBtn}>
-                            <Ionicons name="send" size={18} color="white" />
-                        </TouchableOpacity>
-                    </Animated.View>
-                </GestureDetector>
-            </Animated.View>
-        </GestureHandlerRootView>
+            {/* Right: Send Button */}
+            <TouchableOpacity 
+                onPress={handleStop} 
+                style={[styles.sendBtn, isPreparing && { opacity: 0.5, backgroundColor: '#D1D5DB' }]}
+                disabled={isPreparing || !recording}
+            >
+                <Ionicons name="send" size={20} color="white" />
+            </TouchableOpacity>
+        </Animated.View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 60,
+        bottom: 10,
+        left: 8,
+        right: 8,
+        height: 52,
+        borderRadius: 26,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.98)',
-        borderTopWidth: 1,
-        borderTopColor: '#F1F5F9',
+        paddingHorizontal: 4,
+        backgroundColor: '#FFFFFF',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.05,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
         shadowRadius: 5,
-        elevation: 10,
+        elevation: 6,
         zIndex: 1000
     },
-    glassBackground: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#FFFFFF',
-        opacity: 0.97,
+    iconBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FEF2F2',
     },
-    metaRow: {
+    centerSection: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FEF2F2',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#FEE2E2',
+        paddingHorizontal: 8,
+    },
+    timerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 12,
     },
     dot: {
         width: 8,
@@ -310,53 +271,20 @@ const styles = StyleSheet.create({
         borderRadius: 4,
         backgroundColor: '#EF4444',
         marginRight: 6,
-        shadowColor: '#EF4444',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 4,
-        elevation: 2
     },
     timerText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#EF4444',
-        fontFamily: Platform.OS === 'ios' ? 'Courier-Bold' : 'monospace',
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1F2937',
+        fontVariant: ['tabular-nums'],
     },
     waveContainer: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        height: 40,
-        marginHorizontal: 10,
-    },
-    controlsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    discardBtn: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#FEF2F2',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#FEE2E2',
-    },
-    cancelHintContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        width: 105,
-        marginRight: 2,
-    },
-    cancelText: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#94A3B8',
-        marginLeft: 2,
+        justifyContent: 'space-between',
+        height: 30,
+        paddingHorizontal: 4,
     },
     sendBtn: {
         width: 44,
@@ -366,9 +294,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: '#F68537',
-        shadowOffset: { width: 0, height: 3 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
-        shadowRadius: 6,
+        shadowRadius: 4,
         elevation: 4,
+        paddingLeft: 3, // visual centering for send icon
     }
 });
