@@ -142,3 +142,5 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
         </TouchableOpacity>
     );
 }
+
+export default React.memo(FriendListItem);

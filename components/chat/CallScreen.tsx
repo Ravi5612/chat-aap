@@ -101,6 +101,7 @@ export default function CallScreen({
         toggleMute,
         toggleVideo,
         switchCamera,
+        channelId
     } = useAgora({
         currentUser,
         friend,
@@ -169,7 +170,7 @@ export default function CallScreen({
                 <View style={styles.groupVideoGrid}>
                     {remoteUids.map((uid) => (
                         <View key={uid} style={styles.gridVideoItem}>
-                            <AgoraVideoView uid={uid} style={styles.gridVideo} />
+                            <AgoraVideoView uid={uid} style={styles.gridVideo} channelId={channelId} />
                         </View>
                     ))}
                 </View>
@@ -181,6 +182,7 @@ export default function CallScreen({
             <AgoraVideoView
                 uid={remoteUid}
                 style={styles.fullVideo}
+                channelId={channelId}
             />
         );
     };
@@ -195,7 +197,7 @@ export default function CallScreen({
                     {callType === 'video' ? (
                         <>
                             {isSwapped ? (
-                                <AgoraVideoView uid={0} style={styles.fullVideo} />
+                                <AgoraVideoView uid={0} style={styles.fullVideo} channelId={channelId} />
                             ) : renderRemoteVideos()}
 
                             {/* Remote Status Badges (simplified for group) */}
@@ -222,7 +224,7 @@ export default function CallScreen({
                             <View style={styles.avatarContainer}>
                                 {friend.avatar_url || friend.img ? (
                                     <Image source={{ uri: friend.avatar_url || friend.img }} style={styles.fullImage} />
-                                ) : (
+                               ) : (
                                     <Ionicons name="person" size={64} color="#94A3B8" />
                                 )}
                             </View>
@@ -246,6 +248,7 @@ export default function CallScreen({
                                     style={styles.pipVideo}
                                     zOrderMediaOverlay={true}
                                     zOrderOnTop={true}
+                                    channelId={channelId}
                                 />
                                 {isVideoOff && !isSwapped && (
                                     <View style={styles.videoOffOverlay}>

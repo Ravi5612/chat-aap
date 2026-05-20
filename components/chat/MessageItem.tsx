@@ -1,16 +1,14 @@
-import React, { memo, useRef } from 'react';
-import { View, Text, TouchableOpacity, Animated, PanResponder, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
-import MessageStatus from './MessageStatus';
-import { Ionicons } from '@expo/vector-icons';
-import VoiceMessagePlayer from './VoiceMessagePlayer';
-import FlyingReaction from './FlyingReaction';
-import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as FileSystem from 'expo-file-system';
 import { getMediaCache, saveMediaCache } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
-import { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import React, { memo, useEffect, useRef, useState } from 'react';
+import { Animated, PanResponder, Text, TouchableOpacity, View } from 'react-native';
+import FlyingReaction from './FlyingReaction';
+import MessageStatus from './MessageStatus';
+import VoiceMessagePlayer from './VoiceMessagePlayer';
 
 interface MessageItemProps {
     message: any;
@@ -22,6 +20,22 @@ interface MessageItemProps {
     friendName?: string;
     flyingEmoji?: any;
 }
+
+const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
+    const prevMsgId = prevProps.message?.id;
+    const nextMsgId = nextProps.message?.id;
+    return (
+        prevProps.message === nextProps.message &&
+        prevProps.isCurrentUser === nextProps.isCurrentUser &&
+        prevProps.friendName === nextProps.friendName &&
+        // Check if flyingEmoji relevancy changed for this message
+        ((prevProps.flyingEmoji?.messageId === prevMsgId) ===
+            (nextProps.flyingEmoji?.messageId === nextMsgId)) &&
+        // If it was and still is relevant, verify ID hasn't changed
+        (!prevMsgId || prevProps.flyingEmoji?.messageId !== prevMsgId ||
+            prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id)
+    );
+};
 
 const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
     const swipeX = useRef(new Animated.Value(0)).current;
@@ -52,7 +66,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
             },
         })
     ).current;
-    
+
     const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
     const [localVoiceUrl, setLocalVoiceUrl] = useState<string | null>(null);
     const [decryptedStatusContent, setDecryptedStatusContent] = useState<string | null>(null);
@@ -67,7 +81,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                 const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
                 // Status is encrypted with owner's self-key (userId === userId)
                 const statusKey = await getChatKey(ctx.user_id, ctx.user_id);
-                
+
                 let content = ctx.content || '';
                 let mediaUrl = ctx.media_url || '';
 
@@ -207,7 +221,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     let documentName = message.file_name || 'Document';
     let documentSize = message.file_size ? `${(message.file_size / 1024 / 1024).toFixed(2)} MB` : '';
     let documentUrl = message.file_url;
-    
+
     if (textContent?.startsWith('[Document]')) {
         const parts = textContent.substring(11).split('|');
         if (!message.file_name) documentName = parts[1]?.trim() || 'Document';
@@ -217,24 +231,24 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
     if (isSystemMsg) {
         const isScreenshot = message.message === 'SYSTEM_MSG: SCREENSHOT_TAKEN';
-        
+
         return (
-            <View style={{ 
-                flexDirection: 'row', 
-                justifyContent: 'center', 
+            <View style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
                 marginVertical: 12,
                 paddingHorizontal: 16,
                 width: '100%'
             }}>
-                <View style={{ 
-                    backgroundColor: isScreenshot ? '#FEF2F2' : (isCurrentUser ? '#FFF7ED' : '#F9FAFB'), 
-                    paddingHorizontal: 14, 
-                    paddingVertical: 8, 
-                    borderRadius: 12, 
-                    borderWidth: 1, 
+                <View style={{
+                    backgroundColor: isScreenshot ? '#FEF2F2' : (isCurrentUser ? '#FFF7ED' : '#F9FAFB'),
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 12,
+                    borderWidth: 1,
                     borderColor: isScreenshot ? '#FECACA' : (isCurrentUser ? '#FFEDD5' : '#F3F4F6'),
-                    flexDirection: 'row', 
-                    alignItems: 'center', 
+                    flexDirection: 'row',
+                    alignItems: 'center',
                     gap: 8,
                     maxWidth: '85%',
                     shadowColor: '#000',
@@ -243,19 +257,19 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     shadowRadius: 1,
                     elevation: 1
                 }}>
-                    <Ionicons 
-                        name={isScreenshot ? "scan-outline" : "ban-outline"} 
-                        size={16} 
-                        color={isScreenshot ? '#EF4444' : (isCurrentUser ? '#F97316' : '#6B7280')} 
+                    <Ionicons
+                        name={isScreenshot ? "scan-outline" : "ban-outline"}
+                        size={16}
+                        color={isScreenshot ? '#EF4444' : (isCurrentUser ? '#F97316' : '#6B7280')}
                     />
-                    <Text style={{ 
-                        fontSize: 12, 
-                        fontWeight: '700', 
+                    <Text style={{
+                        fontSize: 12,
+                        fontWeight: '700',
                         color: isScreenshot ? '#DC2626' : (isCurrentUser ? '#C2410C' : '#374151'),
                         fontStyle: 'italic'
                     }}>
-                        {isScreenshot 
-                            ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend') 
+                        {isScreenshot
+                            ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend')
                             : (isCurrentUser ? 'You deleted this message' : 'This message was deleted')}
                     </Text>
                 </View>
@@ -394,22 +408,22 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
                                     return (
                                         <>
-                                            <View style={{ 
-                                                flexDirection: 'row', 
-                                                alignItems: 'center', 
-                                                marginBottom: 12, 
-                                                paddingBottom: 12, 
-                                                borderBottomWidth: 1, 
-                                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' 
+                                            <View style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                marginBottom: 12,
+                                                paddingBottom: 12,
+                                                borderBottomWidth: 1,
+                                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB'
                                             }}>
-                                                <View style={{ 
-                                                    width: 40, 
-                                                    height: 40, 
-                                                    borderRadius: 20, 
-                                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}10`, 
-                                                    alignItems: 'center', 
-                                                    justifyContent: 'center', 
-                                                    marginRight: 12 
+                                                <View style={{
+                                                    width: 40,
+                                                    height: 40,
+                                                    borderRadius: 20,
+                                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}10`,
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    marginRight: 12
                                                 }}>
                                                     <Ionicons name="receipt" size={20} color={isCurrentUser ? 'white' : themeColor} />
                                                 </View>
@@ -424,11 +438,11 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                                                 <Text style={{ fontSize: 14, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#64748B', marginTop: 4 }}>
                                                     {data.description}
                                                 </Text>
-                                                <View style={{ 
+                                                <View style={{
                                                     marginTop: 10,
-                                                    paddingHorizontal: 10, 
-                                                    paddingVertical: 5, 
-                                                    borderRadius: 10, 
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 5,
+                                                    borderRadius: 10,
                                                     backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}20`,
                                                     alignSelf: 'flex-start',
                                                     borderWidth: isCurrentUser ? 0 : 1,
@@ -450,7 +464,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
                     {/* Image Content */}
                     {imageUrl && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => {
                                 onImagePress?.(localImageUrl || imageUrl);
                             }}
@@ -473,36 +487,36 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     {/* Call Log Content */}
                     {isCallLog && (
                         <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 180 }}>
-                            <View style={{ 
-                                width: 40, 
-                                height: 40, 
-                                borderRadius: 20, 
-                                backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)', 
-                                alignItems: 'center', 
-                                justifyContent: 'center' 
+                            <View style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)',
+                                alignItems: 'center',
+                                justifyContent: 'center'
                             }}>
-                                <Ionicons 
-                                    name={callDetails.type === 'video' ? "videocam" : "call"} 
-                                    size={20} 
-                                    color={isCurrentUser ? 'white' : '#F68537'} 
+                                <Ionicons
+                                    name={callDetails.type === 'video' ? "videocam" : "call"}
+                                    size={20}
+                                    color={isCurrentUser ? 'white' : '#F68537'}
                                 />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ 
-                                    fontSize: 14, 
-                                    fontWeight: 'bold', 
-                                    color: isCurrentUser ? 'white' : '#1F2937' 
+                                <Text style={{
+                                    fontSize: 14,
+                                    fontWeight: 'bold',
+                                    color: isCurrentUser ? 'white' : '#1F2937'
                                 }}>
-                                    {callDetails.status === 'missed' ? 'Missed Call' : 
-                                     callDetails.type === 'video' ? 'Video Call' : 'Audio Call'}
+                                    {callDetails.status === 'missed' ? 'Missed Call' :
+                                        callDetails.type === 'video' ? 'Video Call' : 'Audio Call'}
                                 </Text>
-                                <Text style={{ 
-                                    fontSize: 12, 
+                                <Text style={{
+                                    fontSize: 12,
                                     color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280',
                                     marginTop: 2
                                 }}>
-                                    {callDetails.status === 'completed' ? 
-                                        (callDetails.duration > 0 ? `Duration: ${Math.floor(callDetails.duration / 60)}m ${callDetails.duration % 60}s` : 'Call Ended') 
+                                    {callDetails.status === 'completed' ?
+                                        (callDetails.duration > 0 ? `Duration: ${Math.floor(callDetails.duration / 60)}m ${callDetails.duration % 60}s` : 'Call Ended')
                                         : 'No answer'}
                                 </Text>
                             </View>
@@ -521,7 +535,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                                     <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }}>Contact</Text>
                                 </View>
                             </View>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 onPress={() => {
                                     import('react-native').then(({ Linking }) => {
                                         Linking.openURL(`tel:${contactPhone}`);
@@ -537,22 +551,22 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     {/* Location Card Content */}
                     {isLocationMessage && (
                         <View style={{ padding: 12, width: 220 }}>
-                            <View style={{ 
-                                flexDirection: 'row', 
-                                alignItems: 'center', 
-                                marginBottom: 12, 
-                                paddingBottom: 12, 
-                                borderBottomWidth: 1, 
-                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' 
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                marginBottom: 12,
+                                paddingBottom: 12,
+                                borderBottomWidth: 1,
+                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB'
                             }}>
-                                <View style={{ 
-                                    width: 40, 
-                                    height: 40, 
-                                    borderRadius: 20, 
-                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(16, 185, 129, 0.1)', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    marginRight: 12 
+                                <View style={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: 20,
+                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(16, 185, 129, 0.1)',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginRight: 12
                                 }}>
                                     <Ionicons name="location" size={20} color={isCurrentUser ? 'white' : '#10B981'} />
                                 </View>
@@ -561,7 +575,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                                     <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }} numberOfLines={2}>{locationAddress}</Text>
                                 </View>
                             </View>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 onPress={() => {
                                     import('react-native').then(({ Linking }) => {
                                         Linking.openURL(`https://maps.google.com/?q=${locationCoords}`);
@@ -577,22 +591,22 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     {/* Document Card Content */}
                     {isDocumentMessage && (
                         <View style={{ padding: 12, width: 240 }}>
-                            <View style={{ 
-                                flexDirection: 'row', 
-                                alignItems: 'center', 
-                                marginBottom: 12, 
-                                paddingBottom: 12, 
-                                borderBottomWidth: 1, 
-                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' 
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                marginBottom: 12,
+                                paddingBottom: 12,
+                                borderBottomWidth: 1,
+                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB'
                             }}>
-                                <View style={{ 
-                                    width: 44, 
-                                    height: 44, 
-                                    borderRadius: 12, 
-                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(124, 58, 237, 0.1)', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    marginRight: 12 
+                                <View style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: 12,
+                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(124, 58, 237, 0.1)',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginRight: 12
                                 }}>
                                     <Ionicons name="document-text" size={24} color={isCurrentUser ? 'white' : '#7C3AED'} />
                                 </View>
@@ -603,7 +617,7 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                                     ) : null}
                                 </View>
                             </View>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 onPress={() => {
                                     if (documentUrl) {
                                         import('react-native').then(({ Linking }) => {
@@ -622,22 +636,22 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                     )}
 
                     <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                        {textContent && textContent.trim() !== '' && 
-                         !(hasImage && textContent.startsWith('Sent ')) && 
-                         !(isVoiceMessage && textContent.startsWith('Sent ')) && 
-                         message.message_type !== 'ledger' && (
-                            <Text style={{
-                                fontSize: 15,
-                                lineHeight: 22,
-                                color: isCurrentUser ? 'white' : '#1F2937',
-                                fontStyle: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 'italic' : 'normal',
-                                opacity: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 0.7 : 1
-                            }}>
-                                {textContent && textContent.trim && textContent.trim().startsWith('{"iv":') 
-                                    ? 'Decrypting...' 
-                                    : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
-                            </Text>
-                        )}
+                        {textContent && textContent.trim() !== '' &&
+                            !(hasImage && textContent.startsWith('Sent ')) &&
+                            !(isVoiceMessage && textContent.startsWith('Sent ')) &&
+                            message.message_type !== 'ledger' && (
+                                <Text style={{
+                                    fontSize: 15,
+                                    lineHeight: 22,
+                                    color: isCurrentUser ? 'white' : '#1F2937',
+                                    fontStyle: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 'italic' : 'normal',
+                                    opacity: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 0.7 : 1
+                                }}>
+                                    {textContent && textContent.trim && textContent.trim().startsWith('{"iv":')
+                                        ? 'Decrypting...'
+                                        : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
+                                </Text>
+                            )}
 
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
                             <Text style={{
@@ -681,6 +695,6 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
             </Animated.View>
         </View>
     );
-});
+}, areEqual);
 
 export default MessageItem;

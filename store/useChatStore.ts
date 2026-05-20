@@ -1,12 +1,12 @@
-import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
-import { Alert } from 'react-native';
-import { getChatKey, decryptText, encryptText } from '@/utils/chatCrypto';
-import { uploadChatMessageMedia } from '../utils/uploadHelper';
-import { logErrorToDB } from '@/utils/errorLogger';
-import { useDbStore } from './useDbStore';
-import { saveLocalMessage, getLocalMessages, getChatClearTimestamp, markMessageAsDeletedLocally, getLocallyDeletedMessages, syncLedgerExpense } from '@/lib/localDb';
 import { getFromCache, saveToCache } from '@/lib/database';
+import { getChatClearTimestamp, getLocallyDeletedMessages, getLocalMessages, markMessageAsDeletedLocally, saveLocalMessage, syncLedgerExpense } from '@/lib/localDb';
+import { supabase } from '@/lib/supabase';
+import { decryptText, encryptText, getChatKey } from '@/utils/chatCrypto';
+import { logErrorToDB } from '@/utils/errorLogger';
+import { Alert } from 'react-native';
+import { create } from 'zustand';
+import { uploadChatMessageMedia } from '../utils/uploadHelper';
+import { useDbStore } from './useDbStore';
 
 interface ChatState {
     messages: any[];
@@ -109,7 +109,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     const localDeletedIds = await getLocallyDeletedMessages(db);
                     // Fetch last 20 from local DB
                     let localMsgs = await getLocalMessages(db, friendId, isGroup, PAGE_SIZE, 0);
-                    
+
                     // Since localMsgs are DESC from DB, reverse them for ASC store
                     localMsgs = localMsgs.reverse();
 
@@ -123,8 +123,8 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                     if (localMsgs && localMsgs.length > 0) {
                         console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB (Paginated)`);
-                        set({ 
-                            messages: localMsgs, 
+                        set({
+                            messages: localMsgs,
                             loading: false,
                             hasMore: localMsgs.length >= PAGE_SIZE, // Assume there's more if we got a full page
                             cache: { ...get().cache, [friendId]: { messages: localMsgs, key: chatKey } }
@@ -245,7 +245,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 if (activeChatId === friendId) {
                     // Deduplicate by ID
                     const uniqueMessages = Array.from(new Map(finalMessages.map(m => [m.id, m])).values());
-                    
+
                     set({
                         messages: uniqueMessages,
                         loading: false,
@@ -317,7 +317,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const { db } = useDbStore.getState();
                 const currentLocalCount = messages.length;
                 let olderLocalMsgs: any[] = [];
-                
+
                 if (db) {
                     // Fetch next 20 from local DB
                     olderLocalMsgs = await getLocalMessages(db, friendId, isGroup, PAGE_SIZE, currentLocalCount);
@@ -328,7 +328,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     console.log(`ChatStore: Loaded ${olderLocalMsgs.length} older messages from Local DB`);
                     const combined = [...olderLocalMsgs, ...messages];
                     const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
-                    
+
                     set({
                         messages: unique,
                         loadingMore: false,
@@ -489,7 +489,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 sender_id: currentUser.id,
                 receiver_id: isGroup ? null : friendId,
                 group_id: isGroup ? friendId : null,
-                status: 'sending',
+                status: 'pending',
                 reply_to_id: replyToId,
                 reply: replyObject,
                 message_type: messageType || 'text',
@@ -505,11 +505,17 @@ export const useChatStore = create<ChatState>((set, get) => {
                 cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
             }));
 
+            // ✅ Save to Local SQLite DB immediately!
+            const { db } = useDbStore.getState();
+            if (db) {
+                saveLocalMessage(db, tempMsg);
+            }
+
             try {
                 if (text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Document]')) {
                     const isVoice = text.startsWith('[Voice Message]');
                     const isDoc = text.startsWith('[Document]');
-                    
+
                     let localUri = '';
                     let uploadType: 'image' | 'voice' | 'document' = 'image';
                     let originalName = '';
@@ -566,9 +572,13 @@ export const useChatStore = create<ChatState>((set, get) => {
                     };
                 });
 
-                // Save to Local DB
-                const { db } = useDbStore.getState();
+                // ✅ Update Local DB (Delete temp message and insert synced one)
                 if (db) {
+                    try {
+                        await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
+                    } catch (e) {
+                        console.warn('[DB] Failed to delete temp message:', e);
+                    }
                     saveLocalMessage(db, finalMsg);
                     syncLedgerExpense(db, finalMsg, currentUser.id);
                 }
@@ -582,12 +592,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }
             } catch (error: any) {
                 console.error("SendMessage Error:", error);
-                set((state) => ({
-                    messages: state.messages.filter(m => m.id !== tempId),
-                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: state.messages.filter(m => m.id !== tempId), key: chatKey } }
-                }));
+                // ⚠️ We do NOT delete the message from the list! It will stay as 'pending' (clock icon)
+                // When internet comes back, the background syncPendingMessages will upload it.
                 logErrorToDB(error, 'ChatStore: Send Message', currentUser.id, currentUser.username);
-                Alert.alert('Error', 'Failed to send message');
             }
         },
 
@@ -690,13 +697,13 @@ export const useChatStore = create<ChatState>((set, get) => {
                 // Update Cache Safely
                 const finalMessages = get().messages;
                 set((state) => ({
-                    cache: { 
-                        ...state.cache, 
-                        [activeChatId]: { 
-                            ...state.cache[activeChatId], 
-                            messages: finalMessages, 
-                            key: chatKey 
-                        } 
+                    cache: {
+                        ...state.cache,
+                        [activeChatId]: {
+                            ...state.cache[activeChatId],
+                            messages: finalMessages,
+                            key: chatKey
+                        }
                     }
                 }));
             } catch (err: any) {
@@ -728,7 +735,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         setTypingStatus: (typing, friendId, currentUser) => {
             const { activeChannel } = get();
             const { globalChannel } = (require('./useFriendsStore').useFriendsStore.getState());
-            
+
             const sendPresenceUpdate = (isTyping: boolean) => {
                 if (globalChannel) {
                     globalChannel.track({

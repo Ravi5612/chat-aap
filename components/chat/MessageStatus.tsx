@@ -1,16 +1,16 @@
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface MessageStatusProps {
-    status: 'sending' | 'sent' | 'delivered' | 'read';
+    status: 'sending' | 'pending' | 'sent' | 'delivered' | 'read';
 }
 
 export default function MessageStatus({ status }: MessageStatusProps) {
-    if (status === 'sending') {
+    if (status === 'sending' || status === 'pending') {
         return (
-            <View className="ml-1">
-                <ActivityIndicator size="small" color="#94a3b8" />
+            <View style={{ marginLeft: 2 }}>
+                <Ionicons name="time-outline" size={14} color="#94a3b8" />
             </View>
         );
     }

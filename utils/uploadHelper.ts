@@ -3,8 +3,8 @@ import { Buffer } from 'buffer';
 import * as FileSystem from 'expo-file-system';
 
 export const uploadChatMessageMedia = async (
-    uri: string, 
-    type: 'image' | 'voice' | 'document' | 'video', 
+    uri: string,
+    type: 'image' | 'voice' | 'document' | 'video',
     userId: string,
     originalFileName?: string,
     mimeType?: string

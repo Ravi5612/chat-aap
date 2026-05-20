@@ -1,31 +1,26 @@
-import React, { useState, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useRef, useState } from 'react';
 import {
-    View,
+    Alert,
+    Image,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Image,
-    Alert,
-    Keyboard
+    View
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ReplyPreview from './ReplyPreview';
 
-import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import * as Contacts from 'expo-contacts';
 import AttachmentMenu from './AttachmentMenu';
 import AudioRecorder from './AudioRecorder';
-import EmojiPickerModal from './EmojiPickerModal';
 import ContactPickerModal from './ContactPickerModal';
+import EmojiPickerModal from './EmojiPickerModal';
 
-import * as Haptics from 'expo-haptics';
 
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
@@ -61,6 +56,8 @@ export default function ChatInput({
     const [isRecording, setIsRecording] = useState(false);
     const [emojiModalVisible, setEmojiModalVisible] = useState(false);
     const insets = useSafeAreaInsets();
+    const hasMeasured = insets.top > 0 || insets.bottom > 0;
+    const safeBottom = hasMeasured ? insets.bottom : (initialWindowMetrics?.insets?.bottom || 0);
     const inputRef = useRef<TextInput>(null);
     const typingTimeoutRef = useRef<any>(null);
     const draftTimeoutRef = useRef<any>(null);
@@ -73,6 +70,13 @@ export default function ChatInput({
             inputRef.current?.focus();
         }
     }, [editingMessage, replyingTo]);
+
+    // Sync draft when loaded asynchronously
+    React.useEffect(() => {
+        if (initialMessage) {
+            setMessage(initialMessage);
+        }
+    }, [initialMessage]);
 
     const handleSubmit = () => {
         if (!message.trim() && !selectedImage) {
@@ -160,23 +164,23 @@ export default function ChatInput({
 
             // Optional: Show a loading indicator if you have state for it, but for now just await
             const location = await Location.getCurrentPositionAsync({});
-            
+
             let addressStr = 'Current Location';
             try {
                 const [geocode] = await Location.reverseGeocodeAsync({
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude
                 });
-                
+
                 if (geocode) {
                     // Combine available address components
                     const parts = [
-                        geocode.name, 
-                        geocode.street, 
-                        geocode.city || geocode.subregion, 
+                        geocode.name,
+                        geocode.street,
+                        geocode.city || geocode.subregion,
                         geocode.region
                     ].filter(Boolean);
-                    
+
                     if (parts.length > 0) {
                         addressStr = parts.join(', ');
                     }
@@ -233,7 +237,7 @@ export default function ChatInput({
 
     const handleChangeText = (text: string) => {
         setMessage(text);
-        
+
         // Debounced Draft Save
         if (onDraftChange) {
             if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
@@ -257,7 +261,7 @@ export default function ChatInput({
         }
     };
 
-    const bottomPadding = isKeyboardOpen ? 5 : (insets.bottom > 0 ? insets.bottom : 12);
+    const bottomPadding = isKeyboardOpen ? 5 : (safeBottom > 0 ? safeBottom : 12);
 
     return (
         <View style={{
@@ -336,20 +340,20 @@ export default function ChatInput({
                     </View>
                 )}
 
-                <View style={{ 
-                    flexDirection: 'row', 
-                    alignItems: 'flex-end', 
-                    gap: 6, 
-                    paddingHorizontal: 8, 
-                    paddingVertical: 10, 
-                    opacity: isRecording ? 0 : 1 
+                <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'flex-end',
+                    gap: 6,
+                    paddingHorizontal: 8,
+                    paddingVertical: 10,
+                    opacity: isRecording ? 0 : 1
                 }}>
-                    <View style={{ 
-                        flex: 1, 
-                        backgroundColor: 'white', 
-                        borderRadius: 25, 
-                        minHeight: 48, 
-                        flexDirection: 'row', 
+                    <View style={{
+                        flex: 1,
+                        backgroundColor: 'white',
+                        borderRadius: 25,
+                        minHeight: 48,
+                        flexDirection: 'row',
                         alignItems: 'center',
                         paddingHorizontal: 6,
                         elevation: 2,
@@ -358,7 +362,7 @@ export default function ChatInput({
                         shadowOpacity: 0.1,
                         shadowRadius: 2,
                     }}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => setEmojiModalVisible(true)}
                             style={{ padding: 8 }}
                         >
@@ -367,11 +371,11 @@ export default function ChatInput({
 
                         <TextInput
                             ref={inputRef}
-                            style={{ 
-                                flex: 1, 
-                                fontSize: 16, 
-                                paddingVertical: 10, 
-                                paddingHorizontal: 4, 
+                            style={{
+                                flex: 1,
+                                fontSize: 16,
+                                paddingVertical: 10,
+                                paddingHorizontal: 4,
                                 color: '#1F2937',
                                 maxHeight: 120
                             }}
@@ -393,7 +397,7 @@ export default function ChatInput({
                         />
 
                         {!message.trim() && !selectedImage && (
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 onPress={handleLaunchCamera}
                                 style={{ padding: 8 }}
                             >

@@ -20,6 +20,7 @@ interface AgoraVideoViewProps {
     zOrderMediaOverlay?: boolean;
     zOrderOnTop?: boolean;
     useTextureView?: boolean;
+    channelId?: string;
 }
 
 export default function AgoraVideoView({ 
@@ -27,7 +28,8 @@ export default function AgoraVideoView({
     style, 
     zOrderMediaOverlay = false,
     zOrderOnTop = false,
-    useTextureView = false
+    useTextureView = false,
+    channelId
 }: AgoraVideoViewProps) {
     if (!RtcSurfaceView) {
         return (
@@ -37,14 +39,27 @@ export default function AgoraVideoView({
         );
     }
 
-    // On Android, use RtcTextureView for PIP/Overlays to avoid layering issues
-    const ViewComponent = (useTextureView || Platform.OS === 'android' && (zOrderMediaOverlay || zOrderOnTop)) 
-        ? (RtcTextureView || RtcSurfaceView) 
-        : RtcSurfaceView;
+    // Explicitly parse the UID to a safe number (integer)
+    const safeUid = parseInt(String(uid), 10);
+    if (isNaN(safeUid)) {
+        return (
+            <View style={[style, { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ color: 'white', fontSize: 10 }}>Connecting...</Text>
+            </View>
+        );
+    }
+
+    // fallback to RtcSurfaceView if RtcTextureView is not loaded or causing issues
+    const ViewComponent = useTextureView ? (RtcTextureView || RtcSurfaceView) : RtcSurfaceView;
+
+    const canvasObj: any = { uid: safeUid };
+    if (channelId) {
+        canvasObj.channelId = channelId;
+    }
 
     return (
         <ViewComponent
-            canvas={{ uid: uid }}
+            canvas={canvasObj}
             style={style}
             zOrderMediaOverlay={zOrderMediaOverlay}
             zOrderOnTop={zOrderOnTop}

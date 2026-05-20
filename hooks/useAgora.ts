@@ -252,6 +252,7 @@ export const useAgora = ({
         toggleMute,
         toggleVideo,
         switchCamera,
-        leave
+        leave,
+        channelId: channelName.current
     };
 };

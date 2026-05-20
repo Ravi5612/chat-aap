@@ -8,6 +8,7 @@ import Animated, {
     useAnimatedStyle,
     withSpring,
     withTiming,
+    withRepeat,
     interpolate,
     Extrapolate,
     runOnJS
@@ -28,7 +29,7 @@ const WaveBar = memo(({ anim }: { anim: Animated.SharedValue<number> }) => {
         backgroundColor: '#F68537',
         width: 3,
         borderRadius: 2,
-        marginHorizontal: 1
+        marginHorizontal: 1.5,
     }));
     return <Animated.View style={style} />;
 });
@@ -45,30 +46,46 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
     const translateX = useSharedValue(0);
     const opacity = useSharedValue(0);
 
-    // Fixed hooks for waveform bars (Rules of Hooks compliance)
-    const b1 = useSharedValue(5);
-    const b2 = useSharedValue(5);
-    const b3 = useSharedValue(5);
-    const b4 = useSharedValue(5);
-    const b5 = useSharedValue(5);
-    const b6 = useSharedValue(5);
-    const b7 = useSharedValue(5);
-    const b8 = useSharedValue(5);
-    const b9 = useSharedValue(5);
-    const b10 = useSharedValue(5);
+    // Glowing dot pulse animation
+    const dotPulse = useSharedValue(1);
 
-    const waveAnims = [b1, b2, b3, b4, b5, b6, b7, b8, b9, b10];
+    // Sliding cancel hint chevron animation
+    const chevronSlide = useSharedValue(0);
+
+    // 20 waveform bars for high fidelity visualization
+    const waveAnims = [
+        useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6),
+        useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6),
+        useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6),
+        useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6), useSharedValue(6)
+    ];
 
     useEffect(() => {
         isMounted.current = true;
         startRecording();
-        opacity.value = withTiming(1, { duration: 300 });
+        
+        // Slide-in animation for container
+        opacity.value = withTiming(1, { duration: 250 });
+
+        // Loop pulsing red recording dot
+        dotPulse.value = withRepeat(
+            withTiming(0.3, { duration: 750 }),
+            -1, // infinite
+            true // reverse
+        );
+
+        // Loop sliding cancel arrow hint
+        chevronSlide.value = withRepeat(
+            withTiming(-12, { duration: 1200 }),
+            -1, // infinite
+            false // do not reverse, reset to 0 to simulate slide gesture direction
+        );
 
         return () => {
             isMounted.current = false;
             if (timerRef.current) clearInterval(timerRef.current);
 
-            // Critical cleanup: ensure any active recording is stopped and unloaded
+            // Cleanup: ensure active recording is stopped & unloaded
             if (activeRecordingRef.current) {
                 const rec = activeRecordingRef.current;
                 rec.stopAndUnloadAsync().catch(e => console.warn('AudioRecorder: Cleanup stop failed', e.message));
@@ -78,20 +95,22 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
 
     const startRecording = async () => {
         try {
-            // 1. Permissions
-            const permission = await Audio.requestPermissionsAsync();
-            if (permission.status !== 'granted') return onCancel();
+            // ⚡ Instant startup optimization 1: Check permissions without calling slow request API if already granted
+            const permissionStatus = await Audio.getPermissionsAsync();
+            if (permissionStatus.status !== 'granted') {
+                const requested = await Audio.requestPermissionsAsync();
+                if (requested.status !== 'granted') return onCancel();
+            }
 
-            // 2. Audio Mode Configuration
-            await Audio.setAudioModeAsync({
+            // ⚡ Instant startup optimization 2: Run setAudioModeAsync without awaiting to avoid locking thread for 150ms
+            Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
                 playsInSilentModeIOS: true,
                 staysActiveInBackground: false,
                 shouldDuckAndroid: true,
-            });
+            }).catch(() => {});
 
-            // 3. Create and Prepare Recording
-            // We use createAsync but we track it immediately in ref for cleanup
+            // 3. Create and Prepare Recording (runs directly after fast precheck)
             const { recording: newRecording } = await Audio.Recording.createAsync(
                 {
                     ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
@@ -116,25 +135,25 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
                 (status) => {
                     if (status.metering !== undefined) {
                         metering.value = status.metering;
-                        const val = interpolate(status.metering, [-60, 0], [5, 30], Extrapolate.CLAMP);
+                        // Dynamically update 20 wave bar heights based on audio input levels
+                        const val = interpolate(status.metering, [-60, 0], [6, 32], Extrapolate.CLAMP);
                         waveAnims.forEach((anim) => {
-                            anim.value = withSpring(val * (0.4 + Math.random() * 0.6));
+                            anim.value = withSpring(val * (0.3 + Math.random() * 0.7));
                         });
                     }
                 },
-                100
+                80 // Check frequency (faster response rate)
             );
 
             activeRecordingRef.current = newRecording;
 
             if (!isMounted.current) {
-                // If unmounted while preparing, unload immediately
                 await newRecording.stopAndUnloadAsync();
                 return;
             }
 
             setRecording(newRecording);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
             timerRef.current = setInterval(() => {
                 setSeconds(s => s + 1);
@@ -175,7 +194,7 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Gesture Handling
+    // Swipe to cancel gesture layout binding
     const gesture = Gesture.Pan()
         .activeOffsetX([-10, 10])
         .onUpdate((event) => {
@@ -184,8 +203,8 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
             }
         })
         .onEnd((event) => {
-            if (event.translationX < -100) {
-                translateX.value = withTiming(-SCREEN_WIDTH, { duration: 200 }, () => {
+            if (event.translationX < -110) {
+                translateX.value = withTiming(-SCREEN_WIDTH, { duration: 180 }, () => {
                     runOnJS(handleDiscard)();
                 });
             } else {
@@ -195,43 +214,53 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
 
     const animatedContainerStyle = useAnimatedStyle(() => ({
         opacity: opacity.value,
-        transform: [{ translateY: interpolate(opacity.value, [0, 1], [50, 0]) }]
+        transform: [{ translateY: interpolate(opacity.value, [0, 1], [30, 0]) }]
     }));
 
     const slideStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: translateX.value }]
     }));
 
-    return (
-        <GestureHandlerRootView style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
-            <Animated.View style={[styles.container, animatedContainerStyle]}>
-                <View style={styles.blurBackground} />
+    const dotAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: dotPulse.value,
+        transform: [{ scale: interpolate(dotPulse.value, [0.3, 1], [0.85, 1.1]) }]
+    }));
 
-                <View style={styles.recordingIndicator}>
-                    <View style={styles.dot} />
+    const chevronAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: chevronSlide.value }],
+        opacity: interpolate(chevronSlide.value, [0, -12], [1, 0.15])
+    }));
+
+    return (
+        <GestureHandlerRootView style={StyleSheet.absoluteFillObject}>
+            <Animated.View style={[styles.container, animatedContainerStyle]}>
+                <View style={styles.glassBackground} />
+
+                <View style={styles.metaRow}>
+                    <Animated.View style={[styles.dot, dotAnimatedStyle]} />
                     <Text style={styles.timerText}>{formatTime(seconds)}</Text>
                 </View>
 
+                {/* High fidelity waveform visualization */}
                 <View style={styles.waveContainer}>
                     {waveAnims.map((anim, i) => <WaveBar key={i} anim={anim} />)}
                 </View>
 
                 <GestureDetector gesture={gesture}>
-                    <Animated.View style={[styles.controls, slideStyle]}>
+                    <Animated.View style={[styles.controlsRow, slideStyle]}>
                         <TouchableOpacity onPress={handleDiscard} style={styles.discardBtn}>
-                            <Ionicons name="trash-outline" size={22} color="#EF4444" />
+                            <Ionicons name="trash-outline" size={20} color="#EF4444" />
                         </TouchableOpacity>
 
-                        <View style={styles.cancelHint}>
-                            <Ionicons name="chevron-back" size={16} color="#94A3B8" />
+                        <View style={styles.cancelHintContainer}>
+                            <Animated.View style={chevronAnimatedStyle}>
+                                <Ionicons name="chevron-back" size={15} color="#94A3B8" />
+                            </Animated.View>
                             <Text style={styles.cancelText}>Swipe to cancel</Text>
                         </View>
 
-                        <TouchableOpacity
-                            onPress={handleStop}
-                            style={styles.sendBtn}
-                        >
-                            <Ionicons name="send" size={20} color="white" />
+                        <TouchableOpacity onPress={handleStop} style={styles.sendBtn}>
+                            <Ionicons name="send" size={18} color="white" />
                         </TouchableOpacity>
                     </Animated.View>
                 </GestureDetector>
@@ -242,27 +271,38 @@ export default function AudioRecorder({ onRecordingComplete, onCancel }: AudioRe
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 60,
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
         borderTopWidth: 1,
         borderTopColor: '#F1F5F9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+        elevation: 10,
+        zIndex: 1000
     },
-    blurBackground: {
+    glassBackground: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'white',
-        opacity: 0.9,
+        backgroundColor: '#FFFFFF',
+        opacity: 0.97,
     },
-    recordingIndicator: {
+    metaRow: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#FEF2F2',
         paddingHorizontal: 10,
-        paddingVertical: 6,
+        paddingVertical: 5,
         borderRadius: 20,
-        marginRight: 8,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
     },
     dot: {
         width: 8,
@@ -270,12 +310,17 @@ const styles = StyleSheet.create({
         borderRadius: 4,
         backgroundColor: '#EF4444',
         marginRight: 6,
+        shadowColor: '#EF4444',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 4,
+        elevation: 2
     },
     timerText: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#1E293B',
-        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#EF4444',
+        fontFamily: Platform.OS === 'ios' ? 'Courier-Bold' : 'monospace',
     },
     waveContainer: {
         flex: 1,
@@ -283,43 +328,47 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         height: 40,
-        marginHorizontal: 8,
+        marginHorizontal: 10,
     },
-    controls: {
+    controlsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'transparent',
+        gap: 8,
     },
     discardBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         backgroundColor: '#FEF2F2',
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 6,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
     },
-    cancelHint: {
+    cancelHintContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginRight: 10,
+        justifyContent: 'flex-end',
+        width: 105,
+        marginRight: 2,
     },
     cancelText: {
-        fontSize: 12,
+        fontSize: 11,
+        fontWeight: '600',
         color: '#94A3B8',
         marginLeft: 2,
     },
     sendBtn: {
-        width: 46,
-        height: 46,
-        borderRadius: 23,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: '#F68537',
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: '#F68537',
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 5,
+        shadowRadius: 6,
+        elevation: 4,
     }
 });

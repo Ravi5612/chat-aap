@@ -200,7 +200,7 @@ function HomeScreen() {
     handleViewMyStatus,
   } = useStatusActions(currentUser, loadFriends);
 
-  const handleSelectFriend = (friend: any) => {
+  const handleSelectFriend = useCallback((friend: any) => {
     if (!friend?.id) {
         logHomeDebug("SelectFriend: Failed, no friend ID");
         return;
@@ -230,12 +230,12 @@ function HomeScreen() {
         logHomeDebug("SelectFriend ERROR: " + err.message);
         Alert.alert("Nav Error", err.message);
     }
-  };
+  }, [router, logHomeDebug]);
 
 
-  const handleImageClick = (friend: any) => {
+  const handleImageClick = useCallback((friend: any) => {
     setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`);
-  };
+  }, []);
 
   const filteredItems = combinedItems.filter(item => {
     // Tab filtering

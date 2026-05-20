@@ -6,6 +6,8 @@ import { decryptText } from '@/utils/chatCrypto';
 import { useDbStore } from '@/store/useDbStore';
 import { saveLocalMessage, getLocallyDeletedMessages, syncLedgerExpense, markMessageDeliveredLocally, getPendingDeliveredMessages } from '@/lib/localDb';
 
+const processedMessageIds = new Set<string>();
+
 export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: boolean = false) => {
     const { user: currentUser } = useAuthStore();
     const {
@@ -107,10 +109,21 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
                 const newMsg = payload.new;
                 const isRelevant = isGroup
-                    ? newMsg.group_id === friendId
+                    ? (newMsg.group_id === friendId && newMsg.sender_id !== currentUser.id)
                     : (newMsg.sender_id === friendId && newMsg.receiver_id === currentUser.id);
 
                 if (isRelevant) {
+                    const msgId = newMsg.id;
+                    if (processedMessageIds.has(msgId)) {
+                        console.log('[REALTIME] postgres_changes message already processed/processing:', msgId);
+                        return;
+                    }
+                    processedMessageIds.add(msgId);
+                    if (processedMessageIds.size > 1000) {
+                        const firstItem = processedMessageIds.values().next().value;
+                        if (firstItem) processedMessageIds.delete(firstItem);
+                    }
+
                     // Small delay to ensure DB and Local State are in sync
                     await new Promise(resolve => setTimeout(resolve, 150));
                     
@@ -229,6 +242,17 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     : (msg.sender_id === friendId && msg.receiver_id === currentUser.id);
                 
                 if (!isRelevant) return;
+
+                const msgId = msg.id;
+                if (processedMessageIds.has(msgId)) {
+                    console.log('[REALTIME] broadcast message already processed/processing:', msgId);
+                    return;
+                }
+                processedMessageIds.add(msgId);
+                if (processedMessageIds.size > 1000) {
+                    const firstItem = processedMessageIds.values().next().value;
+                    if (firstItem) processedMessageIds.delete(firstItem);
+                }
 
                 // ✅ Filter out locally deleted messages
                 const { db } = useDbStore.getState();

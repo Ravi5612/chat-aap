@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import { useDbStore } from './useDbStore';
 import { saveLocalProfile, getLocalProfile, updateLocalProfile, getPendingProfileSync } from '@/lib/localDb';
+import * as SecureStore from 'expo-secure-store';
 
 interface AuthState {
     session: Session | null;
@@ -25,7 +26,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     profile: null,
     initializing: true,
-    setSession: (session) => set({ session, user: session?.user || null }),
+    setSession: (session) => {
+        set({ session, user: session?.user || null });
+        if (session) {
+            SecureStore.setItemAsync('supabase_session', JSON.stringify(session)).catch(() => {});
+        } else {
+            SecureStore.deleteItemAsync('supabase_session').catch(() => {});
+        }
+    },
     setUser: (user) => set({ user }),
     setInitializing: (initializing) => set({ initializing }),
     signOut: async () => {
@@ -41,6 +49,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         } finally {
             // ALWAYS clear local state to force UI update
             set({ session: null, user: null, profile: null });
+            // Delete cached session
+            await SecureStore.deleteItemAsync('supabase_session').catch(() => {});
             // Force immediate navigation to login
             router.replace('/login');
         }
