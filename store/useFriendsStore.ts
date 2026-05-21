@@ -51,11 +51,16 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         if (friends.length === 0 && groups.length === 0) return;
 
         const currentUserId = (require('./useAuthStore').useAuthStore.getState()).user?.id;
-        const friendsWithPresence = friends.map(f => ({
-            ...f,
-            isOnline: !!onlineUsers[f.id] || f.db_is_online === true,
-            isTyping: onlineUsers[f.id]?.typingTo === currentUserId
-        }));
+        const isConnected = currentUserId ? !!onlineUsers[currentUserId] : false;
+
+        const friendsWithPresence = friends.map(f => {
+            const isOnline = isConnected ? !!onlineUsers[f.id] : f.db_is_online === true;
+            return {
+                ...f,
+                isOnline,
+                isTyping: onlineUsers[f.id]?.typingTo === currentUserId
+            };
+        });
 
         const combined = [...friendsWithPresence, ...groups];
         const uniqueItems = Array.from(new Map(combined.map(item => [item.id, item])).values())
@@ -361,11 +366,16 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             // Combine and Sort
             const { onlineUsers } = get();
             const currentUserId = (require('./useAuthStore').useAuthStore.getState()).user?.id;
-            const combined = [...formattedFriends.map(f => ({ 
-                ...f, 
-                isOnline: !!onlineUsers[f.id] || f.db_is_online === true,
-                isTyping: onlineUsers[f.id]?.typingTo === currentUserId
-            })), ...formattedGroups];
+            const isConnected = currentUserId ? !!onlineUsers[currentUserId] : false;
+
+            const combined = [...formattedFriends.map(f => {
+                const isOnline = isConnected ? !!onlineUsers[f.id] : f.db_is_online === true;
+                return { 
+                    ...f, 
+                    isOnline,
+                    isTyping: onlineUsers[f.id]?.typingTo === currentUserId
+                };
+            }), ...formattedGroups];
             const sortedItems = Array.from(new Map(combined.map(item => [item.id, item])).values())
                 .sort((a, b) => {
                     const tA = new Date(a.lastActivity).getTime() || 0;

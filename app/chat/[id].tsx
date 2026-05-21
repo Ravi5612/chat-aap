@@ -107,11 +107,13 @@ function ChatScreen() {
     // Check both Presence and DB status for maximum reliability
     const isUserOnline = useMemo(() => {
         if (!safeFriendId) return false;
+        const currentUserId = currentUser?.id;
+        const isConnected = currentUserId ? !!onlineUsers[currentUserId] : false;
         const isPresent = !!onlineUsers[safeFriendId];
         const isDbOnline = friendData?.db_is_online === true;
-        console.log(`[DEBUG] ChatScreen Presence: friendId=${safeFriendId}, isPresent=${isPresent}, isDbOnline=${isDbOnline}`);
-        return isPresent || isDbOnline;
-    }, [onlineUsers, safeFriendId, friendData]);
+        console.log(`[DEBUG] ChatScreen Presence: friendId=${safeFriendId}, isConnected=${isConnected}, isPresent=${isPresent}, isDbOnline=${isDbOnline}`);
+        return isConnected ? isPresent : isDbOnline;
+    }, [onlineUsers, safeFriendId, friendData, currentUser]);
 
     const {
         messages,

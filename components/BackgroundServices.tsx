@@ -7,13 +7,55 @@ import { useCallManager } from '@/hooks/useCallManager';
 import { useInitialPermissions } from '@/hooks/useInitialPermissions';
 import CallScreen from '@/components/chat/CallScreen';
 import { useCallStore } from '@/store/useCallStore';
-import { TouchableOpacity, Text, View, StatusBar } from 'react-native';
+import { TouchableOpacity, Text, View, StatusBar, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useDbStore } from '@/store/useDbStore';
 import InAppNotification from '@/components/ui/InAppNotification';
+import { supabase } from '@/lib/supabase';
+import { markMessageDeliveredLocally } from '@/lib/localDb';
+
+const syncAllPendingDeliveredReceiptsGlobal = async (myUserId: string) => {
+    try {
+        const { db } = useDbStore.getState();
+        if (!db) {
+            console.log('[DELIVERED] DB not initialized yet for sync');
+            return;
+        }
+
+        // 1. Get messages received by me that are still marked as 'sent'
+        const { data: pending, error: fetchError } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('receiver_id', myUserId)
+            .eq('status', 'sent');
+
+        if (fetchError) throw fetchError;
+        if (!pending || pending.length === 0) return;
+
+        console.log(`[DELIVERED] Found ${pending.length} pending sent messages to mark as delivered globally`);
+
+        const ids = pending.map(m => m.id);
+
+        // 2. Mark them as delivered in local SQLite DB
+        for (const id of ids) {
+            await markMessageDeliveredLocally(db, id);
+        }
+
+        // 3. Batch update Supabase to 'delivered'
+        const { error: updateError } = await supabase
+            .from('messages')
+            .update({ status: 'delivered' })
+            .in('id', ids);
+
+        if (updateError) throw updateError;
+        console.log(`[DELIVERED] Batch updated ${ids.length} messages successfully`);
+    } catch (e) {
+        console.warn('[DELIVERED] Global sync failed:', e);
+    }
+};
 
 export const BackgroundServices = () => {
     const session = useAuthStore(state => state.session);
@@ -26,6 +68,28 @@ export const BackgroundServices = () => {
             initializeDb();
         }
     }, [session?.user]);
+
+    // Sync all pending delivered receipts when user logs in/opens the app
+    useEffect(() => {
+        if (session?.user?.id) {
+            syncAllPendingDeliveredReceiptsGlobal(session.user.id);
+        }
+    }, [session?.user?.id]);
+
+    // Listen to AppState transitions to sync when app comes to foreground (active)
+    useEffect(() => {
+        if (!session?.user?.id) return;
+
+        const subscription = AppState.addEventListener('change', (nextAppState) => {
+            if (nextAppState === 'active') {
+                syncAllPendingDeliveredReceiptsGlobal(session.user.id);
+            }
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, [session?.user?.id]);
     
     // 1. Permissions
     useInitialPermissions();

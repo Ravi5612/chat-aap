@@ -5,6 +5,8 @@ import { decryptText, getChatKey } from '@/utils/chatCrypto';
 import { Audio } from 'expo-av';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import { markMessageDeliveredLocally } from '@/lib/localDb';
+import { useDbStore } from '@/store/useDbStore';
 
 const DEFAULT_MESSAGE_TONE = 'https://raw.githubusercontent.com/Anshuman71/chat-app/master/client/src/assets/notification.mp3';
 
@@ -51,13 +53,12 @@ export const useGlobalRealtime = (userId: string | null) => {
     useEffect(() => {
         if (!userId) return;
 
-        console.log('[DEBUG] GlobalRealtime: Initializing channel for:', userId);
+        console.log('[DEBUG] GlobalRealtime: Initializing channels for:', userId);
 
-        const channel = supabase.channel(`global-sync-${userId}`);
-        setGlobalChannel(channel);
+        // 1. Message Sync Channel (Private to current user)
+        const msgChannel = supabase.channel(`global-sync-${userId}`);
 
-        // 1. Listen for New Messages (Private)
-        channel.on(
+        msgChannel.on(
             'postgres_changes',
             {
                 event: 'INSERT',
@@ -68,7 +69,20 @@ export const useGlobalRealtime = (userId: string | null) => {
             async (payload) => {
                 console.log('[DEBUG] GlobalRealtime: New private message arrived:', payload.new.id);
 
-                // Play sound
+                // Mark message as 'delivered' immediately
+                const { db } = useDbStore.getState();
+                if (db) {
+                    markMessageDeliveredLocally(db, payload.new.id).catch(() => {});
+                }
+
+                supabase
+                    .from('messages')
+                    .update({ status: 'delivered' })
+                    .eq('id', payload.new.id)
+                    .eq('status', 'sent')
+                    .then(() => console.log('[DELIVERED] GlobalRealtime marked delivered:', payload.new.id))
+                    .catch(e => console.warn('[DELIVERED] GlobalRealtime mark failed:', e));
+
                 playMessageSound();
 
                 try {
@@ -97,10 +111,17 @@ export const useGlobalRealtime = (userId: string | null) => {
             }
         );
 
-        // 2. Presence Logic
-        channel
+        msgChannel.subscribe((status) => {
+            console.log('[DEBUG] GlobalRealtime MsgChannel Status:', status);
+        });
+
+        // 2. Shared Global Presence Channel (For real-time online status and typing sync)
+        const presenceChannel = supabase.channel('global-presence');
+        setGlobalChannel(presenceChannel);
+
+        presenceChannel
             .on('presence', { event: 'sync' }, () => {
-                const newState = channel.presenceState();
+                const newState = presenceChannel.presenceState();
                 const onlineMap: Record<string, any> = {};
 
                 Object.keys(newState).forEach((key) => {
@@ -113,6 +134,7 @@ export const useGlobalRealtime = (userId: string | null) => {
                     }
                 });
 
+                console.log('[DEBUG] Presence sync updated. Online users count:', Object.keys(onlineMap).length);
                 setOnlineUsers(onlineMap);
             })
             .on('presence', { event: 'join' }, ({ key, newPresences }) => {
@@ -122,11 +144,10 @@ export const useGlobalRealtime = (userId: string | null) => {
                 // console.log('[DEBUG] Presence: User left:', leftPresences);
             });
 
-        // 3. Subscribe & Track
-        channel.subscribe(async (status) => {
-            console.log('[DEBUG] GlobalRealtime: Status:', status);
+        presenceChannel.subscribe(async (status) => {
+            console.log('[DEBUG] GlobalRealtime PresenceChannel Status:', status);
             if (status === 'SUBSCRIBED') {
-                await channel.track({
+                await presenceChannel.track({
                     userId: userId,
                     online_at: new Date().toISOString(),
                 });
@@ -134,8 +155,10 @@ export const useGlobalRealtime = (userId: string | null) => {
         });
 
         return () => {
-            console.log('[DEBUG] GlobalRealtime: Cleaning up...');
-            supabase.removeChannel(channel);
+            console.log('[DEBUG] GlobalRealtime: Cleaning up channels...');
+            supabase.removeChannel(msgChannel);
+            supabase.removeChannel(presenceChannel);
+            setGlobalChannel(null);
         };
     }, [userId]); // Only re-run if userId changes
 };
