@@ -84,6 +84,16 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <View style={styles.divider} />
 
+                                {(!friend.isGroup && !friend.isUnfriended) && (
+                                    <TouchableOpacity
+                                        style={styles.actionItem}
+                                        onPress={() => { onAction('unfriend', friend); onClose(); }}
+                                    >
+                                        <Ionicons name="person-remove-outline" size={20} color="#EF4444" />
+                                        <Text style={[styles.actionText, { color: '#EF4444' }]}>Unfriend</Text>
+                                    </TouchableOpacity>
+                                )}
+
                                 <TouchableOpacity
                                     style={styles.actionItem}
                                     onPress={() => { onAction('delete', friend); onClose(); }}

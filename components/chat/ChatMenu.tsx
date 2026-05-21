@@ -9,6 +9,7 @@ interface ChatMenuProps {
     onGroupInfo: () => void;
     onClearChat: () => void;
     onBlockUser: () => void;
+    onUnfriend: () => void;
     isBlocked: boolean;
     isMember: boolean;
     isGroup: boolean;
@@ -24,6 +25,7 @@ export default function ChatMenu({
     onGroupInfo,
     onClearChat, 
     onBlockUser, 
+    onUnfriend,
     isBlocked, 
     isGroup, 
     onLeaveGroup, 
@@ -48,6 +50,7 @@ export default function ChatMenu({
     const dangerItems = [];
 
     if (!isGroup) {
+        dangerItems.push({ label: 'Unfriend', icon: 'person-remove-outline', onPress: onUnfriend, color: '#EF4444' });
         dangerItems.push({ label: isBlocked ? 'Unblock User' : 'Block User', icon: 'ban-outline', onPress: onBlockUser, color: '#EF4444' });
     }
 
