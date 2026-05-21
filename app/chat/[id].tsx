@@ -35,7 +35,6 @@ import {
     markMessageDeliveredLocally
 } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
-import DebugConsole from '@/components/DebugConsole';
 import { useDebugStore } from '@/store/useDebugStore';
 
 function ChatScreen() {
@@ -661,9 +660,6 @@ function ChatScreen() {
                     </TouchableOpacity>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <TouchableOpacity onPress={() => useDebugStore.getState().toggleVisible()}>
-                        <Ionicons name="bug-outline" size={22} color="#F68537" />
-                    </TouchableOpacity>
                     <TouchableOpacity 
                         onPress={() => {
                             if (isBlocked) Alert.alert("Blocked", "Unblock this user to call.");

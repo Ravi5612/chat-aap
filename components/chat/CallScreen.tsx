@@ -363,59 +363,61 @@ export default function CallScreen({
                 </View>
 
                 {/* Controls */}
-                <View style={styles.controlsContainer}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            if (__DEV__) console.log('[CALL_ACTION] Mute toggled');
-                            toggleMute();
-                        }}
-                        style={[styles.controlButton, isMuted && styles.dangerButton]}
-                    >
-                        <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
-                    </TouchableOpacity>
-
-                    {callState === 'incoming' && (
-                        <TouchableOpacity
-                            onPress={acceptCall}
-                            style={[styles.controlButton, styles.successButton, styles.largeButton]}
-                        >
-                            <Ionicons name="call" size={32} color="white" />
-                        </TouchableOpacity>
-                    )}
-
-                    <TouchableOpacity
-                        onPress={endCall}
-                        style={[styles.controlButton, styles.dangerButton, styles.largeButton]}
-                    >
-                        <Ionicons name="close" size={32} color="white" />
-                    </TouchableOpacity>
-
-                    {callType === 'video' && (
+                <View style={styles.controlsWrapper}>
+                    <View style={styles.controlsContainer}>
                         <TouchableOpacity
                             onPress={() => {
-                                if (__DEV__) console.log('[CALL_ACTION] Video toggled');
-                                toggleVideo();
+                                if (__DEV__) console.log('[CALL_ACTION] Mute toggled');
+                                toggleMute();
                             }}
-                            style={[
-                                styles.controlButton,
-                                isVideoOff && styles.dangerButton
-                            ]}
+                            style={[styles.controlButton, isMuted && styles.dangerButton]}
                         >
-                            <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
+                            <Ionicons name={isMuted ? "mic-off" : "mic"} size={22} color="white" />
                         </TouchableOpacity>
-                    )}
 
-                    {callType === 'video' && (
+                        {callState === 'incoming' && (
+                            <TouchableOpacity
+                                onPress={acceptCall}
+                                style={[styles.controlButton, styles.successButton, styles.largeButton]}
+                            >
+                                <Ionicons name="call" size={28} color="white" />
+                            </TouchableOpacity>
+                        )}
+
                         <TouchableOpacity
-                            onPress={() => {
-                                if (__DEV__) console.log('[CALL_ACTION] Camera switched');
-                                switchCamera();
-                            }}
-                            style={styles.controlButton}
+                            onPress={endCall}
+                            style={[styles.controlButton, styles.dangerButton, styles.largeButton]}
                         >
-                            <Ionicons name="refresh" size={24} color="white" />
+                            <Ionicons name="close" size={28} color="white" />
                         </TouchableOpacity>
-                    )}
+
+                        {callType === 'video' && (
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (__DEV__) console.log('[CALL_ACTION] Video toggled');
+                                    toggleVideo();
+                                }}
+                                style={[
+                                    styles.controlButton,
+                                    isVideoOff && styles.dangerButton
+                                ]}
+                            >
+                                <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={22} color="white" />
+                            </TouchableOpacity>
+                        )}
+
+                        {callType === 'video' && (
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (__DEV__) console.log('[CALL_ACTION] Camera switched');
+                                    switchCamera();
+                                }}
+                                style={styles.controlButton}
+                            >
+                                <Ionicons name="refresh" size={22} color="white" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>
             </View>
         </Modal>
@@ -550,28 +552,41 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.5)',
         fontSize: 10,
     },
-    controlsContainer: {
+    controlsWrapper: {
         position: 'absolute',
-        bottom: 60,
+        bottom: 50,
         left: 0,
         right: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    controlsContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 20,
+        gap: 12,
+        backgroundColor: '#F68537', // Orange Label
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 40, // Pill shape
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
     },
     controlButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: 'rgba(255,255,255,0.2)', // Slightly more visible on orange
         alignItems: 'center',
         justifyContent: 'center',
     },
     largeButton: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
     },
     dangerButton: {
         backgroundColor: '#EF4444',
