@@ -315,8 +315,14 @@ function ChatScreen() {
                 );
 
                 if (pending.length > 0) {
-                    console.log(`[OFFLINE] Syncing ${pending.length} pending messages...`);
+                    let syncedCount = 0;
                     for (const msg of pending) {
+                        // FIX: Prevent race condition! Ignore messages created in the last 10 seconds.
+                        // They are actively being sent by handleSendMessageOriginal.
+                        const ageMs = Date.now() - new Date(msg.created_at).getTime();
+                        if (ageMs < 10000) continue;
+
+                        syncedCount++;
                         const { data, error } = await supabase
                             .from('messages')
                             .insert([{
@@ -335,6 +341,7 @@ function ChatScreen() {
                             await saveLocalMessage(db, { ...data, status: 'sent' });
                         }
                     }
+                    if (syncedCount > 0) console.log(`[OFFLINE] Synced ${syncedCount} old pending messages.`);
                 }
             } catch (error) {
                 console.error('[OFFLINE] Sync failed:', error);
@@ -355,9 +362,14 @@ function ChatScreen() {
                 markMessagesAsReadLocally();
             }
         }
-        // Try syncing pending messages whenever messages update (or on mount)
+    }, [messages, markMessagesAsReadLocally]);
+
+    // Try syncing pending messages on mount and interval, not on every keystroke
+    useEffect(() => {
         syncPendingMessages();
-    }, [messages, syncPendingMessages, markMessagesAsReadLocally]);
+        const interval = setInterval(syncPendingMessages, 8000);
+        return () => clearInterval(interval);
+    }, [syncPendingMessages]);
 
     const handleSetWallpaper = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({

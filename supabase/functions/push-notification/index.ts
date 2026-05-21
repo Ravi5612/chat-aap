@@ -9,7 +9,7 @@ serve(async (req) => {
     // Supabase client initialize karein
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
     // Receiver ka push_token fetch karein
@@ -53,6 +53,23 @@ serve(async (req) => {
       })
 
       const result = await response.json()
+
+      // If it is a message and has a valid ID, mark it as delivered in the database
+      if (record.id && record.message) {
+        console.log(`Marking message ${record.id} as delivered in database...`)
+        const { error: updateError } = await supabase
+          .from('messages')
+          .update({ status: 'delivered' })
+          .eq('id', record.id)
+          .eq('status', 'sent')
+
+        if (updateError) {
+          console.error(`Error updating message status for ${record.id}:`, updateError)
+        } else {
+          console.log(`Successfully marked message ${record.id} as delivered.`)
+        }
+      }
+
       return new Response(JSON.stringify(result), { 
         status: 200,
         headers: { 'Content-Type': 'application/json' }
