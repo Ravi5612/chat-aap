@@ -791,16 +791,12 @@ function ChatScreen() {
             />
 
             <MediaViewer
-                visible={!!mediaViewerUrl}
-                mediaUrl={mediaViewerUrl || ''}
-                mediaType={mediaViewerUrl?.endsWith('.mp4') ? 'video' : 'image'}
-                onClose={() => setMediaViewerUrl(null)}
-                senderName={friendName || 'User'}
+                visible={viewerVisible}
+                imageUri={viewerImage}
+                onClose={() => setViewerVisible(false)}
             />
             
             <DebugConsole />
-        </View>
-
             <LedgerModal 
                 visible={ledgerVisible}
                 onClose={() => setLedgerVisible(false)}
