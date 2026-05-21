@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
+import { useFriendsStore } from '@/store/useFriendsStore';
 import { supabase } from '@/lib/supabase';
 import { Audio } from 'expo-av';
 import { logErrorToDB } from '@/utils/errorLogger';
@@ -11,10 +12,16 @@ import ringingTone from '../assets/audio/ringing_tone.mp3';
 const DIAL_TONE_URL = ringingTone;
 import callingTone from '../assets/audio/calling_tone.mp3';
 const CALLING_TONE_URL = callingTone;
+let isAudioModeConfigured = false;
 
 export const useCallManager = (currentUser: any, combinedItems: any[], isListener = true, profile: any = null) => {
     const { callSession, setCallSession, setCallActive, setCallEnded, endCall: endGlobalCall } = useCallStore();
     const soundRef = useRef<Audio.Sound | null>(null);
+    const combinedItemsRef = useRef(combinedItems);
+
+    useEffect(() => {
+        combinedItemsRef.current = combinedItems;
+    }, [combinedItems]);
 
     // Handle ringtone
     useEffect(() => {
@@ -23,13 +30,16 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         const manageRingtone = async () => {
             try {
                 if (callSession?.status === 'incoming' || callSession?.status === 'ringing' || callSession?.status === 'outgoing') {
-                    // Set Audio Mode for Call
-                    await Audio.setAudioModeAsync({
-                        playsInSilentModeIOS: true,
-                        staysActiveInBackground: true,
-                        shouldRouteThroughEarpieceAndroid: false,
-                        shouldDuckAndroid: true,
-                    });
+                    // Set Audio Mode for Call only once per session or globally
+                    if (!isAudioModeConfigured) {
+                        await Audio.setAudioModeAsync({
+                            playsInSilentModeIOS: true,
+                            staysActiveInBackground: true,
+                            shouldRouteThroughEarpieceAndroid: false,
+                            shouldDuckAndroid: true,
+                        });
+                        isAudioModeConfigured = true;
+                    }
 
                     const isIncoming = callSession.status === 'incoming';
                     const isRinging = callSession.status === 'ringing';
@@ -57,9 +67,8 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                     }
 
                     soundRef.current = sound;
-                } else {
                     if (soundRef.current) {
-                        console.log('[DEBUG] CallManager: Stopping tone');
+                        if (__DEV__) console.log('[DEBUG] CallManager: Stopping tone');
                         try {
                             const status = await soundRef.current.getStatusAsync();
                             if (status.isLoaded) {
@@ -67,14 +76,14 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                                 await soundRef.current.unloadAsync();
                             }
                         } catch (e) {
-                            console.log('[DEBUG] CallManager: Tone stop error ignored', e);
+                            if (__DEV__) console.log('[DEBUG] CallManager: Tone stop error ignored', e);
                         } finally {
                             soundRef.current = null;
                         }
                     }
                 }
             } catch (error) {
-                console.error('[DEBUG] CallManager: Error in manageRingtone:', error);
+                if (__DEV__) console.error('[DEBUG] CallManager: Error in manageRingtone:', error);
             }
         };
 
@@ -122,13 +131,13 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         if (callSession?.status === 'outgoing') {
             // Wait 30 seconds for 'ringing' signal. If not received, they are offline.
             timeoutId = setTimeout(() => {
-                console.log('[DEBUG] CallManager: Outgoing call timed out (User unreachable)');
+                if (__DEV__) console.log('[DEBUG] CallManager: Outgoing call timed out (User unreachable)');
                 setCallEnded('User is offline or unreachable');
             }, 30000);
         } else if (callSession?.status === 'ringing') {
             // Wait 60 seconds for them to answer. If not, it's a missed call.
             timeoutId = setTimeout(() => {
-                console.log('[DEBUG] CallManager: Ringing call timed out (No answer)');
+                if (__DEV__) console.log('[DEBUG] CallManager: Ringing call timed out (No answer)');
                 setCallEnded('Call unanswered');
             }, 60000);
         }
@@ -145,36 +154,56 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         sessionRef.current = callSession;
     }, [callSession]);
 
+    // Helper function for reliable signaling without race conditions
+    const sendSignalReliably = (targetId: string, payload: any) => {
+        const channelName = `calls-signal-${targetId}`;
+        const channel = supabase.channel(channelName);
+        let timeoutId: NodeJS.Timeout;
+
+        const cleanup = () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            supabase.removeChannel(channel).catch(() => {});
+        };
+
+        channel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                try {
+                    await channel.send({
+                        type: 'broadcast',
+                        event: 'signal',
+                        payload
+                    });
+                } catch (e) {
+                    if (__DEV__) console.warn('[CALL_ACTION] Failed to send signal:', e);
+                }
+                cleanup(); // Clean up immediately after sending
+            }
+        });
+
+        // Fail-safe cleanup after 8 seconds
+        timeoutId = setTimeout(cleanup, 8000);
+    };
+
     // Setup Global Realtime Listener for calls
     useEffect(() => {
         if (!currentUser?.id || !isListener) return;
 
         const channelName = `calls-signal-${currentUser.id}`;
-
         const channel = supabase.channel(channelName);
 
         channel.on('broadcast', { event: 'signal' }, ({ payload }) => {
-            console.log('[CALL_ACTION] Signal received:', payload.type, 'from:', payload.caller_id);
+            if (__DEV__) console.log('[CALL_ACTION] Signal received:', payload.type, 'from:', payload.caller_id);
             if (payload.type === 'offer') {
                 // If already in a call, send BUSY signal back to the caller
                 if (sessionRef.current) {
-                    console.log('[CALL_ACTION] Already in a call, sending BUSY to:', payload.caller_id);
-                    const busyChannel = supabase.channel(`calls-signal-${payload.caller_id}`);
-                    busyChannel.subscribe((status) => {
-                        if (status === 'SUBSCRIBED') {
-                            busyChannel.send({
-                                type: 'broadcast',
-                                event: 'signal',
-                                payload: { type: 'busy', receiver_id: currentUser.id }
-                            });
-                            setTimeout(() => supabase.removeChannel(busyChannel), 1000);
-                        }
-                    });
+                    if (__DEV__) console.log('[CALL_ACTION] Already in a call, sending BUSY to:', payload.caller_id);
+                    sendSignalReliably(payload.caller_id, { type: 'busy', receiver_id: currentUser.id });
                     return;
                 }
 
-                const caller = combinedItems.find(f => f.id === (payload.is_group ? payload.group_id : payload.caller_id)) || { id: payload.caller_id, name: 'Unknown' };
-                console.log('[CALL_ACTION] Incoming call offer from:', caller.name);
+                // Use the ref to prevent stale closures and avoid recreating the channel
+                const caller = combinedItemsRef.current.find((f: any) => f.id === (payload.is_group ? payload.group_id : payload.caller_id)) || { id: payload.caller_id, name: 'Unknown' };
+                if (__DEV__) console.log('[CALL_ACTION] Incoming call offer from:', caller.name);
                 setCallSession({
                     status: 'incoming',
                     type: payload.call_type,
@@ -184,37 +213,27 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                 });
 
                 // Immediately send back a 'ringing' signal so caller knows we got it
-                const ringingChannel = supabase.channel(`calls-signal-${payload.caller_id}`);
-                ringingChannel.subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        ringingChannel.send({
-                            type: 'broadcast',
-                            event: 'signal',
-                            payload: { type: 'ringing', receiver_id: currentUser.id }
-                        });
-                        setTimeout(() => supabase.removeChannel(ringingChannel).catch(() => {}), 1000);
-                    }
-                });
+                sendSignalReliably(payload.caller_id, { type: 'ringing', receiver_id: currentUser.id });
             } else if (payload.type === 'ringing') {
-                console.log('[CALL_ACTION] Remote user is ringing');
+                if (__DEV__) console.log('[CALL_ACTION] Remote user is ringing');
                 useCallStore.getState().setCallRinging();
             } else if (payload.type === 'accepted') {
-                console.log('[CALL_ACTION] Call accepted by remote user');
+                if (__DEV__) console.log('[CALL_ACTION] Call accepted by remote user');
                 setCallActive();
             } else if (payload.type === 'busy') {
-                console.log('[CALL_ACTION] Remote user is busy');
+                if (__DEV__) console.log('[CALL_ACTION] Remote user is busy');
                 if (!sessionRef.current?.isGroup) {
                     setCallEnded('User is busy on another call');
                 }
             } else if (payload.type === 'rejected') {
-                console.log('[CALL_ACTION] Call rejected by remote user');
+                if (__DEV__) console.log('[CALL_ACTION] Call rejected by remote user');
                 if (!sessionRef.current?.isGroup) {
                     setCallEnded('Call declined');
                 } else {
                     setCallSession(null);
                 }
             } else if (payload.type === 'end') {
-                console.log('[CALL_ACTION] Call ended by remote user signal');
+                if (__DEV__) console.log('[CALL_ACTION] Call ended by remote user signal');
                 setCallSession(null);
             }
         });
@@ -224,10 +243,10 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [currentUser?.id, combinedItems]); // Removed callSession to prevent unmounting!
+    }, [currentUser?.id, isListener]); // Removed combinedItems to fix channel disconnecting bug!
 
     const handleStartCall = async (friend: any, type: 'audio' | 'video' = 'video', isGroup: boolean = false) => {
-        console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type, 'IsGroup:', isGroup);
+        if (__DEV__) console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type, 'IsGroup:', isGroup);
         
         setCallSession({
             status: 'outgoing',
@@ -236,60 +255,38 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
             isGroup
         });
 
-        const sendSignal = (targetId: string) => {
-            const signalChannelName = `calls-signal-${targetId}`;
-            const personalChannel = supabase.channel(signalChannelName);
-            personalChannel.subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    personalChannel.send({
-                        type: 'broadcast',
-                        event: 'signal',
-                        payload: {
-                            type: 'offer',
-                            call_type: type,
-                            caller_id: currentUser.id,
-                            is_group: isGroup,
-                            group_id: isGroup ? friend.id : null
-                        }
-                    });
-                    setTimeout(() => supabase.removeChannel(personalChannel), 5000);
-                }
-            });
+        const offerPayload = {
+            type: 'offer',
+            call_type: type,
+            caller_id: currentUser.id,
+            is_group: isGroup,
+            group_id: isGroup ? friend.id : null
         };
 
         if (isGroup) {
-            // Fetch group members to alert them
-            const { data: members, error } = await supabase
-                .from('group_members')
-                .select('user_id')
-                .eq('group_id', friend.id)
-                .neq('user_id', currentUser.id);
-
-            if (!error && members) {
-                console.log(`[CALL_ACTION] Notifying ${members.length} group members`);
-                members.forEach(m => sendSignal(m.user_id));
+            // Fetch group members from local store to alert them
+            const { groups } = useFriendsStore.getState();
+            const group = groups.find(g => g.group.id === friend.id);
+            const members = group?.members || [];
+            
+            if (members.length > 0) {
+                if (__DEV__) console.log(`[CALL_ACTION] Notifying ${members.length - 1} group members`);
+                members.forEach(m => {
+                    if (m.user_id !== currentUser.id) {
+                        sendSignalReliably(m.user_id, offerPayload);
+                    }
+                });
             }
         } else {
-            sendSignal(friend.id);
+            sendSignalReliably(friend.id, offerPayload);
         }
     };
 
     const endCall = () => {
-        console.log('[DEBUG] CallManager: Manual end call triggered');
+        if (__DEV__) console.log('[DEBUG] CallManager: Manual end call triggered');
         const endType = callSession?.status === 'incoming' ? 'rejected' : 'end';
         if (callSession?.friend?.id) {
-            const signalChannelName = `calls-signal-${callSession.friend.id}`;
-            const personalChannel = supabase.channel(signalChannelName);
-            personalChannel.subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    personalChannel.send({
-                        type: 'broadcast',
-                        event: 'signal',
-                        payload: { type: endType }
-                    });
-                    setTimeout(() => supabase.removeChannel(personalChannel), 1000);
-                }
-            });
+            sendSignalReliably(callSession.friend.id, { type: endType });
         }
         setCallSession(null);
     };

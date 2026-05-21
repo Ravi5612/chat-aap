@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, Alert, Modal, StyleSheet, Pressable } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Modal, StyleSheet, Pressable } from 'react-native';
+import { Image } from 'expo-image';
 import { supabase } from '@/lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +42,7 @@ export default function CallsScreen() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -76,9 +78,19 @@ export default function CallsScreen() {
         }
     };
 
-    const handleDeleteSelected = async () => {
+    const handleDeleteSelected = useCallback(async () => {
+        if (isDeleting || selectedIds.size === 0 || !currentUser?.id) return;
+        setIsDeleting(true);
+        
         const idsToDelete = Array.from(selectedIds);
-        const { error } = await supabase.from('call_logs').delete().in('id', idsToDelete);
+        
+        // SECURITY: Ensure we only delete logs that belong to the current user
+        // (Fallback protection in case RLS is misconfigured)
+        const { error } = await supabase.from('call_logs')
+            .delete()
+            .in('id', idsToDelete)
+            .or(`caller_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`);
+            
         if (!error) {
             refreshLogs();
             setSelectedIds(new Set());
@@ -88,7 +100,8 @@ export default function CallsScreen() {
             Alert.alert("Error", "Failed to delete logs");
             setIsDeleteModalVisible(false);
         }
-    };
+        setIsDeleting(false);
+    }, [selectedIds, isDeleting, currentUser?.id, refreshLogs]);
 
     const cancelSelection = () => {
         setIsSelectionMode(false);
@@ -145,10 +158,16 @@ export default function CallsScreen() {
                 )}
                 
                 <View style={{ marginRight: 16 }}>
-                    <Image
-                        source={{ uri: displayImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random` }}
-                        style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: '#E5E7EB' }}
-                    />
+                    {displayImg ? (
+                        <Image
+                            source={{ uri: displayImg }}
+                            style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: '#E5E7EB' }}
+                        />
+                    ) : (
+                        <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="person" size={24} color="#9CA3AF" />
+                        </View>
+                    )}
                     <View style={{
                         position: 'absolute',
                         bottom: -2,
@@ -229,7 +248,11 @@ export default function CallsScreen() {
                         refreshControl={
                             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#F68537']} />
                         }
-                        onEndReached={loadMoreLogs}
+                        onEndReached={() => {
+                            if (!loadingMore && hasMore) {
+                                loadMoreLogs();
+                            }
+                        }}
                         onEndReachedThreshold={0.5}
                         ListEmptyComponent={() => (
                             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 50 }}>
@@ -295,10 +318,15 @@ export default function CallsScreen() {
                                     <Text style={styles.cancelButtonText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity 
-                                    style={[styles.modalButton, styles.deleteButton]} 
+                                    style={[styles.modalButton, styles.deleteButton, isDeleting && { opacity: 0.7 }]} 
                                     onPress={handleDeleteSelected}
+                                    disabled={isDeleting}
                                 >
-                                    <Text style={styles.deleteButtonText}>Delete</Text>
+                                    {isDeleting ? (
+                                        <ActivityIndicator size="small" color="white" />
+                                    ) : (
+                                        <Text style={styles.deleteButtonText}>Delete</Text>
+                                    )}
                                 </TouchableOpacity>
                             </View>
                         </View>

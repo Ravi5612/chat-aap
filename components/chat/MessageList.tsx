@@ -1,7 +1,8 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { FlatList, View, Platform, LayoutAnimation, UIManager, ActivityIndicator, Text } from 'react-native';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { FlatList, View, Platform, LayoutAnimation, UIManager, ActivityIndicator, Text, TouchableOpacity, Animated } from 'react-native';
 import MessageItem from './MessageItem';
 import { useChatStore } from '@/store/useChatStore';
+import { Ionicons } from '@expo/vector-icons';
 
 interface MessageListProps {
     messages: any[];
@@ -32,7 +33,55 @@ export default function MessageList({
 }: MessageListProps) {
     const flatListRef = useRef<FlatList>(null);
 
-    // ✅ Removed LayoutAnimation from here as it causes jitter on Android
+    // ── Scroll-to-bottom button state ──────────────────────────────────
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const isAtBottomRef = useRef(true);           // inverted list: offset=0 = latest msgs
+    const prevMsgCountRef = useRef(messages.length);
+    const btnOpacity = useRef(new Animated.Value(0)).current;
+
+    // Track new messages while scrolled away from bottom
+    useEffect(() => {
+        const newCount = messages.length;
+        const prevCount = prevMsgCountRef.current;
+
+        if (!isAtBottomRef.current && newCount > prevCount) {
+            const diff = newCount - prevCount;
+            setUnreadCount(prev => prev + diff);
+        }
+        prevMsgCountRef.current = newCount;
+    }, [messages.length]);
+
+    // Simple visibility toggle instead of complex animations
+    const showBtn = useCallback(() => {
+        setShowScrollBtn(true);
+    }, []);
+
+    const hideBtn = useCallback(() => {
+        setShowScrollBtn(false);
+    }, []);
+
+    const handleScroll = useCallback((event: any) => {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        // inverted FlatList: offset 0 = bottom (latest messages)
+        const atBottom = offsetY < 60;
+        isAtBottomRef.current = atBottom;
+
+        if (atBottom) {
+            setUnreadCount(0);
+            hideBtn();
+        } else {
+            showBtn();
+        }
+    }, [showBtn, hideBtn]);
+
+    const scrollToBottom = useCallback(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        setUnreadCount(0);
+        isAtBottomRef.current = true;
+        hideBtn();
+    }, [hideBtn]);
+    // ──────────────────────────────────────────────────────────────────
 
     // ✅ Date Grouping Logic - For Inverted list, newest first
     const groupedMessages = React.useMemo(() => {
@@ -203,6 +252,8 @@ export default function MessageList({
                 onEndReached={onLoadMore}
                 onEndReachedThreshold={0.2}
                 keyboardShouldPersistTaps="handled"
+                onScroll={handleScroll}
+                scrollEventThrottle={100}
                 onScrollToIndexFailed={(info) => {
                     flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
                     setTimeout(() => {
@@ -214,6 +265,69 @@ export default function MessageList({
                 windowSize={10}
                 removeClippedSubviews={Platform.OS === 'android'}
             />
+
+            {/* ── Scroll-to-Bottom Floating Button (SIMPLIFIED & ROBUST) ── */}
+            {showScrollBtn && (
+                <View
+                    style={{
+                        position: 'absolute',
+                        bottom: 20, // slightly higher to ensure it's not covered by input padding
+                        right: 16,
+                        zIndex: 9999, // ultra high z-index
+                        elevation: 10,
+                    }}
+                >
+                    <TouchableOpacity
+                        onPress={scrollToBottom}
+                        activeOpacity={0.8}
+                        style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            backgroundColor: 'white',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 5,
+                            elevation: 10,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                        }}
+                    >
+                        <Ionicons name="chevron-down" size={26} color="#F68537" />
+                    </TouchableOpacity>
+
+                    {/* Unread count badge */}
+                    {unreadCount > 0 && (
+                        <View style={{
+                            position: 'absolute',
+                            top: -8,
+                            right: -6,
+                            backgroundColor: '#EF4444', // Red for higher visibility
+                            borderRadius: 12,
+                            minWidth: 24,
+                            height: 24,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingHorizontal: 6,
+                            borderWidth: 2,
+                            borderColor: 'white',
+                            zIndex: 10000,
+                            elevation: 11,
+                        }}>
+                            <Text style={{
+                                color: 'white',
+                                fontSize: 11,
+                                fontWeight: '900',
+                            }}>
+                                {unreadCount > 99 ? '99+' : unreadCount}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            )}
         </View>
     );
 }

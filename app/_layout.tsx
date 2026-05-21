@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import { useDbStore } from '@/store/useDbStore';
 import { SplashScreen } from '@/components/SplashScreen';
 import { BackgroundServices } from '@/components/BackgroundServices';
 import * as Updates from 'expo-updates';
@@ -48,7 +49,6 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [isMounted, setIsMounted] = useState(false);
-  const [showSplash, setShowSplash] = useState(false);
 
   useEffect(() => {
     // 1. Setup Auth Listener & Initial Session
@@ -57,9 +57,9 @@ export default function RootLayout() {
         setupDatabase(); // Initialize SQLite local database
         
         // Initialize the useDbStore early and await it so it's ready before any screen mounts
-        const { useDbStore } = require('@/store/useDbStore');
         await useDbStore.getState().initialize();
 
+        let didFetchCache = false;
         // Check for cached session to render Home instantly
         const cachedSessionStr = await SecureStore.getItemAsync('supabase_session').catch(() => null);
         if (cachedSessionStr) {
@@ -67,9 +67,9 @@ export default function RootLayout() {
             const cachedSession = JSON.parse(cachedSessionStr);
             useAuthStore.setState({ session: cachedSession, user: cachedSession.user });
             // Pre-load profile & blocked users from cache
-            useAuthStore.getState().syncProfile();
-            useFriendsStore.getState().fetchBlockedUsers(cachedSession.user.id);
-            setInitializing(false);
+            await useAuthStore.getState().syncProfile();
+            await useFriendsStore.getState().fetchBlockedUsers(cachedSession.user.id);
+            didFetchCache = true;
           } catch (e) {
             console.warn('Error parsing cached session:', e);
           }
@@ -78,10 +78,10 @@ export default function RootLayout() {
         const { data: { session: liveSession } } = await supabase.auth.getSession();
         setSession(liveSession);
         if (liveSession) {
-          useAuthStore.getState().syncProfile();
-          useFriendsStore.getState().fetchBlockedUsers(liveSession.user.id);
-          // Skip the animated splash screen if the user is already logged in
-          setShowSplash(false);
+          if (!didFetchCache || !cachedSessionStr || JSON.parse(cachedSessionStr).user.id !== liveSession.user.id) {
+             await useAuthStore.getState().syncProfile();
+             await useFriendsStore.getState().fetchBlockedUsers(liveSession.user.id);
+          }
         }
       } catch (error) {
         console.error('Error getting session:', error);
@@ -98,8 +98,6 @@ export default function RootLayout() {
       const now = Date.now();
       if (now - lastAppStateTime.current < 2000) return;
       lastAppStateTime.current = now;
-
-      console.log(`[DEBUG] RootLayout: AppState -> ${nextAppState}`);
       
       const { session, syncOnlineStatus } = useAuthStore.getState();
       if (session?.user?.id) {
@@ -136,7 +134,7 @@ export default function RootLayout() {
     } else if (!inAuthGroup) {
       router.replace('/login');
     }
-  }, [session, initializing, segments, isMounted, showSplash]);
+  }, [session, initializing, segments, isMounted]);
 
 
 

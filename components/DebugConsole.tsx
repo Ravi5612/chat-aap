@@ -1,8 +1,7 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Dimensions, Clipboard, Alert } from 'react-native';
 import { useDebugStore } from '@/store/useDebugStore';
 import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
 
 export default function DebugConsole() {
     const { logs, isVisible, toggleVisible, clearLogs } = useDebugStore();
@@ -16,10 +15,10 @@ export default function DebugConsole() {
         }
     }, [logs.length, isVisible]);
 
-    const handleCopy = async () => {
+    const handleCopy = () => {
         const text = logs.join('\n');
-        await Clipboard.setStringAsync(text);
-        alert('Logs copied to clipboard!');
+        Clipboard.setString(text);
+        Alert.alert('✅ Copied!', 'Logs copied to clipboard!');
     };
 
     if (!isVisible) return null;

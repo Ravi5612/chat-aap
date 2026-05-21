@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 import * as AgoraRTC from 'react-native-agora';
 import { 
     IRtcEngine, 
@@ -40,31 +40,41 @@ export const useAgora = ({
     const engine = useRef<IRtcEngine | null>(null);
     const channelName = useRef<string>('');
     const isJoining = useRef(false);
-    const hasAcceptedRef = useRef(false); // NEW: Prevent multiple onAcceptCall triggers
+    const hasAcceptedRef = useRef(false);
 
-    const init = async () => {
-        if (engine.current) return;
+    // Refs for stable event handler callbacks
+    const onEndCallRef = useRef(onEndCall);
+    const onAcceptCallRef = useRef(onAcceptCall);
+    const callTypeRef = useRef(callType);
+
+    useEffect(() => {
+        onEndCallRef.current = onEndCall;
+        onAcceptCallRef.current = onAcceptCall;
+        callTypeRef.current = callType;
+    }, [onEndCall, onAcceptCall, callType]);
+
+    const init = async (): Promise<boolean> => {
+        if (engine.current) return true;
         
         try {
-            console.log('[CALL_ACTION] Initializing Agora Engine...');
+            if (__DEV__) console.log('[CALL_ACTION] Initializing Agora Engine...');
             
             if (!APP_ID) {
-                console.error('[CALL_ACTION] AGORA_APP_ID is missing! Check your environment variables.');
+                if (__DEV__) console.error('[CALL_ACTION] AGORA_APP_ID is missing! Check your environment variables.');
                 setConnectionStatus('Error: Missing App ID');
-                return;
+                return false;
             }
 
             if (Platform.OS === 'android') {
-                const { PermissionsAndroid } = require('react-native');
                 const granted = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
                     PermissionsAndroid.PERMISSIONS.CAMERA,
                 ]);
                 
                 if (granted['android.permission.RECORD_AUDIO'] !== 'granted' || 
-                    granted['android.permission.CAMERA'] !== 'granted') {
+                    (callTypeRef.current === 'video' && granted['android.permission.CAMERA'] !== 'granted')) {
                     setConnectionStatus('Error: Permissions denied');
-                    return;
+                    return false;
                 }
             }
 
@@ -73,32 +83,32 @@ export const useAgora = ({
 
             const eventHandler = {
                 onJoinChannelSuccess: (connection: any) => {
-                    console.log('[CALL_ACTION] Joined successfully. Local UID:', connection.localUid);
+                    if (__DEV__) console.log('[CALL_ACTION] Joined successfully. Local UID:', connection.localUid);
                     setJoined(true);
                     setConnectionStatus('Connected');
-                    rtcEngine.enableLocalVideo(true);
+                    if (callTypeRef.current === 'video') {
+                        rtcEngine.enableLocalVideo(true);
+                    }
                 },
                 onUserJoined: (connection: any, rUid: number) => {
-                    console.log('[CALL_ACTION] REMOTE USER JOINED! UID:', rUid);
+                    if (__DEV__) console.log('[CALL_ACTION] REMOTE USER JOINED! UID:', rUid);
                     setRemoteUids(prev => [...new Set([...prev, rUid])]);
                     
-                    // Only trigger acceptance ONCE to avoid state loops
                     if (stateRef.current === 'outgoing' && !hasAcceptedRef.current) {
                         hasAcceptedRef.current = true;
-                        onAcceptCall();
+                        onAcceptCallRef.current();
                     }
                 },
                 onUserOffline: (connection: any, rUid: number) => {
-                    console.log('[CALL_ACTION] Remote user offline:', rUid);
+                    if (__DEV__) console.log('[CALL_ACTION] Remote user offline:', rUid);
                     setRemoteUids(prev => prev.filter(uid => uid !== rUid));
                     
-                    // Only end call automatically if it was 1-on-1
                     if (!isGroup) {
-                        onEndCall();
+                        onEndCallRef.current();
                     }
                 },
                 onLeaveChannel: () => {
-                    console.log('[CALL_ACTION] Left Agora channel');
+                    if (__DEV__) console.log('[CALL_ACTION] Left Agora channel');
                     setJoined(false);
                     setRemoteUids([]);
                     setRemoteAudioMuted(false);
@@ -106,15 +116,15 @@ export const useAgora = ({
                     setConnectionStatus('Disconnected');
                 },
                 onUserMuteAudio: (connection: any, rUid: number, muted: boolean) => {
-                    console.log('[CALL_ACTION] Remote user mute audio:', rUid, muted);
+                    if (__DEV__) console.log('[CALL_ACTION] Remote user mute audio:', rUid, muted);
                     setRemoteAudioMuted(muted);
                 },
                 onUserMuteVideo: (connection: any, rUid: number, muted: boolean) => {
-                    console.log('[CALL_ACTION] Remote user mute video:', rUid, muted);
+                    if (__DEV__) console.log('[CALL_ACTION] Remote user mute video:', rUid, muted);
                     setRemoteVideoMuted(muted);
                 },
                 onError: (err: any) => {
-                    console.error('[CALL_ACTION] Agora Error:', err);
+                    if (__DEV__) console.error('[CALL_ACTION] Agora Error:', err);
                     setConnectionStatus(`Error: ${err}`);
                 }
             };
@@ -125,15 +135,19 @@ export const useAgora = ({
             });
 
             rtcEngine.registerEventHandler(eventHandler);
-            rtcEngine.enableVideo();
             rtcEngine.enableAudio();
+            if (callTypeRef.current === 'video') {
+                rtcEngine.enableVideo();
+                rtcEngine.startPreview();
+            }
             rtcEngine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
-            rtcEngine.startPreview();
             setIsEngineReady(true);
-            console.log('[CALL_ACTION] Agora Engine Initialized Successfully');
+            if (__DEV__) console.log('[CALL_ACTION] Agora Engine Initialized Successfully');
+            return true;
         } catch (e) {
-            console.error('[CALL_ACTION] Failed to initialize Agora:', e);
+            if (__DEV__) console.error('[CALL_ACTION] Failed to initialize Agora:', e);
             setIsEngineReady(false);
+            return false;
         }
     };
 
@@ -144,15 +158,17 @@ export const useAgora = ({
 
         try {
             isJoining.current = true;
-            console.log('[CALL_ACTION] Joining channel:', channelName.current);
-            engine.current.startPreview();
+            if (__DEV__) console.log('[CALL_ACTION] Joining channel:', channelName.current);
+            if (callTypeRef.current === 'video') {
+                engine.current.startPreview();
+            }
             
             const joinResult = engine.current.joinChannel('', channelName.current, 0, {
                 clientRoleType: ClientRoleType.ClientRoleBroadcaster,
                 publishMicrophoneTrack: true,
-                publishCameraTrack: callType === 'video',
+                publishCameraTrack: callTypeRef.current === 'video',
                 autoSubscribeAudio: true,
-                autoSubscribeVideo: true,
+                autoSubscribeVideo: callTypeRef.current === 'video',
             });
 
             if (joinResult !== 0) {
@@ -161,15 +177,21 @@ export const useAgora = ({
             }
         } catch (e) {
             isJoining.current = false;
-            console.error('[CALL_ACTION] Join error:', e);
+            if (__DEV__) console.error('[CALL_ACTION] Join error:', e);
         }
     };
 
     const leave = useCallback(() => {
         if (engine.current) {
-            console.log('[CALL_ACTION] Leaving channel and stopping media');
-            engine.current.leaveChannel();
-            engine.current.stopPreview();
+            if (__DEV__) console.log('[CALL_ACTION] Leaving channel and stopping media');
+            try {
+                engine.current.leaveChannel();
+                engine.current.stopPreview();
+                engine.current.release(); // Fully release resources
+            } catch (e) {
+                if (__DEV__) console.warn('Error releasing engine:', e);
+            }
+            engine.current = null;
             setJoined(false);
             setIsEngineReady(false); // Reset ready state
             setRemoteUids([]);
@@ -202,24 +224,24 @@ export const useAgora = ({
         const isCallActive = ['active', 'outgoing', 'incoming'].includes(callState as string);
         
         if (isCallActive) {
-            init().then(() => {
-                if (callState === 'active' || callState === 'outgoing') {
+            init().then((success) => {
+                if (success && (stateRef.current === 'active' || stateRef.current === 'outgoing')) {
                     join();
                 }
             });
         } else {
-            if (joined || isJoining.current) {
-                leave();
-            }
+            leave();
         }
-    }, [callState, joined]);
+    }, [callState]); // Removed 'joined' to fix infinite loop
 
     useEffect(() => {
         return () => {
             if (engine.current) {
-                console.log('[CALL_ACTION] Cleanup - releasing Agora engine');
-                engine.current.leaveChannel();
-                engine.current.release();
+                if (__DEV__) console.log('[CALL_ACTION] Cleanup - releasing Agora engine');
+                try {
+                    engine.current.leaveChannel();
+                    engine.current.release();
+                } catch (e) {}
                 engine.current = null;
             }
         };

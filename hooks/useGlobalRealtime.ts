@@ -1,20 +1,49 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { usePushNotifications } from './usePushNotifications';
+import { showLocalNotification } from './usePushNotifications';
 import { decryptText, getChatKey } from '@/utils/chatCrypto';
 import { Audio } from 'expo-av';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
-import { markMessageDeliveredLocally } from '@/lib/localDb';
+import { useChatStore } from '@/store/useChatStore';
+import { markMessageDeliveredLocally, batchMarkMessageDeliveredLocally } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
 
 const DEFAULT_MESSAGE_TONE = 'https://raw.githubusercontent.com/Anshuman71/chat-app/master/client/src/assets/notification.mp3';
 
+let globalSoundInstance: Audio.Sound | null = null;
+let isAudioConfigured = false;
+
+// Queue for batching Supabase 'delivered' updates
+let deliveredUpdateQueue: string[] = [];
+let deliveredUpdateTimer: NodeJS.Timeout | null = null;
+
+const queueDeliveredUpdate = (messageId: string) => {
+    deliveredUpdateQueue.push(messageId);
+    if (deliveredUpdateTimer) clearTimeout(deliveredUpdateTimer);
+    
+    deliveredUpdateTimer = setTimeout(async () => {
+        if (deliveredUpdateQueue.length === 0) return;
+        const idsToUpdate = [...deliveredUpdateQueue];
+        deliveredUpdateQueue = [];
+        
+        try {
+            const { error } = await supabase
+                .from('messages')
+                .update({ status: 'delivered' })
+                .in('id', idsToUpdate);
+            
+            if (error) throw error;
+            if (__DEV__) console.log(`[DELIVERED] Batch updated ${idsToUpdate.length} messages in GlobalRealtime`);
+        } catch (e) {
+            if (__DEV__) console.warn('[DELIVERED] Batch update failed in GlobalRealtime:', e);
+        }
+    }, 1500); // Debounce for 1.5 seconds
+};
+
 export const useGlobalRealtime = (userId: string | null) => {
-    const { showLocalNotification } = usePushNotifications(userId);
     const { profile } = useAuthStore();
     const setOnlineUsers = useFriendsStore(state => state.setOnlineUsers);
-    const setGlobalChannel = (channel: any) => useFriendsStore.setState({ globalChannel: channel });
 
     // Use a ref for the latest profile to avoid re-subscribing too often
     // and to ensure the latest tone is used in the callback.
@@ -25,35 +54,46 @@ export const useGlobalRealtime = (userId: string | null) => {
 
     const playMessageSound = async () => {
         try {
-            // Configure audio mode to ensure sound plays even if ringer is off (optional, based on UX)
-            await Audio.setAudioModeAsync({
-                playsInSilentModeIOS: true,
-                staysActiveInBackground: true,
-                shouldRouteThroughEarpieceAndroid: false,
-            });
+            // Configure audio mode only once
+            if (!isAudioConfigured) {
+                await Audio.setAudioModeAsync({
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: true,
+                    shouldRouteThroughEarpieceAndroid: false,
+                });
+                isAudioConfigured = true;
+            }
 
             const soundUrl = profileRef.current?.message_tone || DEFAULT_MESSAGE_TONE;
-            console.log('[DEBUG] GlobalRealtime: Playing sound from:', soundUrl);
+            if (__DEV__) console.log('[DEBUG] GlobalRealtime: Playing sound from:', soundUrl);
+
+            // Prevent memory leak: unload previous instance if it exists
+            if (globalSoundInstance) {
+                await globalSoundInstance.unloadAsync().catch(() => {});
+            }
 
             const { sound } = await Audio.Sound.createAsync(
                 { uri: soundUrl },
                 { shouldPlay: true, volume: 1.0 }
             );
+            
+            globalSoundInstance = sound;
 
             sound.setOnPlaybackStatusUpdate((status: any) => {
                 if (status.didJustFinish) {
                     sound.unloadAsync().catch(() => { });
+                    globalSoundInstance = null;
                 }
             });
         } catch (error) {
-            console.error('[ERROR] GlobalRealtime: Error playing message sound:', error);
+            if (__DEV__) console.error('[ERROR] GlobalRealtime: Error playing message sound:', error);
         }
     };
 
     useEffect(() => {
         if (!userId) return;
 
-        console.log('[DEBUG] GlobalRealtime: Initializing channels for:', userId);
+        if (__DEV__) console.log('[DEBUG] GlobalRealtime: Initializing channels for:', userId);
 
         // 1. Message Sync Channel (Private to current user)
         const msgChannel = supabase.channel(`global-sync-${userId}`);
@@ -67,57 +107,68 @@ export const useGlobalRealtime = (userId: string | null) => {
                 filter: `receiver_id=eq.${userId}`
             },
             async (payload) => {
-                console.log('[DEBUG] GlobalRealtime: New private message arrived:', payload.new.id);
+                if (__DEV__) console.log('[DEBUG] GlobalRealtime: New private message arrived:', payload.new.id);
+
+                // Check if user is currently inside this chat. If so, don't show global notification or sound.
+                const { activeChatId } = useChatStore.getState();
+                const isGroupMessage = !!payload.new.group_id;
+                const activeIdToCheck = isGroupMessage ? payload.new.group_id : payload.new.sender_id;
+                
+                if (activeChatId === activeIdToCheck) {
+                    return; // Skip global alerts, useChatRoom handles it
+                }
 
                 // Mark message as 'delivered' immediately
                 const { db } = useDbStore.getState();
                 if (db) {
-                    markMessageDeliveredLocally(db, payload.new.id).catch(() => {});
+                    await markMessageDeliveredLocally(db, payload.new.id).catch(() => {});
                 }
 
-                supabase
-                    .from('messages')
-                    .update({ status: 'delivered' })
-                    .eq('id', payload.new.id)
-                    .eq('status', 'sent')
-                    .then(() => console.log('[DELIVERED] GlobalRealtime marked delivered:', payload.new.id))
-                    .catch(e => console.warn('[DELIVERED] GlobalRealtime mark failed:', e));
+                // Queue Supabase update for batching instead of calling it immediately 
+                queueDeliveredUpdate(payload.new.id);
 
-                playMessageSound();
+                await playMessageSound();
 
                 try {
-                    const { data: sender } = await supabase
-                        .from('profiles')
-                        .select('username')
-                        .eq('id', payload.new.sender_id)
-                        .single();
+                    // Fetch sender name from local cache instead of hitting Supabase
+                    const { friends, groups } = useFriendsStore.getState();
+                    let senderName = 'New Message';
+                    
+                    if (isGroupMessage) {
+                        const group = groups.find(g => g.group.id === payload.new.group_id);
+                        if (group) senderName = `New message in ${group.group.name}`;
+                    } else {
+                        const friend = friends.find(f => f.friend.id === payload.new.sender_id);
+                        if (friend) senderName = friend.friend.username;
+                    }
 
+                    // Note: getChatKey is ALREADY cached in memory inside chatCrypto.ts 
                     const chatKey = await getChatKey(userId, payload.new.sender_id);
                     let content = '[Encrypted Message]';
                     try {
                         content = await decryptText(payload.new.message, chatKey);
                     } catch (e) {
-                        console.warn('[DEBUG] GlobalRealtime: Decryption failed');
+                        if (__DEV__) console.warn('[DEBUG] GlobalRealtime: Decryption failed');
                     }
 
                     showLocalNotification(
-                        sender?.username || 'New Message',
+                        senderName,
                         content,
                         { senderId: payload.new.sender_id, messageId: payload.new.id }
                     );
                 } catch (err) {
-                    console.error('[ERROR] GlobalRealtime Message Handler:', err);
+                    if (__DEV__) console.error('[ERROR] GlobalRealtime Message Handler:', err);
                 }
             }
         );
 
         msgChannel.subscribe((status) => {
-            console.log('[DEBUG] GlobalRealtime MsgChannel Status:', status);
+            if (__DEV__) console.log('[DEBUG] GlobalRealtime MsgChannel Status:', status);
         });
 
         // 2. Shared Global Presence Channel (For real-time online status and typing sync)
         const presenceChannel = supabase.channel('global-presence');
-        setGlobalChannel(presenceChannel);
+        useFriendsStore.setState({ globalChannel: presenceChannel });
 
         presenceChannel
             .on('presence', { event: 'sync' }, () => {
@@ -134,18 +185,18 @@ export const useGlobalRealtime = (userId: string | null) => {
                     }
                 });
 
-                console.log('[DEBUG] Presence sync updated. Online users count:', Object.keys(onlineMap).length);
+                if (__DEV__) console.log('[DEBUG] Presence sync updated. Online users count:', Object.keys(onlineMap).length);
                 setOnlineUsers(onlineMap);
             })
             .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-                // console.log('[DEBUG] Presence: User joined:', newPresences);
+                // if (__DEV__) console.log('[DEBUG] Presence: User joined:', newPresences);
             })
             .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-                // console.log('[DEBUG] Presence: User left:', leftPresences);
+                // if (__DEV__) console.log('[DEBUG] Presence: User left:', leftPresences);
             });
 
         presenceChannel.subscribe(async (status) => {
-            console.log('[DEBUG] GlobalRealtime PresenceChannel Status:', status);
+            if (__DEV__) console.log('[DEBUG] GlobalRealtime PresenceChannel Status:', status);
             if (status === 'SUBSCRIBED') {
                 await presenceChannel.track({
                     userId: userId,
@@ -155,10 +206,10 @@ export const useGlobalRealtime = (userId: string | null) => {
         });
 
         return () => {
-            console.log('[DEBUG] GlobalRealtime: Cleaning up channels...');
+            if (__DEV__) console.log('[DEBUG] GlobalRealtime: Cleaning up channels...');
             supabase.removeChannel(msgChannel);
             supabase.removeChannel(presenceChannel);
-            setGlobalChannel(null);
+            useFriendsStore.setState({ globalChannel: null });
         };
     }, [userId]); // Only re-run if userId changes
 };

@@ -123,9 +123,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                         const firstItem = processedMessageIds.values().next().value;
                         if (firstItem) processedMessageIds.delete(firstItem);
                     }
-
-                    // Small delay to ensure DB and Local State are in sync
-                    await new Promise(resolve => setTimeout(resolve, 150));
                     
                     const currentKey = useChatStore.getState().chatKey;
                     if (!currentKey) {
@@ -254,14 +251,6 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     if (firstItem) processedMessageIds.delete(firstItem);
                 }
 
-                // ✅ Filter out locally deleted messages
-                const { db } = useDbStore.getState();
-                const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
-                if (localDeletedIds.includes(msg.id)) {
-                    console.log('[REALTIME] Ignoring locally deleted message:', msg.id);
-                    return;
-                }
-
                 try {
                     const currentKey = useChatStore.getState().chatKey;
                     if (!currentKey) return;
@@ -375,8 +364,9 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             })
             .on('broadcast', { event: 'message_edit' }, async (payload) => {
                 const { message_id, message: encText } = payload.payload;
-                if (chatKey) {
-                    const decText = await decryptText(encText, chatKey);
+                const currentKey = useChatStore.getState().chatKey;
+                if (currentKey) {
+                    const decText = await decryptText(encText, currentKey);
                     useChatStore.setState((state) => ({
                         messages: state.messages.map(m => m.id === message_id ? { ...m, message: decText, is_edited: true } : m)
                     }));
@@ -399,11 +389,15 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
             supabase.removeChannel(channel);
             cleanupChat();
         };
-    }, [friendId, currentUser?.id, isGroup, chatKey]);
+    }, [friendId, currentUser?.id, isGroup]); // Removed chatKey to prevent channel recreation
 
     const handleSendMessage = useCallback((text: string, replyToId?: string) => {
+        if (isGroup && !isMember) {
+            require('react-native').Alert.alert('Access Denied', 'You are no longer a participant of this group.');
+            return;
+        }
         if (currentUser) sendMessage(text, friendId, currentUser, isGroup, replyToId);
-    }, [friendId, currentUser, isGroup, sendMessage]);
+    }, [friendId, currentUser, isGroup, isMember, sendMessage]);
 
     const handleReact = useCallback((messageId: string, emoji: string) => {
         if (currentUser) reactToMessage(messageId, emoji, currentUser);

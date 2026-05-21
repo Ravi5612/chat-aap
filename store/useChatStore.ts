@@ -145,33 +145,6 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const { db } = useDbStore.getState();
                 const clearTimestamp = db ? await getChatClearTimestamp(db, friendId) : null;
 
-                // ✅ Pehle total count lo
-                let countQuery = supabase
-                    .from('messages')
-                    .select('id', { count: 'exact', head: true });
-
-                if (isGroup) {
-                    countQuery = countQuery.eq('group_id', friendId);
-                } else {
-                    countQuery = countQuery.or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`);
-                }
-
-                if (clearTimestamp) {
-                    countQuery = countQuery.gt('created_at', clearTimestamp);
-                }
-
-                const { count } = await countQuery;
-                const totalCount = count || 0;
-
-                // ✅ Agar koi message nahi to loading band karo
-                if (totalCount === 0) {
-                    set({ messages: [], loading: false, hasMore: false, pageOffset: 0 });
-                    return;
-                }
-
-                // ✅ Last PAGE_SIZE messages lo (ascending order mein)
-                const startOffset = Math.max(0, totalCount - PAGE_SIZE);
-
                 let query = supabase
                     .from('messages')
                     .select(`
@@ -191,11 +164,15 @@ export const useChatStore = create<ChatState>((set, get) => {
                     query = query.gt('created_at', clearTimestamp);
                 }
 
-                const { data, error } = await query
-                    .order('created_at', { ascending: true })
-                    .range(startOffset, totalCount - 1);
+                const { data: rawData, error } = await query
+                    .order('created_at', { ascending: false })
+                    .limit(PAGE_SIZE);
 
                 if (error) throw error;
+                
+                const data = (rawData || []).reverse();
+
+
 
                 const decryptedMessages = await Promise.all((data || []).map(async (msg) => {
                     try {
@@ -255,8 +232,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     set({
                         messages: uniqueMessages,
                         loading: false,
-                        pageOffset: startOffset,
-                        hasMore: startOffset > 0,
+                        hasMore: data.length === PAGE_SIZE,
                     });
 
                     // 2. Save fetched messages to Local DB for next time
@@ -344,10 +320,8 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }
 
                 // 2. If not in local DB, fetch from Supabase
-                const endOffset = Math.max(0, pageOffset - 1);
-                const startOffset = Math.max(0, pageOffset - PAGE_SIZE);
-
-                if (endOffset < 0) {
+                const oldestMsg = messages[0];
+                if (!oldestMsg || !oldestMsg.created_at) {
                     set({ loadingMore: false, hasMore: false });
                     return;
                 }
@@ -373,11 +347,13 @@ export const useChatStore = create<ChatState>((set, get) => {
                     query = query.gt('created_at', clearTimestamp);
                 }
 
-                const { data, error } = await query
-                    .order('created_at', { ascending: true })
-                    .range(startOffset, endOffset);
+                const { data: rawData, error } = await query
+                    .lt('created_at', oldestMsg.created_at)
+                    .order('created_at', { ascending: false })
+                    .limit(PAGE_SIZE);
 
                 if (error) throw error;
+                const data = (rawData || []).reverse();
 
                 const decryptedOlderMessages = await Promise.all((data || []).map(async (msg) => {
                     try {
@@ -430,8 +406,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 set({
                     messages: uniqueMessages,
                     loadingMore: false,
-                    pageOffset: startOffset,
-                    hasMore: startOffset > 0,
+                    hasMore: data.length === PAGE_SIZE,
                 });
 
                 // Update cache
@@ -594,28 +569,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             const { chatKey, activeChannel, messages, cache } = get();
             if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !friendId || !currentUser || !chatKey) return;
 
-            // 🛡️ Security Check: Verify Group Membership
-            if (isGroup) {
-                console.log(`Checking membership for Group: ${friendId}, User: ${currentUser.id}`);
-                const { data: memberCheck, error: memberError } = await supabase
-                    .from('group_members')
-                    .select('id')
-                    .eq('group_id', friendId)
-                    .eq('user_id', currentUser.id);
-
-                if (memberError) {
-                    console.error("Membership Check Error:", memberError);
-                    Alert.alert('Error', 'Failed to verify group membership.');
-                    return;
-                }
-
-                if (!memberCheck || memberCheck.length === 0) {
-                    console.warn(`Access Denied: User ${currentUser.id} is NOT a member of group ${friendId}`);
-                    Alert.alert('Access Denied', 'You are no longer a participant of this group.');
-                    return;
-                }
-                console.log("Membership verified ✅. Data:", memberCheck);
-            }
+            // Note: Group membership check is now handled locally in useChatRoom before calling this to save a DB trip.
 
             const tempId = `temp-${Date.now()}`;
             let messageToEncrypt = text;

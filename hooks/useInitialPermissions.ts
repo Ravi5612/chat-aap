@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
-import * as Contacts from 'expo-contacts';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
@@ -10,47 +9,64 @@ export const useInitialPermissions = () => {
     useEffect(() => {
         const requestAllPermissions = async () => {
             try {
-                console.log('[PERMISSIONS] Requesting initial permissions...');
+                if (__DEV__) console.log('[PERMISSIONS] Checking initial permissions...');
 
-                // 1. Camera Permission
-                const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
-                console.log('[PERMISSIONS] Camera:', cameraStatus);
+                // 1. Parallel Check of Existing Permissions (Extremely Fast)
+                const [cameraRes, audioRes, libraryRes, notifRes] = await Promise.all([
+                    Camera.getCameraPermissionsAsync(),
+                    Audio.getPermissionsAsync(),
+                    ImagePicker.getMediaLibraryPermissionsAsync(),
+                    Notifications.getPermissionsAsync()
+                ]);
 
-                // 2. Microphone Permission
-                const { status: audioStatus } = await Audio.requestPermissionsAsync();
-                console.log('[PERMISSIONS] Audio:', audioStatus);
+                let cameraStatus = cameraRes.status;
+                let audioStatus = audioRes.status;
+                let libraryStatus = libraryRes.status;
+                let notifStatus = notifRes.status;
 
-                // 3. Media Library (Gallery) Permission
-                const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                console.log('[PERMISSIONS] Media Library:', libraryStatus);
+                // 2. Sequentially Request Only Missing Permissions
+                // (To prevent OS popup crashing which happens if we use Promise.all for requests)
+                if (cameraStatus !== 'granted') {
+                    const res = await Camera.requestCameraPermissionsAsync();
+                    cameraStatus = res.status;
+                }
+                if (audioStatus !== 'granted') {
+                    const res = await Audio.requestPermissionsAsync();
+                    audioStatus = res.status;
+                }
+                if (libraryStatus !== 'granted') {
+                    const res = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    libraryStatus = res.status;
+                }
+                if (notifStatus !== 'granted') {
+                    const res = await Notifications.requestPermissionsAsync();
+                    notifStatus = res.status;
+                }
 
-                // 4. Contacts Permission
-                const { status: contactsStatus } = await Contacts.requestPermissionsAsync();
-                console.log('[PERMISSIONS] Contacts:', contactsStatus);
+                if (__DEV__) {
+                    console.log('[PERMISSIONS] Camera:', cameraStatus);
+                    console.log('[PERMISSIONS] Audio:', audioStatus);
+                    console.log('[PERMISSIONS] Media Library:', libraryStatus);
+                    console.log('[PERMISSIONS] Notifications:', notifStatus);
+                }
 
-                // 5. Notifications Permission
-                const { status: notifStatus } = await Notifications.requestPermissionsAsync();
-                console.log('[PERMISSIONS] Notifications:', notifStatus);
-
-                if (
-                    cameraStatus !== 'granted' || 
-                    libraryStatus !== 'granted' || 
-                    audioStatus !== 'granted'
-                ) {
-                    // Don't block the user, but warn them
-                    console.warn('[PERMISSIONS] Some permissions were denied. Some features might not work.');
+                if (cameraStatus !== 'granted' || libraryStatus !== 'granted' || audioStatus !== 'granted') {
+                    if (__DEV__) console.warn('[PERMISSIONS] Some permissions were denied. Some features might not work.');
+                    Alert.alert(
+                        'Permissions Required', 
+                        'Some permissions were denied. Core features like sending photos, voice notes, and video calls will not work properly until you enable them in your device settings.',
+                        [{ text: 'OK' }]
+                    );
                 }
 
             } catch (error) {
-                console.error('[PERMISSIONS] Error requesting permissions:', error);
+                if (__DEV__) console.error('[PERMISSIONS] Error requesting permissions:', error);
             }
         };
 
-        // Run after a short delay to not block splash screen
-        const timer = setTimeout(() => {
-            requestAllPermissions();
-        }, 1500);
-
-        return () => clearTimeout(timer);
+        // Removed arbitrary 1500ms delay. 
+        // Checking permissions natively is async and won't block the splash screen.
+        requestAllPermissions();
+        
     }, []);
 };

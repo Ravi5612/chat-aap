@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, Image, TouchableOpacity, Dimensions, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList, Alert } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import * as Haptics from 'expo-haptics';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import { Ionicons } from '@expo/vector-icons';
+import { ResizeMode, Video } from 'expo-av';
+import * as Haptics from 'expo-haptics';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -19,6 +19,7 @@ export default function StatusViewer() {
     const [currentIndex, setCurrentIndex] = useState(parseInt(initialIndex as string || '0'));
     const [loading, setLoading] = useState(true);
     const [replyText, setReplyText] = useState('');
+    const [isReplying, setIsReplying] = useState(false); // ✅ Track keyboard/reply state
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [showViewers, setShowViewers] = useState(false);
     const [statusViewers, setStatusViewers] = useState<any[]>([]);
@@ -313,7 +314,7 @@ export default function StatusViewer() {
 
     // Auto progress timer effect for image/text statuses
     useEffect(() => {
-        if (loading || statuses.length === 0 || paused) return;
+        if (loading || statuses.length === 0 || paused || isReplying) return; // ✅ Also pause when replying
 
         const currentStatus = statuses[currentIndex];
         if (currentStatus?.media_type === 'video') {
@@ -343,7 +344,7 @@ export default function StatusViewer() {
         }, 30); // 30ms interval for extremely fluid 60fps movement
 
         return () => clearInterval(interval);
-    }, [currentIndex, statuses, loading, paused]);
+    }, [currentIndex, statuses, loading, paused, isReplying]);
 
     // Handle video play/pause during holds
     useEffect(() => {
@@ -613,9 +614,12 @@ export default function StatusViewer() {
             )}
 
             {/* Footer / Reply or Views Pill */}
-            {!paused && (
-                <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Math.max(insets.bottom, 20) }}>
-                    {isOwner ? (
+            {/* ✅ Fix: Show footer always — don't hide it when paused/holding.
+                 Reply box stays visible. Owner views pill only hides on hold (not needed during hold). */}
+            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Math.max(insets.bottom, 20) }}>
+                {isOwner ? (
+                    // Owner sees Views pill — hide during hold (paused) is fine here
+                    !paused && (
                         <View style={{ alignItems: 'center' }}>
                             <TouchableOpacity
                                 onPress={() => setShowViewers(true)}
@@ -633,28 +637,51 @@ export default function StatusViewer() {
                                 <Text style={{ color: 'white', fontWeight: '900', fontSize: 14 }}>{statusViewers.length} VIEWS</Text>
                             </TouchableOpacity>
                         </View>
-                    ) : (
-                        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)', borderRadius: 30, paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.3)' }}>
-                                <TextInput
-                                    placeholder="Reply to status..."
-                                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                                    style={{ flex: 1, color: 'white', fontSize: 15 }}
-                                    value={replyText}
-                                    onChangeText={setReplyText}
-                                />
-                                <TouchableOpacity 
-                                    style={{ marginLeft: 12 }}
-                                    onPress={handleSendReply}
-                                    disabled={!replyText.trim()}
-                                >
-                                    <Ionicons name="send" size={24} color={replyText.trim() ? "#F68537" : "rgba(255, 255, 255, 0.3)"} />
-                                </TouchableOpacity>
-                            </View>
-                        </KeyboardAvoidingView>
-                    )}
-                </View>
-            )}
+                    )
+                ) : (
+                    // ✅ Fix: Reply box ALWAYS visible for non-owners (not hidden on pause/hold)
+                    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)', borderRadius: 30, paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1.5, borderColor: '#F68537' }}>
+                            <TextInput
+                                placeholder="Reply to status..."
+                                placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                                style={{ flex: 1, color: 'white', fontSize: 15 }}
+                                value={replyText}
+                                onChangeText={setReplyText}
+                                onFocus={() => {
+                                    // ✅ Fix: Pause story while user is typing a reply
+                                    setIsReplying(true);
+                                    setPaused(true);
+                                }}
+                                onBlur={() => {
+                                    // ✅ Resume story when keyboard is dismissed
+                                    setIsReplying(false);
+                                    setPaused(false);
+                                }}
+                            />
+                            <TouchableOpacity 
+                                style={{ 
+                                    marginLeft: 12,
+                                    backgroundColor: '#F68537', // Always orange
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: 20,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    shadowColor: '#F68537',
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 3,
+                                }}
+                                onPress={handleSendReply}
+                                disabled={!replyText.trim()}
+                            >
+                                <Ionicons name="send" size={20} color="white" style={{ marginLeft: 3 }} />
+                            </TouchableOpacity>
+                        </View>
+                    </KeyboardAvoidingView>
+                )}
+            </View>
 
             {/* Viewers Modal */}
             <Modal

@@ -247,6 +247,19 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
 
     const isSystemMsg = message.message?.startsWith('SYSTEM_MSG:');
 
+    // Memoize Ledger Parsing to avoid JSON.parse on every render
+    const ledgerData = React.useMemo(() => {
+        if (message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:')) {
+            try {
+                return JSON.parse(message.message.replace('SYSTEM_LEDGER:', ''));
+            } catch (e) {
+                console.error("Ledger parse error:", e);
+                return null;
+            }
+        }
+        return null;
+    }, [message.message, message.message_type]);
+
     // Contact detection
     const isContactMessage = textContent?.startsWith('[Contact]');
     let contactName = '';
@@ -465,7 +478,8 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
                         <View style={{ padding: 12, width: 220 }}>
                             {(() => {
                                 try {
-                                    const data = JSON.parse(message.message.replace('SYSTEM_LEDGER:', ''));
+                                    const data = ledgerData;
+                                    if (!data) return <Text style={{ color: 'red' }}>Error parsing ledger entry</Text>;
                                     const isDeneHain = data.type === 'gave' ? !isCurrentUser : isCurrentUser;
                                     const themeColor = isDeneHain ? '#EF4444' : '#F68537';
                                     const label = isDeneHain ? 'Dene Hain' : 'Lene Hain';

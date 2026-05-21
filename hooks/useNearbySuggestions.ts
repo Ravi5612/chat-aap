@@ -1,125 +1,151 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLocationStore } from '@/store/useLocationStore';
 
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) *
+        Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const NEARBY_RADIUS_KM = 1.0;
+const REFRESH_INTERVAL_MS = 60000; // 1 minute smart poll
+
 export const useNearbySuggestions = () => {
     const { user: currentUser } = useAuthStore();
+    const currentUserId = currentUser?.id || '';
     const { currentLocation, startTracking } = useLocationStore();
+    
     const [nearbyPeople, setNearbyPeople] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
+    // Refs to prevent dependency loops
+    const locationRef = useRef(currentLocation);
+    const lastFetchLocationRef = useRef<{lat: number, lon: number} | null>(null);
+
+    useEffect(() => {
+        locationRef.current = currentLocation;
+    }, [currentLocation]);
+
     const fetchNearby = useCallback(async () => {
-        if (!currentUser?.id || !currentLocation) return;
+        if (!currentUserId || !locationRef.current) return;
 
         setLoading(true);
         try {
-            const { latitude, longitude } = currentLocation.coords;
+            const { latitude, longitude } = locationRef.current.coords;
+            lastFetchLocationRef.current = { lat: latitude, lon: longitude };
 
-            // 1KM Radius rough approximation (approx 0.009 degrees per KM)
-            const range = 0.01;
+            // 1.2 KM rough bounding box (approx 0.012 degrees) to fetch candidates from DB quickly
+            const boxRange = 0.012;
 
-            // 1. Parallelly fetch relationships (friends, sent requests, received requests) to exclude them
+            // 1. Parallelly fetch relationships to exclude them
             const [friendsRes, sentRequestsRes, receivedRequestsRes] = await Promise.all([
                 supabase
                     .from('friendships')
                     .select('user_id, friend_id')
-                    .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`),
+                    .or(`user_id.eq.${currentUserId},friend_id.eq.${currentUserId}`),
                 supabase
                     .from('friend_requests')
                     .select('receiver_id')
-                    .eq('sender_id', currentUser.id)
+                    .eq('sender_id', currentUserId)
                     .in('status', ['pending', 'accepted']),
                 supabase
                     .from('friend_requests')
                     .select('sender_id')
-                    .eq('receiver_id', currentUser.id)
+                    .eq('receiver_id', currentUserId)
                     .in('status', ['pending', 'accepted'])
             ]);
 
-            // Create set of all IDs to filter out (including current user)
-            const excludeIds = new Set<string>([currentUser.id]);
+            const excludeIds = new Set<string>([currentUserId]);
             
             friendsRes.data?.forEach(f => {
-                if (f.user_id === currentUser.id) excludeIds.add(f.friend_id);
+                if (f.user_id === currentUserId) excludeIds.add(f.friend_id);
                 else excludeIds.add(f.user_id);
             });
             receivedRequestsRes.data?.forEach(r => excludeIds.add(r.sender_id));
 
             const sentRequestIds = new Set(sentRequestsRes.data?.map(r => r.receiver_id) || []);
 
-            // 2. Fetch profiles within 1KM radius that are currently online
+            // 2. Fetch profiles within rough bounding box that are currently online
             const { data, error } = await supabase
                 .from('profiles')
                 .select('id, username, avatar_url, last_lat, last_long, gender, is_online')
                 .eq('is_online', true)
-                .neq('id', currentUser.id)
-                .gte('last_lat', latitude - range)
-                .lte('last_lat', latitude + range)
-                .gte('last_long', longitude - range)
-                .lte('last_long', longitude + range)
-                .limit(50); // Fetch more so we have plenty after filtering client-side
+                .neq('id', currentUserId)
+                .gte('last_lat', latitude - boxRange)
+                .lte('last_lat', latitude + boxRange)
+                .gte('last_long', longitude - boxRange)
+                .lte('last_long', longitude + boxRange)
+                .limit(50);
 
             if (!error && data) {
-                // 3. Filter out existing friends, incoming requests, and self client-side
+                // 3. Filter using accurate Haversine circular distance AND exclude existing friends
                 const filtered = data
-                    .filter(person => !excludeIds.has(person.id))
+                    .filter(person => {
+                        if (excludeIds.has(person.id) || !person.last_lat || !person.last_long) return false;
+                        const dist = haversineDistance(latitude, longitude, person.last_lat, person.last_long);
+                        return dist <= NEARBY_RADIUS_KM; // True circle!
+                    })
                     .map(person => ({
                         ...person,
                         requestStatus: sentRequestIds.has(person.id) ? 'pending' : null
                     }));
-                setNearbyPeople(filtered.slice(0, 10)); // limit to top 10
+                
+                setNearbyPeople(filtered.slice(0, 10)); // Top 10 nearest
             }
         } catch (e) {
-            console.error('Nearby fetch error:', e);
+            if (__DEV__) console.error('Nearby fetch error:', e);
         } finally {
             setLoading(false);
         }
-    }, [currentUser, currentLocation]);
+    }, [currentUserId]);
 
+    // Initial boot
     useEffect(() => {
-        if (currentUser?.id) {
-            startTracking(currentUser.id);
+        if (currentUserId) {
+            startTracking(currentUserId);
+            fetchNearby();
         }
-    }, [currentUser]);
+    }, [currentUserId, fetchNearby, startTracking]);
 
-    // Initial fetch and re-fetch when current user moves
+    // Re-fetch dynamically only if user moves more than 100 meters
     useEffect(() => {
-        fetchNearby();
+        if (!currentLocation) return;
+        
+        const lastLoc = lastFetchLocationRef.current;
+        if (lastLoc) {
+            const dist = haversineDistance(
+                lastLoc.lat, 
+                lastLoc.lon, 
+                currentLocation.coords.latitude, 
+                currentLocation.coords.longitude
+            );
+            
+            // If moved > 100 meters (0.1 KM), fetch new nearby users
+            if (dist > 0.1) {
+                if (__DEV__) console.log('[NearbySuggestions] Moved > 100m, re-fetching...');
+                fetchNearby();
+            }
+        }
     }, [currentLocation, fetchNearby]);
 
-    // Real-time subscription to listen for updates from OTHER users
+    // Smart Interval Polling (Replaces dangerous unfiltered DB subscription)
+    // Runs every 1 minute to check for new people who walked into your range.
     useEffect(() => {
-        if (!currentUser?.id) return;
-
-        const channel = supabase
-            .channel(`nearby-suggestions-${currentUser.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'profiles'
-                },
-                (payload) => {
-                    // Check if the update is from another user
-                    if (payload.new.id !== currentUser.id) {
-                        console.log('Nearby Suggestions: Other user moved, re-fetching...');
-                        fetchNearby();
-                    }
-                }
-            )
-            .subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log('Nearby Suggestions: Real-time channel active');
-                }
-            });
-
-        return () => {
-            console.log('Nearby Suggestions: Cleaning up subscription');
-            supabase.removeChannel(channel);
-        };
-    }, [currentUser?.id, fetchNearby]);
+        if (!currentUserId) return;
+        const intervalId = setInterval(() => {
+            fetchNearby();
+        }, REFRESH_INTERVAL_MS);
+        
+        return () => clearInterval(intervalId);
+    }, [currentUserId, fetchNearby]);
 
     return { nearbyPeople, loading, refresh: fetchNearby };
 };

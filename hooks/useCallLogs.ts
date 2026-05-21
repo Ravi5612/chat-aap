@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getCurrentUser } from '@/lib/supabase';
 import { useDbStore } from '@/store/useDbStore';
 import { getLocalCallLogs, saveLocalCallLog } from '@/lib/localDb';
+import { useAuthStore } from '@/store/useAuthStore';
+import { getFromCache, saveToCache } from '@/lib/database';
 
 export interface CallLog {
     id: string;
@@ -24,19 +25,24 @@ export interface Profile {
 }
 
 export const useCallLogs = () => {
+    const { user: currentUser } = useAuthStore();
     const [logs, setLogs] = useState<CallLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
-    const [currentUser, setCurrentUser] = useState<any>(null);
+    
+    const logsLengthRef = useRef(0);
+    useEffect(() => {
+        logsLengthRef.current = logs.length;
+    }, [logs]);
 
     const PAGE_SIZE = 15;
 
-    const loadLogs = async (offset = 0, isRefresh = false) => {
+    const loadLogs = useCallback(async (offset = 0, isRefresh = false) => {
         try {
             if (offset === 0 && !isRefresh) {
                 // 1. Instantly load from local SQLite cache to skip loading skeleton
-                const sqliteCache = require('@/lib/database').getFromCache('call_logs_cache');
+                const sqliteCache = getFromCache('call_logs_cache');
                 if (sqliteCache && sqliteCache.logs && sqliteCache.logs.length > 0) {
                     setLogs(sqliteCache.logs);
                     setLoading(false); // Skip loading spinner!
@@ -49,14 +55,8 @@ export const useCallLogs = () => {
                 setLoadingMore(true);
             }
 
-            let user = currentUser;
-            if (!user) {
-                user = await getCurrentUser();
-                setCurrentUser(user);
-            }
-
-            if (!user || !user.id || String(user.id) === 'null' || String(user.id) === 'undefined') {
-                console.log('[DEBUG] useCallLogs: Invalid User ID detected, skipping query.', { id: user?.id });
+            if (!currentUser?.id) {
+                if (__DEV__) console.log('[DEBUG] useCallLogs: Invalid User ID detected, skipping query.', { id: currentUser?.id });
                 if (offset === 0) setLoading(false);
                 else setLoadingMore(false);
                 return;
@@ -66,9 +66,9 @@ export const useCallLogs = () => {
             if (offset === 0) {
                 const { db } = useDbStore.getState();
                 if (db) {
-                    const localLogs = await getLocalCallLogs(db, user.id);
+                    const localLogs = await getLocalCallLogs(db, currentUser.id);
                     if (localLogs.length > 0) {
-                        console.log(`useCallLogs: Loaded ${localLogs.length} logs from Local DB`);
+                        if (__DEV__) console.log(`useCallLogs: Loaded ${localLogs.length} logs from Local DB`);
                         // Note: Profiles won't be enriched yet, but we show what we have
                         setLogs(localLogs as any);
                         setLoading(false);
@@ -76,90 +76,85 @@ export const useCallLogs = () => {
                 }
             }
 
-            console.log(`[DEBUG] useCallLogs: Querying logs for UUID: "${user.id}"`);
-            const { data: basicLogs, error: logError } = await supabase
+            if (__DEV__) console.log(`[DEBUG] useCallLogs: Querying logs for UUID: "${currentUser.id}"`);
+            const { data: rawLogs, error: logError } = await supabase
                 .from('call_logs')
-                .select('*')
-                .or(`caller_id.eq.${user.id},receiver_id.eq.${user.id}`)
+                .select('*, caller:profiles!caller_id(id,username,avatar_url,email), receiver:profiles!receiver_id(id,username,avatar_url,email)')
+                .or(`caller_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
                 .order('created_at', { ascending: false })
                 .range(offset, offset + PAGE_SIZE - 1);
 
             if (logError) throw logError;
 
-            if (basicLogs && basicLogs.length > 0) {
-                const userIds = [...new Set(basicLogs.flatMap((log: CallLog) => [log.caller_id, log.receiver_id]))].filter(id => id && id !== 'null');
-
-                const { data: profiles, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('id, username, avatar_url, email')
-                    .in('id', userIds);
-
-                if (profileError) throw profileError;
-
-                const profileMap = (profiles || []).reduce((acc: any, p: any) => ({ ...acc, [p.id]: p }), {});
-
-                const enrichedLogs = basicLogs.map((log: CallLog) => ({
+            if (rawLogs && rawLogs.length > 0) {
+                // Supabase joins can return arrays for one-to-many relationships even if we expect single objects, 
+                // but since these are explicit one-to-one FK links, they are objects. We handle both just in case.
+                const enrichedLogs = rawLogs.map((log: any) => ({
                     ...log,
-                    caller: profileMap[log.caller_id],
-                    receiver: profileMap[log.receiver_id]
+                    caller: Array.isArray(log.caller) ? log.caller[0] : log.caller,
+                    receiver: Array.isArray(log.receiver) ? log.receiver[0] : log.receiver
                 }));
 
                 if (isRefresh || offset === 0) {
                     setLogs(enrichedLogs);
                     // ✅ Save fresh first-page logs to SQLite cache
-                    require('@/lib/database').saveToCache('call_logs_cache', { logs: enrichedLogs });
+                    saveToCache('call_logs_cache', { logs: enrichedLogs });
                 } else {
                     setLogs(prev => {
                         const all = [...prev, ...enrichedLogs];
-                        const deduplicated = all.filter((item, index, self) =>
-                            index === self.findIndex((t) => t.id === item.id)
-                        );
+                        // ✅ Fast O(n) Map deduplication
+                        const deduped = [...new Map(all.map(item => [item.id, item])).values()];
                         // ✅ Save paginated logs to SQLite cache too
-                        require('@/lib/database').saveToCache('call_logs_cache', { logs: deduplicated });
-                        return deduplicated;
+                        saveToCache('call_logs_cache', { logs: deduped });
+                        return deduped;
                     });
                 }
 
-                if (basicLogs.length < PAGE_SIZE) {
+                if (rawLogs.length < PAGE_SIZE) {
                     setHasMore(false);
                 } else {
                     setHasMore(true);
                 }
 
-                // 2. Save fetched logs to Local DB
+                // 2. Save fetched logs to Local DB concurrently
                 const { db } = useDbStore.getState();
                 if (db) {
-                    basicLogs.forEach(log => saveLocalCallLog(db, log));
+                    Promise.all(rawLogs.map((log: any) => saveLocalCallLog(db, log)))
+                        .catch(err => {
+                            if (__DEV__) console.error("Error saving local call logs batch:", err);
+                        });
                 }
             } else {
                 if (isRefresh || offset === 0) {
                     setLogs([]);
-                    require('@/lib/database').saveToCache('call_logs_cache', { logs: [] });
+                    saveToCache('call_logs_cache', { logs: [] });
                 }
                 setHasMore(false);
             }
 
         } catch (err) {
-            console.error("Error loading call logs:", err);
+            if (__DEV__) console.error("Error loading call logs:", err);
         } finally {
             setLoading(false);
             setLoadingMore(false);
         }
-    };
+    }, [currentUser?.id]);
 
     useEffect(() => {
-        loadLogs();
-    }, []);
-
-    const refreshLogs = () => {
-        loadLogs(0, true);
-    };
-
-    const loadMoreLogs = () => {
-        if (!loadingMore && hasMore) {
-            loadLogs(logs.length);
+        if (currentUser?.id) {
+            loadLogs(0, false);
         }
-    };
+    }, [currentUser?.id, loadLogs]);
+
+    const refreshLogs = useCallback(() => {
+        loadLogs(0, true);
+    }, [loadLogs]);
+
+    const loadMoreLogs = useCallback(() => {
+        if (!loadingMore && hasMore) {
+            loadLogs(logsLengthRef.current);
+        }
+    }, [loadingMore, hasMore, loadLogs]);
 
     return {
         logs,

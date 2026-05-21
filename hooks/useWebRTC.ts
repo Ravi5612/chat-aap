@@ -23,9 +23,8 @@ const ICE_SERVERS = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
     ],
 };
 
@@ -49,6 +48,21 @@ export const useWebRTC = ({
     const localStreamRef = useRef<MediaStream | null>(null);
     const channelRef = useRef<any>(null);
 
+    // Refs for stable state without re-triggering effects
+    const onAcceptCallRef = useRef(onAcceptCall);
+    const onEndCallRef = useRef(onEndCall);
+    const callStateRef = useRef(callState);
+    const callTypeRef = useRef(callType);
+    const facingModeRef = useRef(facingMode);
+
+    useEffect(() => {
+        onAcceptCallRef.current = onAcceptCall;
+        onEndCallRef.current = onEndCall;
+        callStateRef.current = callState;
+        callTypeRef.current = callType;
+        facingModeRef.current = facingMode;
+    }, [onAcceptCall, onEndCall, callState, callType, facingMode]);
+
     // 1. Signaling Setup
     const setupSignaling = useCallback(() => {
         if (!currentUser || !friend) return;
@@ -56,51 +70,51 @@ export const useWebRTC = ({
         // Stable shared channel for this specific pair of users
         const sharedChannelName = `webrtc-sig-${ids[0].substring(0, 8)}-${ids[1].substring(0, 8)}`;
 
-        console.log('[DEBUG] WebRTC: Subscribing to signaling:', sharedChannelName);
+        if (__DEV__) console.log('[DEBUG] WebRTC: Subscribing to signaling:', sharedChannelName);
         const channel = supabase.channel(sharedChannelName);
         channelRef.current = channel;
 
         channel
             .on('broadcast', { event: 'signal' }, async ({ payload }) => {
-                console.log('[DEBUG] WebRTC: Received signal:', payload.type);
+                if (__DEV__) console.log('[DEBUG] WebRTC: Received signal:', payload.type);
                 try {
                     if (payload.type === 'answer') {
                         if (peerConnection.current) {
                             await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-                            onAcceptCall();
+                            onAcceptCallRef.current();
                         }
                     } else if (payload.type === 'ice-candidate') {
                         if (payload.candidate && peerConnection.current) {
                             await peerConnection.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
                         }
                     } else if (payload.type === 'end') {
-                        onEndCall();
+                        onEndCallRef.current();
                     }
                 } catch (err) {
-                    console.error("[ERROR] WebRTC Signaling:", err);
+                    if (__DEV__) console.error("[ERROR] WebRTC Signaling:", err);
                 }
             })
             .subscribe((status) => {
-                console.log('[DEBUG] WebRTC: Signaling Status:', status);
+                if (__DEV__) console.log('[DEBUG] WebRTC: Signaling Status:', status);
             });
 
         return () => {
-            console.log('[DEBUG] WebRTC: Cleaning up signaling channel');
+            if (__DEV__) console.log('[DEBUG] WebRTC: Cleaning up signaling channel');
             supabase.removeChannel(channel);
         };
-    }, [currentUser?.id, friend?.id, onAcceptCall, onEndCall]);
+    }, [currentUser?.id, friend?.id]);
 
     // 2. Media Setup
-    const setupMedia = useCallback(async (mode = facingMode) => {
+    const setupMedia = useCallback(async () => {
         if (!isWebRTCSupported) {
-            console.warn("WebRTC setup skipped: Not supported in this environment");
+            if (__DEV__) console.warn("WebRTC setup skipped: Not supported in this environment");
             return null;
         }
 
         try {
             const constraints: any = {
-                video: callType === 'video' ? {
-                    facingMode: mode,
+                video: callTypeRef.current === 'video' ? {
+                    facingMode: facingModeRef.current,
                     frameRate: 30,
                 } : false,
                 audio: true
@@ -111,9 +125,9 @@ export const useWebRTC = ({
             setLocalStream(stream);
             return stream;
         } catch (err) {
-            console.error("Media setup failed:", err);
+            if (__DEV__) console.error("Media setup failed:", err);
             // Fallback for video fail -> audio only
-            if (callType === 'video') {
+            if (callTypeRef.current === 'video') {
                 try {
                     const audioStream = await mediaDevices.getUserMedia({ video: false, audio: true }) as MediaStream;
                     localStreamRef.current = audioStream;
@@ -121,13 +135,13 @@ export const useWebRTC = ({
                     setIsVideoOff(true);
                     return audioStream;
                 } catch (e) {
-                    console.error("Audio fallback failed:", e);
+                    if (__DEV__) console.error("Audio fallback failed:", e);
                     return null;
                 }
             }
             return null;
         }
-    }, [callType, facingMode]);
+    }, []);
 
     // 3. Peer Connection Setup
     const createPeerConnection = useCallback((stream: MediaStream) => {
@@ -140,8 +154,11 @@ export const useWebRTC = ({
             pc.addTrack(track, stream);
         });
 
-        (pc as any).addEventListener('addstream', (event: any) => {
-            setRemoteStream(event.stream);
+        // Use standard 'track' event instead of deprecated 'addstream'
+        (pc as any).addEventListener('track', (event: any) => {
+            if (event.streams && event.streams[0]) {
+                setRemoteStream(event.streams[0]);
+            }
         });
 
         (pc as any).addEventListener('icecandidate', (event: any) => {
@@ -173,27 +190,39 @@ export const useWebRTC = ({
             await pc.setLocalDescription(offer);
 
             const signalChannelName = `calls-signal-${friend.id}`;
-            console.log('[DEBUG] WebRTC: Sending offer to:', signalChannelName);
+            if (__DEV__) console.log('[DEBUG] WebRTC: Sending offer to:', signalChannelName);
             const personalChannel = supabase.channel(signalChannelName);
-            personalChannel.subscribe((status) => {
+            let timeoutId: any;
+            
+            const cleanup = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                supabase.removeChannel(personalChannel).catch(() => {});
+            };
+
+            personalChannel.subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
-                    personalChannel.send({
-                        type: 'broadcast',
-                        event: 'signal',
-                        payload: {
-                            type: 'offer',
-                            sdp: offer,
-                            call_type: callType,
-                            caller_id: currentUser.id
-                        }
-                    });
-                    setTimeout(() => supabase.removeChannel(personalChannel), 3000);
+                    try {
+                        await personalChannel.send({
+                            type: 'broadcast',
+                            event: 'signal',
+                            payload: {
+                                type: 'offer',
+                                sdp: offer,
+                                call_type: callTypeRef.current,
+                                caller_id: currentUser.id
+                            }
+                        });
+                    } catch (e) {
+                        if (__DEV__) console.warn('Failed to send WebRTC offer', e);
+                    }
+                    cleanup();
                 }
             });
+            timeoutId = setTimeout(cleanup, 8000);
         } catch (err: any) {
-            console.error("Failed to start call:", err);
+            if (__DEV__) console.error("Failed to start call:", err);
         }
-    }, [currentUser?.id, friend?.id, callType, setupMedia, createPeerConnection]);
+    }, [currentUser?.id, friend?.id, setupMedia, createPeerConnection]);
 
     const acceptCall = useCallback(async () => {
         try {
@@ -213,18 +242,18 @@ export const useWebRTC = ({
                     payload: { type: 'answer', sdp: answer }
                 });
             }
-            onAcceptCall();
+            onAcceptCallRef.current();
         } catch (err: any) {
-            console.error("Failed to accept call:", err);
+            if (__DEV__) console.error("Failed to accept call:", err);
         }
-    }, [incomingOffer, setupMedia, createPeerConnection, onAcceptCall]);
+    }, [incomingOffer, setupMedia, createPeerConnection]);
 
     const endCall = useCallback(() => {
         if (channelRef.current) {
             channelRef.current.send({ type: 'broadcast', event: 'signal', payload: { type: 'end' } });
         }
-        onEndCall();
-    }, [onEndCall]);
+        onEndCallRef.current();
+    }, []);
 
     const toggleMute = useCallback(() => {
         if (localStreamRef.current) {
@@ -254,21 +283,32 @@ export const useWebRTC = ({
 
     // Lifecycle
     useEffect(() => {
-        setupSignaling();
-        if (callState === 'outgoing') startCall();
+        const cleanupSignaling = setupSignaling();
+        
+        // Use the ref to check initial call state without adding to dependency array
+        if (callStateRef.current === 'outgoing') {
+            startCall();
+        }
 
         return () => {
+            if (cleanupSignaling) cleanupSignaling();
+            
             if (localStreamRef.current) {
                 localStreamRef.current.getTracks().forEach(t => t.stop());
             }
             if (peerConnection.current) {
+                try {
+                    const senders = (peerConnection.current as any).getSenders();
+                    senders.forEach((sender: any) => (peerConnection.current as any).removeTrack(sender));
+                } catch (e) {
+                    if (__DEV__) console.warn('Error removing tracks:', e);
+                }
                 peerConnection.current.close();
+                peerConnection.current = null;
             }
-            if (channelRef.current) {
-                supabase.removeChannel(channelRef.current);
-            }
+            // channelRef cleanup is handled by cleanupSignaling return
         };
-    }, []);
+    }, [setupSignaling, startCall]);
 
     return {
         localStream,

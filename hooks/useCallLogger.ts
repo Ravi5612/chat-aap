@@ -3,9 +3,8 @@ import { supabase } from '@/lib/supabase';
 import { useDbStore } from '@/store/useDbStore';
 import { saveLocalCallLog } from '@/lib/localDb';
 
-// Global variable to persist across hook re-renders for the same session
-let globalLastSessionId = '';
-let globalHasLogged = false;
+// Module-level map to safely track logs across multiple users and sessions
+const sessionLogState = new Map<string, boolean>();
 
 export const useCallLogger = (currentUser: any, friend: any, callType: string, callState: string | null) => {
     const stateRef = useRef(callState);
@@ -15,6 +14,7 @@ export const useCallLogger = (currentUser: any, friend: any, callType: string, c
 
     // Track when this specific call session started
     const sessionTypeRef = useRef<string | null>(null);
+    const sessionIdRef = useRef<string>('');
 
     useEffect(() => {
         stateRef.current = callState;
@@ -24,15 +24,17 @@ export const useCallLogger = (currentUser: any, friend: any, callType: string, c
 
         // Detect call start and lock the session type (incoming vs outgoing)
         if (callState === 'outgoing' || callState === 'incoming') {
-            const sessionId = `${friend?.id}_${callState}`;
-            if (globalLastSessionId !== sessionId) {
-                console.log(`[CALL_ACTION] NEW SESSION: ${sessionId}. Resetting log locks.`);
-                globalLastSessionId = sessionId;
-                globalHasLogged = false;
+            const newSessionId = `${currentUser?.id}_${friend?.id}_${callState}`;
+            if (sessionIdRef.current !== newSessionId) {
+                if (__DEV__) console.log(`[CALL_ACTION] NEW SESSION: ${newSessionId}. Resetting log locks.`);
+                sessionIdRef.current = newSessionId;
                 sessionTypeRef.current = callState;
+                if (!sessionLogState.has(newSessionId)) {
+                    sessionLogState.set(newSessionId, false);
+                }
             }
         }
-    }, [callState, friend?.id]);
+    }, [callState, friend?.id, currentUser?.id]);
 
     const saveCallLog = useCallback(async (status = 'completed', duration = 0, overrideFriend?: any) => {
         const friendData = overrideFriend || friendRef.current;
@@ -41,29 +43,27 @@ export const useCallLogger = (currentUser: any, friend: any, callType: string, c
 
         if (!userData?.id || !friendData?.id) return;
 
-        // 1. GLOBAL LOCK: If already logged for this session, STOP.
-        if (globalHasLogged) {
-            console.log('[CALL_ACTION] Duplicate log prevented by Global Lock.');
+        const currentSessionId = sessionIdRef.current;
+
+        // 1. GLOBAL LOCK: If already logged for this exact session, STOP.
+        if (sessionLogState.get(currentSessionId)) {
+            if (__DEV__) console.log('[CALL_ACTION] Duplicate log prevented by Global Session Lock.');
             return;
         }
 
-        // 2. CALLER ONLY: Only the one who started the call logs it.
-        if (sessionTypeRef.current !== 'outgoing') {
-            console.log('[CALL_ACTION] Receiver side - skipping log to prevent duplicates.');
-            globalHasLogged = true; // Still lock it locally
-            return;
-        }
+        // 2. Determine exact roles (Fixing Receiver Missed Call Bug)
+        const isOutgoing = sessionTypeRef.current === 'outgoing';
+        const actualCallerId = isOutgoing ? userData.id : friendData.id;
+        const actualReceiverId = isOutgoing ? friendData.id : userData.id;
 
-        globalHasLogged = true;
-        console.log(`[CALL_ACTION] EXECUTING LOG SAVE: Status=${status}, Duration=${duration}`);
+        sessionLogState.set(currentSessionId, true);
+        if (__DEV__) console.log(`[CALL_ACTION] EXECUTING LOG SAVE: Status=${status}, Duration=${duration}`);
 
         try {
-            // We OMIT the 'id' field so Supabase/Postgres generates a valid UUID automatically
-            
-            // Save to call_logs
+            // Save to call_logs (created_at is handled automatically by Postgres server-side)
             const { data: logData, error: logError } = await supabase.from('call_logs').insert([{
-                caller_id: userData.id,
-                receiver_id: friendData.id,
+                caller_id: actualCallerId,
+                receiver_id: actualReceiverId,
                 call_type: currentType,
                 status: status,
                 duration: duration
@@ -89,8 +89,8 @@ export const useCallLogger = (currentUser: any, friend: any, callType: string, c
 
             // Save to messages (this is what shows in the chat box)
             const { error: msgError } = await supabase.from('messages').insert([{
-                sender_id: userData.id,
-                receiver_id: friendData.id,
+                sender_id: actualCallerId,
+                receiver_id: actualReceiverId,
                 message: `Call ${status}`,
                 message_type: 'call',
                 status: 'sent',
@@ -105,10 +105,10 @@ export const useCallLogger = (currentUser: any, friend: any, callType: string, c
 
             if (msgError) throw msgError;
 
-            console.log('[CALL_ACTION] Log saved successfully.');
+            if (__DEV__) console.log('[CALL_ACTION] Log saved successfully.');
         } catch (error) {
-            console.error('[CALL_ACTION] Log save failed:', error);
-            globalHasLogged = false; // Allow one retry if it failed
+            if (__DEV__) console.error('[CALL_ACTION] Log save failed:', error);
+            sessionLogState.set(currentSessionId, false); // Allow one retry if it failed
         }
     }, []);
 

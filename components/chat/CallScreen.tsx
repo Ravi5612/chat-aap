@@ -9,8 +9,7 @@ import { useAgora } from '@/hooks/useAgora';
 import { useCallLogger } from '@/hooks/useCallLogger';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
-
-const { width, height } = Dimensions.get('window');
+import { useWindowDimensions } from 'react-native';
 
 interface CallScreenProps {
     visible: boolean;
@@ -42,6 +41,7 @@ export default function CallScreen({
     endReason
 }: CallScreenProps) {
     const router = useRouter();
+    const { width, height } = useWindowDimensions();
     const [callDuration, setCallDuration] = useState(0);
     const [isSwapped, setIsSwapped] = useState(false);
     const startTimeRef = useRef<number | null>(null); // NEW: To track when the call actually started
@@ -89,14 +89,16 @@ export default function CallScreen({
     }));
 
     // Keep memory of the call info even if props become null
-    if (callState && friend?.id) {
-        lastCallInfo.current = {
-            state: callState,
-            friend: friend,
-            type: callType,
-            isGroup: isGroup
-        };
-    }
+    useEffect(() => {
+        if (callState && friend?.id) {
+            lastCallInfo.current = {
+                state: callState,
+                friend: friend,
+                type: callType,
+                isGroup: isGroup
+            };
+        }
+    }, [callState, friend?.id, callType, isGroup]);
 
     const {
         joined,
@@ -142,12 +144,14 @@ export default function CallScreen({
                         group_id: isGroup ? friend.id : null
                     }
                 });
+                // Clean up channel after a short delay
                 setTimeout(() => {
                     supabase.removeChannel(personalChannel).catch(() => {});
                 }, 1000);
             }
         });
-        onAcceptCall();
+        // We do NOT call onAcceptCall() here because the payload 'accepted' 
+        // will be caught by useCallManager which then calls setCallActive() globally.
     };
 
     const endCall = () => {
@@ -305,9 +309,12 @@ export default function CallScreen({
                                     style={{ alignItems: 'center' }}
                                     onPress={() => {
                                         onEndCall();
-                                        const nameParam = encodeURIComponent(friend.name || 'User');
-                                        const groupParam = isGroup ? 'true' : 'false';
-                                        router.push(`/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}`);
+                                        // Slight delay to ensure call teardown completes before navigation
+                                        setTimeout(() => {
+                                            const nameParam = encodeURIComponent(friend.name || 'User');
+                                            const groupParam = isGroup ? 'true' : 'false';
+                                            router.push(`/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}`);
+                                        }, 300);
                                     }}
                                 >
                                     <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#3B82F6', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
@@ -359,7 +366,7 @@ export default function CallScreen({
                 <View style={styles.controlsContainer}>
                     <TouchableOpacity
                         onPress={() => {
-                            console.log('[CALL_ACTION] Mute toggled');
+                            if (__DEV__) console.log('[CALL_ACTION] Mute toggled');
                             toggleMute();
                         }}
                         style={[styles.controlButton, isMuted && styles.dangerButton]}
@@ -383,24 +390,25 @@ export default function CallScreen({
                         <Ionicons name="close" size={32} color="white" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        onPress={() => {
-                            console.log('[CALL_ACTION] Video toggled');
-                            toggleVideo();
-                        }}
-                        style={[
-                            styles.controlButton,
-                            isVideoOff && styles.dangerButton,
-                            { display: callType === 'video' ? 'flex' : 'none' }
-                        ]}
-                    >
-                        <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
-                    </TouchableOpacity>
+                    {callType === 'video' && (
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (__DEV__) console.log('[CALL_ACTION] Video toggled');
+                                toggleVideo();
+                            }}
+                            style={[
+                                styles.controlButton,
+                                isVideoOff && styles.dangerButton
+                            ]}
+                        >
+                            <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
+                        </TouchableOpacity>
+                    )}
 
                     {callType === 'video' && (
                         <TouchableOpacity
                             onPress={() => {
-                                console.log('[CALL_ACTION] Camera switched');
+                                if (__DEV__) console.log('[CALL_ACTION] Camera switched');
                                 switchCamera();
                             }}
                             style={styles.controlButton}

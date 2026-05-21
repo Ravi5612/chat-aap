@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { useDbStore } from './useDbStore';
 import { saveLocalStatus, getLocalStatuses, pruneExpiredStatuses, syncLocalStatuses, saveLocalConversation, getLocalConversations, saveLocalProfile, getLocalBlocks, syncLocalBlocks, saveLocalBlock, deleteLocalBlock } from '@/lib/localDb';
+import { useAuthStore } from './useAuthStore';
+import { Alert } from 'react-native';
 
 interface FriendsState {
     friends: any[];
@@ -50,7 +52,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         const { friends, groups } = get();
         if (friends.length === 0 && groups.length === 0) return;
 
-        const currentUserId = (require('./useAuthStore').useAuthStore.getState()).user?.id;
+        const currentUserId = useAuthStore.getState().user?.id;
         const isConnected = currentUserId ? !!onlineUsers[currentUserId] : false;
 
         const friendsWithPresence = friends.map(f => {
@@ -185,6 +187,17 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             // Sort by created_at descending to get the most recent status first
             const sortedStatuses = [...filteredStatuses].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+            // Pre-fetch all keys concurrently
+            const uniqueStatusUsers = [...new Set(sortedStatuses.map(s => s.user_id))];
+            const keyCache: Record<string, any> = {};
+            await Promise.all(uniqueStatusUsers.map(async (uid) => {
+                try {
+                    keyCache[uid] = await getChatKey(uid, uid);
+                } catch (e) {
+                    console.error('Failed to pre-fetch key for', uid, e);
+                }
+            }));
+
             for (const s of sortedStatuses) {
                 if (!statusInfoMap[s.user_id]) {
                     statusInfoMap[s.user_id] = { count: 0, viewedCount: 0 };
@@ -193,10 +206,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                     if (s.media_url) {
                         if (s.media_url.trim().startsWith('{')) {
                             try {
-                                const statusKey = await getChatKey(s.user_id, s.user_id);
-                                const decryptedUrl = await decryptText(s.media_url, statusKey);
-                                statusInfoMap[s.user_id].thumbnail = decryptedUrl;
-                                statusInfoMap[s.user_id].mediaType = s.media_type;
+                                const statusKey = keyCache[s.user_id];
+                                if (statusKey) {
+                                    const decryptedUrl = await decryptText(s.media_url, statusKey);
+                                    statusInfoMap[s.user_id].thumbnail = decryptedUrl;
+                                    statusInfoMap[s.user_id].mediaType = s.media_type;
+                                }
                             } catch (e) {
                                 console.error('Thumbnail decryption error:', e);
                             }
@@ -210,9 +225,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                         statusInfoMap[s.user_id].bgColor = s.background_color;
                         if (s.content && s.content.trim().startsWith('{')) {
                             try {
-                                const statusKey = await getChatKey(s.user_id, s.user_id);
-                                const decryptedText = await decryptText(s.content, statusKey);
-                                statusInfoMap[s.user_id].text = decryptedText;
+                                const statusKey = keyCache[s.user_id];
+                                if (statusKey) {
+                                    const decryptedText = await decryptText(s.content, statusKey);
+                                    statusInfoMap[s.user_id].text = decryptedText;
+                                }
                             } catch (e) {
                                 console.error('Text status decryption error:', e);
                             }
@@ -442,14 +459,14 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                     combinedItems: previousItems
                 });
                 if (db) await deleteLocalBlock(db, currentUserId, targetId);
-                require('react-native').Alert.alert("Block Failed", `Server error: ${error.message}`);
+                Alert.alert("Block Failed", `Server error: ${error.message}`);
             } else {
                 console.log('[BLOCK] Supabase Sync Success');
-                get().loadFriends(currentUserId);
+                // No need to reload all friends, state is already updated locally
             }
         } catch (e: any) {
             console.error('[BLOCK] Catch Block Error:', e);
-            require('react-native').Alert.alert("Block Error", e.message || "Unknown error occurred");
+            Alert.alert("Block Error", e.message || "Unknown error occurred");
         }
     },
 
@@ -482,20 +499,17 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             
             if (error) {
                 console.error('[UNBLOCK] Supabase Sync Error:', error);
-                // Rollback on error
-                set({ 
-                    blockedUserIds: previousBlockedIds,
-                    combinedItems: previousItems
-                });
+                // Rollback
+                set({ blockedUserIds: previousBlockedIds });
                 if (db) await saveLocalBlock(db, currentUserId, targetId);
-                require('react-native').Alert.alert("Unblock Failed", `Server error: ${error.message}`);
+                Alert.alert("Unblock Failed", `Server error: ${error.message}`);
             } else {
                 console.log('[UNBLOCK] Supabase Sync Success');
-                get().loadFriends(currentUserId);
+                // No need to reload all friends, state is already updated locally
             }
         } catch (e: any) {
-            console.error('[UNBLOCK] Catch Block Error:', e);
-            require('react-native').Alert.alert("Unblock Error", e.message || "Unknown error occurred");
+            console.error('[UNBLOCK] Catch Unblock Error:', e);
+            Alert.alert("Unblock Error", e.message || "Unknown error occurred");
         }
     },
 

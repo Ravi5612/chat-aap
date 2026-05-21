@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { View, Text, Image, TouchableOpacity, Animated } from 'react-native';
+import React, { useRef, memo } from 'react';
+import { View, Text, Image, TouchableOpacity, Animated, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface FriendListItemProps {
@@ -11,7 +11,7 @@ interface FriendListItemProps {
     onImageClick?: (friend: any) => void;
 }
 
-export default function FriendListItem({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
+const FriendListItem = memo(function FriendListItem({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
     const hasStatus = friend.statusCount > 0;
     const ringColor = hasStatus
         ? (friend.allStatusesViewed ? '#D1D5DB' : '#10B981')
@@ -42,12 +42,10 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <TouchableOpacity
                 onPress={() => {
-                    console.log('Friend clicked:', friend.name);
                     onClick(friend);
                 }}
                 onLongPress={() => {
                     if (onLongPress) {
-                        console.log('Friend long-pressed:', friend.name);
                         onLongPress(friend);
                     }
                 }}
@@ -56,8 +54,7 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
                 activeOpacity={0.85}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, width: '100%' }}
             >
-                <TouchableOpacity
-                    activeOpacity={0.8}
+                <Pressable
                     onPress={(e) => {
                         e.stopPropagation();
                         if (hasStatus && onViewUserStatus) {
@@ -66,7 +63,7 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
                             onImageClick(friend);
                         }
                     }}
-                    style={{ position: 'relative' }}
+                    style={({ pressed }) => ({ position: 'relative', opacity: pressed ? 0.8 : 1 })}
                 >
                     {friend.img ? (
                         <Image
@@ -131,7 +128,7 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
                             <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{friend.statusCount}</Text>
                         </View>
                     )}
-                </TouchableOpacity>
+                </Pressable>
 
                 <View style={{ flex: 1, marginLeft: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0, 0, 0, 0.05)', paddingBottom: 12 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -159,4 +156,6 @@ export default function FriendListItem({ friend, onClick, onLongPress, isOnline,
             </TouchableOpacity>
         </Animated.View>
     );
-}
+});
+
+export default FriendListItem;

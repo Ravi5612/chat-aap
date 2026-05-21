@@ -4,14 +4,44 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriends } from '@/hooks/useFriends';
 import { useStatusActions } from '@/hooks/useStatusActions';
-import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'expo-router';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import StatusBar from '@/components/chat/StatusBar';
 import { Video, ResizeMode } from 'expo-av';
 
+const VIDEO_STATUS_PROPS = { shouldPlay: false, positionMillis: 1000 } as const;
+
+const formatRelativeTime = (isoString?: string) => {
+    if (!isoString) return 'Recently updated';
+    const diff = Date.now() - new Date(isoString).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+};
+
 // Memoized Status Item for performance
 const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: any) => void }) => {
+    // Single Video thumbnail rendered once for both avatar and thumbnail areas
+    const videoThumbnail = item.mediaType === 'video' ? (
+        <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+            <Video
+                source={{ uri: item.thumbnail }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={false}
+                isMuted={true}
+                status={VIDEO_STATUS_PROPS}
+            />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                <Ionicons name="play" size={14} color="white" />
+            </View>
+        </View>
+    ) : null;
+
     return (
         <TouchableOpacity
             onPress={() => onPress(item)}
@@ -31,20 +61,7 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                         </View>
                     ) : item.mediaType === 'video' ? (
                         <View style={{ width: '100%', height: '100%', borderRadius: 30, overflow: 'hidden', position: 'relative' }}>
-                            <Video
-                                source={{ uri: item.thumbnail }}
-                                style={{ width: '100%', height: '100%' }}
-                                resizeMode={ResizeMode.COVER}
-                                shouldPlay={false}
-                                isMuted={true}
-                                status={{
-                                    shouldPlay: false,
-                                    positionMillis: 1000
-                                }}
-                            />
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                                <Ionicons name="play" size={14} color="white" />
-                            </View>
+                            {videoThumbnail}
                         </View>
                     ) : (
                         <Image
@@ -62,7 +79,7 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                 <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
                 <View style={styles.timeContainer}>
                     <Ionicons name="time-outline" size={12} color="#94A3B8" />
-                    <Text style={styles.timeText}>Recently updated</Text>
+                    <Text style={styles.timeText}>{formatRelativeTime(item.latestTimestamp)}</Text>
                 </View>
             </View>
 
@@ -77,22 +94,7 @@ const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: a
                         </Text>
                     </View>
                 ) : item.mediaType === 'video' ? (
-                    <View style={{ width: '100%', height: '100%', position: 'relative' }}>
-                        <Video
-                            source={{ uri: item.thumbnail }}
-                            style={{ width: '100%', height: '100%' }}
-                            resizeMode={ResizeMode.COVER}
-                            shouldPlay={false}
-                            isMuted={true}
-                            status={{
-                                shouldPlay: false,
-                                positionMillis: 1000
-                            }}
-                        />
-                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                            <Ionicons name="play" size={14} color="white" />
-                        </View>
-                    </View>
+                    videoThumbnail
                 ) : (
                     <Image
                         source={{ uri: item.thumbnail || item.img }}
@@ -109,13 +111,8 @@ export default function StatusScreen() {
     const swipeHandlers = useSwipeNavigation();
     const insets = useSafeAreaInsets();
     const { combinedItems = [], myStatuses = { active: [] }, statusInfo = {}, loading, loadFriends } = useFriends();
-    const [currentUser, setCurrentUser] = useState<any>(null);
-
-    useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => {
-            setCurrentUser(data.user);
-        });
-    }, []);
+    // ✅ Use auth store instead of separate supabase.auth.getUser() call
+    const { user: currentUser } = useAuthStore();
 
     const {
         setShowAddStatus,
@@ -132,11 +129,12 @@ export default function StatusScreen() {
                 thumbnail: statusInfo[item.id]?.thumbnail,
                 mediaType: statusInfo[item.id]?.mediaType,
                 text: statusInfo[item.id]?.text,
-                bgColor: statusInfo[item.id]?.bgColor
+                bgColor: statusInfo[item.id]?.bgColor,
+                latestTimestamp: statusInfo[item.id]?.latestTimestamp,
             }));
     }, [combinedItems, statusInfo, currentUser]);
 
-    const renderHeader = () => {
+    const renderHeader = useCallback(() => {
         return (
             <>
                 {/* Header */}
@@ -165,7 +163,7 @@ export default function StatusScreen() {
                 </View>
             </>
         );
-    };
+    }, [myStatuses, statusInfo, friendsWithStatus, handleViewUserStatus, handleViewMyStatus]);
 
     const renderEmpty = () => (
         <View style={styles.emptyContainer}>
@@ -176,12 +174,18 @@ export default function StatusScreen() {
         </View>
     );
 
+    const renderItem = useCallback(({ item }: { item: any }) => (
+        <View style={{ paddingHorizontal: 20 }}>
+            <StatusItem item={item} onPress={handleViewUserStatus} />
+        </View>
+    ), [handleViewUserStatus]);
+
     const [refreshing, setRefreshing] = useState(false);
 
     const onRefresh = useCallback(async () => {
         if (!currentUser) return;
         setRefreshing(true);
-        await loadFriends(currentUser.id, true); // Force refresh with loader
+        await loadFriends();
         setRefreshing(false);
     }, [currentUser, loadFriends]);
 
@@ -208,11 +212,7 @@ export default function StatusScreen() {
                 <FlatList
                     data={friendsWithStatus}
                     keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => (
-                        <View style={{ paddingHorizontal: 20 }}>
-                            <StatusItem item={item} onPress={handleViewUserStatus} />
-                        </View>
-                    )}
+                    renderItem={renderItem}
                     ListHeaderComponent={renderHeader}
                     ListEmptyComponent={renderEmpty}
                     refreshControl={

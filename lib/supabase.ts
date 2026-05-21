@@ -23,7 +23,7 @@ const ExpoSecureStoreAdapter = {
             }
             return;
         }
-        SecureStore.setItemAsync(key, value);
+        return SecureStore.setItemAsync(key, value);
     },
     removeItem: (key: string) => {
         if (isWeb) {
@@ -32,12 +32,16 @@ const ExpoSecureStoreAdapter = {
             }
             return;
         }
-        SecureStore.deleteItemAsync(key);
+        return SecureStore.deleteItemAsync(key);
     },
 };
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase URL or Anon Key in environment variables!');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -77,7 +81,7 @@ export const resendVerification = async (email: string) => {
             type: 'signup',
             email: email,
             options: {
-                emailRedirectTo: `https://chat-warrios.vercel.app/login`,
+                emailRedirectTo: process.env.EXPO_PUBLIC_APP_URL || `https://chat-warrios.vercel.app/login`,
             }
         });
         if (error) throw error;

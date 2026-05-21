@@ -35,6 +35,8 @@ import {
     markMessageDeliveredLocally
 } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
+import DebugConsole from '@/components/DebugConsole';
+import { useDebugStore } from '@/store/useDebugStore';
 
 function ChatScreen() {
     const logDebug = useCallback((msg: string) => {}, []);

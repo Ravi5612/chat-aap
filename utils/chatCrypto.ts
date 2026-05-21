@@ -4,7 +4,7 @@
  * ✅ Same library, same output, cross-platform sync guaranteed
  */
 
-import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
+import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import * as Crypto from 'expo-crypto';
@@ -35,6 +35,8 @@ if (typeof TextDecoder === 'undefined') {
 const SALT = "supabase-secure-chat-v1";
 const encoder = new TextEncoder();
 
+const keyCache = new Map<string, Uint8Array>();
+
 /**
  * 🔑 Generate deterministic crypto key for a chat
  * Same key will be generated for both users on both platforms
@@ -47,14 +49,20 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
     // Same baseKey logic as web app
     const baseKey = isGroup ? `group_v6:${friendId}` : [userId, friendId].sort().join(":");
 
-    // ✅ Noble PBKDF2 - same as web app
-    const key = pbkdf2(sha256, encoder.encode(baseKey), encoder.encode(SALT), {
+    if (keyCache.has(baseKey)) {
+        return keyCache.get(baseKey)!;
+    }
+
+    // ✅ Noble PBKDF2 Async - non-blocking for React Native UI
+    const key = await pbkdf2Async(sha256, encoder.encode(baseKey), encoder.encode(SALT), {
         c: 1000,
         dkLen: 32 // 256 bits
     });
 
+    const uintKey = new Uint8Array(key);
+    keyCache.set(baseKey, uintKey);
     console.log(`Crypto: Key generated for ${baseKey.substring(0, 8)}`);
-    return new Uint8Array(key);
+    return uintKey;
 }
 
 /**

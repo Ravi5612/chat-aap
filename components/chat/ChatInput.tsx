@@ -374,10 +374,18 @@ export default function ChatInput({
                         shadowRadius: 2,
                     }}>
                         <TouchableOpacity
-                            onPress={() => setEmojiModalVisible(true)}
+                            onPress={() => {
+                                if (emojiModalVisible) {
+                                    setEmojiModalVisible(false);
+                                    inputRef.current?.focus();
+                                } else {
+                                    inputRef.current?.blur();
+                                    setEmojiModalVisible(true);
+                                }
+                            }}
                             style={{ padding: 8 }}
                         >
-                            <Ionicons name="happy-outline" size={26} color="#6B7280" />
+                            <Ionicons name="happy-outline" size={26} color={emojiModalVisible ? "#F68537" : "#6B7280"} />
                         </TouchableOpacity>
 
                         <TextInput
@@ -443,11 +451,17 @@ export default function ChatInput({
                     </TouchableOpacity>
                 </View>
 
-                <EmojiPickerModal
-                    visible={emojiModalVisible}
-                    onClose={() => setEmojiModalVisible(false)}
-                    onSelect={handleSelectEmoji}
-                />
+                {emojiModalVisible && (
+                    <EmojiPickerModal
+                        visible={emojiModalVisible}
+                        onClose={() => {
+                            setEmojiModalVisible(false);
+                            inputRef.current?.focus();
+                        }}
+                        onSelect={handleSelectEmoji}
+                        isInline={true}
+                    />
+                )}
 
                 <ContactPickerModal
                     visible={contactModalVisible}

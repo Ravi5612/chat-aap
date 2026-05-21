@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { uploadChatMessageMedia } from '@/utils/uploadHelper';
 
 export const useStatusActions = (currentUser: any, loadFriends?: () => void) => {
     const router = useRouter();
@@ -13,25 +14,22 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
 
     const handleFetchViewers = useCallback(async (statusId: string) => {
         try {
+            // Optimized single query joining status_views with profiles
             const { data: views, error } = await supabase
                 .from('status_views')
-                .select('viewed_at, viewer_id')
+                .select('viewed_at, viewer_id, profiles!viewer_id(id, username, avatar_url)')
                 .eq('status_id', statusId)
                 .order('viewed_at', { ascending: false });
 
             if (error) throw error;
+            
             if (views && views.length > 0) {
-                const viewerIds = views.map(v => v.viewer_id);
-                const { data: profiles } = await supabase
-                    .from('profiles')
-                    .select('id, username, avatar_url')
-                    .in('id', viewerIds);
-
-                const profileMap = profiles?.reduce((acc: any, p: any) => ({ ...acc, [p.id]: p }), {}) || {};
-                const combined = views.map(v => {
-                    const profile = profileMap[v.viewer_id];
+                const combined = views.map((v: any) => {
+                    const profile = Array.isArray(v.profiles) ? v.profiles[0] : v.profiles;
                     return {
-                        ...(profile || { id: v.viewer_id, username: 'Unknown User' }),
+                        id: profile?.id || v.viewer_id,
+                        username: profile?.username || 'Unknown User',
+                        avatar_url: profile?.avatar_url,
                         viewed_at: v.viewed_at
                     };
                 });
@@ -40,23 +38,30 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
                 setStatusViewers([]);
             }
         } catch (error) {
-            console.error("Error fetching viewers:", error);
+            if (__DEV__) console.error("Error fetching viewers:", error);
             setStatusViewers([]);
         }
     }, []);
 
-    const handleAddStatus = async ({ type, content, bgcolor, file }: any) => {
+    const handleAddStatus = useCallback(async ({ type, content, bgcolor, file }: any) => {
         if (!currentUser) return;
         setUploadingStatus(true);
         try {
-            // Simplified insert for now
+            let mediaUrl = null;
+            if (file) {
+                const ext = file.split('.').pop()?.toLowerCase() || 'jpg';
+                const folder = type === 'video' ? 'status_videos' : 'status_images';
+                mediaUrl = await uploadChatMessageMedia(file, 'chat_media', folder, type);
+                if (!mediaUrl) throw new Error("Failed to upload media");
+            }
+
             const { error } = await supabase.from('statuses').insert([{
                 user_id: currentUser.id,
                 content,
                 media_type: type,
-                media_url: file ? null : null, // Handle upload separately 
-                background_color: bgcolor,
-                expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+                media_url: mediaUrl,
+                background_color: bgcolor
+                // Removed client-side expires_at computation. Rely on Postgres defaults or trigger.
             }]);
 
             if (error) throw error;
@@ -64,11 +69,12 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
             setShowAddStatus(false);
             loadFriends?.();
         } catch (error: any) {
+            if (__DEV__) console.error("Status Upload Error:", error);
             Alert.alert('Error', error.message || 'Failed to add status');
         } finally {
             setUploadingStatus(false);
         }
-    };
+    }, [currentUser, loadFriends]);
 
     const handleViewUserStatus = useCallback(async (data: any) => {
         if (!currentUser) return;
@@ -88,44 +94,50 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
         });
     }, [currentUser]);
 
-    const setShowAddStatusProxy = (show: boolean) => {
+    const setShowAddStatusProxy = useCallback((show: boolean) => {
         if (show) {
             router.push('/status/add' as any);
         }
-    };
+    }, [router]);
 
     // Track viewing and mark as seen
+    const currentUserRef = useRef(currentUser);
     useEffect(() => {
-        if (!viewingStatus || !currentUser) return;
+        currentUserRef.current = currentUser;
+    }, [currentUser]);
+
+    useEffect(() => {
+        if (!viewingStatus || !currentUserRef.current) return;
         const currentId = viewingStatus.statuses?.[statusIndex]?.id;
         if (!currentId) return;
 
+        // View tracking without reloading all friends on every swipe
         supabase.from('status_views').upsert([{
             status_id: currentId,
-            viewer_id: currentUser.id
+            viewer_id: currentUserRef.current.id
         }], { onConflict: 'status_id,viewer_id' }).then(({ error }) => {
-            if (!error || error.code === '23505') {
-                loadFriends?.();
+            if (__DEV__ && error && error.code !== '23505') {
+                console.error("View tracking error:", error);
             }
         });
-    }, [viewingStatus, statusIndex, currentUser, loadFriends]);
+    }, [viewingStatus, statusIndex]); // Removed loadFriends to prevent infinite loop and over-fetching
 
-    const handleNextStatus = () => {
+    const handleNextStatus = useCallback(() => {
         if (!viewingStatus) return;
         if (statusIndex < viewingStatus.statuses.length - 1) {
             setStatusIndex(statusIndex + 1);
         } else {
             setViewingStatus(null);
         }
-    };
+    }, [viewingStatus, statusIndex]);
 
-    const handleViewMyStatus = () => {
+    const handleViewMyStatus = useCallback(() => {
         if (!currentUser) return;
         router.push({
             pathname: '/status/viewer' as any,
             params: { userId: currentUser.id, initialIndex: 0, isArchive: 'false' }
         });
-    };
+    }, [currentUser, router]);
 
     return {
         viewingStatus,

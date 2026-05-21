@@ -1,32 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Contacts from 'expo-contacts';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Alert } from 'react-native';
+import { getFromCache, saveToCache } from '@/lib/database';
 
-// Module-level cache to prevent re-fetching on tab switches
-let cachedSuggestions: any[] | null = null;
-let lastFetchTime = 0;
+// Memory cache keyed by user ID to prevent cross-user data leaks on logout/login
+const memoryCache: Record<string, { data: any[], timestamp: number }> = {};
 const CACHE_DURATION = 1000 * 60 * 5; // 5 minutes
 
 export const useContactSuggestions = () => {
     const { user: currentUser } = useAuthStore();
-    const [suggestions, setSuggestions] = useState<any[]>(cachedSuggestions || []);
+    const currentUserId = currentUser?.id || '';
+
+    // Initialize state from memory cache if available for this specific user
+    const initialCache = memoryCache[currentUserId]?.data || [];
+    const [suggestions, setSuggestions] = useState<any[]>(initialCache);
     const [loading, setLoading] = useState(false);
     const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
 
-    const loadSuggestions = async (forceRefresh = false) => {
-        if (!currentUser?.id) return;
+    const loadSuggestions = useCallback(async (forceRefresh = false) => {
+        if (!currentUserId) return;
         
         // 0. Instant SQLite Cache Load
-        const localCached = require('@/lib/database').getFromCache('contact_suggestions');
+        const localCached = getFromCache('contact_suggestions');
         if (localCached && suggestions.length === 0 && !forceRefresh) {
              setSuggestions(localCached);
         }
 
         // Use memory cache if it's recent and not forced to refresh
-        if (!forceRefresh && cachedSuggestions && (Date.now() - lastFetchTime < CACHE_DURATION)) {
-            setSuggestions(cachedSuggestions);
+        const userCache = memoryCache[currentUserId];
+        if (!forceRefresh && userCache && (Date.now() - userCache.timestamp < CACHE_DURATION)) {
+            setSuggestions(userCache.data);
             return;
         }
 
@@ -36,10 +41,18 @@ export const useContactSuggestions = () => {
         }
 
         try {
-            const { status } = await Contacts.requestPermissionsAsync();
-            setPermissionGranted(status === 'granted');
+            // Fix: Check permissions first to avoid blind prompt triggers every 5 mins
+            const { status: existingStatus } = await Contacts.getPermissionsAsync();
+            let finalStatus = existingStatus;
 
-            if (status !== 'granted') {
+            if (existingStatus !== 'granted') {
+                const { status: requestedStatus } = await Contacts.requestPermissionsAsync();
+                finalStatus = requestedStatus;
+            }
+            
+            setPermissionGranted(finalStatus === 'granted');
+
+            if (finalStatus !== 'granted') {
                 setLoading(false);
                 return;
             }
@@ -58,19 +71,13 @@ export const useContactSuggestions = () => {
                             let num = phone.number?.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '');
                             if (!num) return;
                             
-                            // Basic normalization for India and robust matching
+                            // Basic normalization: prevent duplicate array entries to keep Supabase query small
                             if (num.length === 10 && /^\d+$/.test(num)) {
                                 phoneNumbers.add(`+91${num}`);
-                                phoneNumbers.add(num);
                             } else if (num.startsWith('0') && num.length === 11) {
                                 phoneNumbers.add(`+91${num.substring(1)}`);
-                                phoneNumbers.add(num.substring(1));
                             } else if (!num.startsWith('+') && num.length > 10) {
                                 phoneNumbers.add(`+${num}`);
-                                phoneNumbers.add(num);
-                            } else if (num.startsWith('+91') && num.length === 13) {
-                                phoneNumbers.add(num);
-                                phoneNumbers.add(num.substring(3));
                             } else {
                                 phoneNumbers.add(num);
                             }
@@ -95,7 +102,7 @@ export const useContactSuggestions = () => {
                             .from('profiles')
                             .select('id, username, phone, avatar_url, email')
                             .in('phone', chunk)
-                            .neq('id', currentUser.id)
+                            .neq('id', currentUserId)
                     );
                 }
 
@@ -120,17 +127,17 @@ export const useContactSuggestions = () => {
                     supabase
                         .from('friendships')
                         .select('user_id, friend_id')
-                        .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`),
+                        .or(`user_id.eq.${currentUserId},friend_id.eq.${currentUserId}`),
                     supabase
                         .from('friend_requests')
                         .select('receiver_id')
-                        .eq('sender_id', currentUser.id)
+                        .eq('sender_id', currentUserId)
                         .in('receiver_id', profileIds)
                         .in('status', ['pending', 'accepted']),
                     supabase
                         .from('friend_requests')
                         .select('sender_id')
-                        .eq('receiver_id', currentUser.id)
+                        .eq('receiver_id', currentUserId)
                         .in('sender_id', profileIds)
                         .in('status', ['pending', 'accepted'])
                 ]);
@@ -138,7 +145,7 @@ export const useContactSuggestions = () => {
                 // Collect ALL friend IDs where I am either user_id or friend_id
                 const friendIds = new Set<string>();
                 friendsRes.data?.forEach(f => {
-                    if (f.user_id === currentUser.id) friendIds.add(f.friend_id);
+                    if (f.user_id === currentUserId) friendIds.add(f.friend_id);
                     else friendIds.add(f.user_id);
                 });
                 
@@ -155,35 +162,34 @@ export const useContactSuggestions = () => {
                         requestStatus: sentRequestIds.has(p.id) ? 'pending' : null
                     }));
 
-                cachedSuggestions = finalSuggestions;
-                lastFetchTime = Date.now();
+                memoryCache[currentUserId] = {
+                    data: finalSuggestions,
+                    timestamp: Date.now()
+                };
+                
                 setSuggestions(finalSuggestions);
-                require('@/lib/database').saveToCache('contact_suggestions', finalSuggestions);
+                saveToCache('contact_suggestions', finalSuggestions);
             }
         } catch (error) {
-            console.error("Error loading contact suggestions:", error);
+            if (__DEV__) console.error("Error loading contact suggestions:", error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentUserId, suggestions.length]);
 
     useEffect(() => {
         loadSuggestions();
-    }, [currentUser]);
+    }, [currentUserId, loadSuggestions]);
 
-    const sendRequest = async (receiverId: string) => {
-        if (!currentUser?.id) return;
+    const sendRequest = useCallback(async (receiverId: string) => {
+        if (!currentUserId || !currentUser) return;
         
         try {
-            // 1. Verify sender profile exists first (Safety check)
-            const { data: senderProfile, error: profileError } = await supabase
-                .from('profiles')
-                .select('id, username')
-                .eq('id', currentUser.id)
-                .single();
-
-            if (profileError || !senderProfile) {
-                console.error("Sender profile not found in database:", profileError);
+            // Profile verification is no longer needed via extra Supabase round-trip,
+            // we already have the local session Profile in useAuthStore.
+            const senderProfile = currentUser;
+            
+            if (!senderProfile || !senderProfile.username) {
                 Alert.alert('Profile Error', 'Your profile details are missing. Please update your profile in settings first.');
                 return;
             }
@@ -197,13 +203,13 @@ export const useContactSuggestions = () => {
             const { error: requestError } = await supabase
                 .from('friend_requests')
                 .insert([{
-                    sender_id: currentUser.id,
+                    sender_id: currentUserId,
                     receiver_id: receiverId,
                     status: 'pending'
                 }]);
 
             if (requestError) {
-                console.error("Friend request insert error:", requestError);
+                if (__DEV__) console.error("Friend request insert error:", requestError);
                 // Revert on error
                 setSuggestions(prev => prev.map(p => 
                     p.id === receiverId ? { ...p, requestStatus: null } : p
@@ -215,20 +221,20 @@ export const useContactSuggestions = () => {
             try {
                 await supabase.from('notifications').insert([{
                     user_id: receiverId,
-                    sender_id: currentUser.id,
+                    sender_id: currentUserId,
                     type: 'friend_request',
                     message: `${senderProfile.username || 'A contact'} sent you a friend request.`,
                     is_read: false
                 }]);
             } catch (notifErr) {
-                console.warn("Notification failed to send:", notifErr);
+                if (__DEV__) console.warn("Notification failed to send:", notifErr);
             }
 
         } catch (error: any) {
-            console.error("Overall sendRequest error:", error);
+            if (__DEV__) console.error("Overall sendRequest error:", error);
             Alert.alert('Error', 'Failed to send friend request. ' + error.message);
         }
-    };
+    }, [currentUser, currentUserId]);
 
     return {
         suggestions,

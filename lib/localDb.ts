@@ -155,6 +155,25 @@ export const initDatabase = async () => {
             );
         `);
 
+        // 14. Media Cache Table
+        await db.execAsync(`
+            CREATE TABLE IF NOT EXISTS media_cache (
+                remote_url TEXT PRIMARY KEY NOT NULL,
+                local_uri TEXT NOT NULL,
+                file_type TEXT,
+                file_size INTEGER,
+                created_at TEXT NOT NULL
+            );
+        `);
+
+        // 15. Create Indexes for Messages Table
+        await db.execAsync(`
+            CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages (sender_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages (receiver_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_group ON messages (group_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at DESC);
+        `);
+
 
         // Migration: Ensure needs_sync exists in profiles
         try {
@@ -326,6 +345,10 @@ export const syncLedgerExpense = async (db: SQLite.SQLiteDatabase, msg: any, cur
 
 export const getLocalMessages = async (db: SQLite.SQLiteDatabase, friendId: string, isGroup: boolean = false, limit: number = 20, offset: number = 0) => {
     try {
+        const { useAuthStore } = require('@/store/useAuthStore');
+        const currentUser = useAuthStore.getState().user;
+        if (!currentUser) return [];
+
         const query = isGroup 
             ? `SELECT m.*, 
                       r.id as reply_id, r.message as reply_message, r.sender_id as reply_sender_id, r.file_url as reply_file_url, r.file_type as reply_file_type
@@ -337,10 +360,10 @@ export const getLocalMessages = async (db: SQLite.SQLiteDatabase, friendId: stri
                       r.id as reply_id, r.message as reply_message, r.sender_id as reply_sender_id, r.file_url as reply_file_url, r.file_type as reply_file_type
                FROM messages m 
                LEFT JOIN messages r ON m.reply_to_id = r.id 
-               WHERE (m.sender_id = ? OR m.receiver_id = ?) AND m.group_id IS NULL 
+               WHERE ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)) AND m.group_id IS NULL 
                ORDER BY m.created_at DESC LIMIT ? OFFSET ?`;
         
-        const params = isGroup ? [friendId, limit, offset] : [friendId, friendId, limit, offset];
+        const params = isGroup ? [friendId, limit, offset] : [currentUser.id, friendId, friendId, currentUser.id, limit, offset];
         const results = await db.getAllAsync<any>(query, params);
         
         return results.map(row => {
@@ -875,7 +898,21 @@ export const markMessageDeliveredLocally = async (db: SQLite.SQLiteDatabase, mes
             [messageId]
         );
     } catch (error) {
-        console.error('[ERROR] Failed to mark message delivered locally:', error);
+        if (__DEV__) console.error('[ERROR] Failed to mark message delivered locally:', error);
+    }
+};
+
+// Batch mark messages as 'delivered' in local DB
+export const batchMarkMessageDeliveredLocally = async (db: SQLite.SQLiteDatabase, messageIds: string[]) => {
+    try {
+        if (!messageIds || messageIds.length === 0) return;
+        const placeholders = messageIds.map(() => '?').join(',');
+        await db.runAsync(
+            `UPDATE messages SET status = 'delivered' WHERE id IN (${placeholders}) AND status = 'sent'`,
+            messageIds
+        );
+    } catch (error) {
+        if (__DEV__) console.error('[ERROR] Failed to batch mark messages delivered locally:', error);
     }
 };
 

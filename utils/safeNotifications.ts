@@ -2,7 +2,7 @@
 // STRICT MODE: Safe wrapper for expo-notifications
 // COMPLETELY MOCKED to prevent Expo Go SDK 53+ crashes due to side-effects
 
-console.warn("Using Safe Protected Notifications Wrapper");
+if (__DEV__) console.warn("Using Safe Protected Notifications Wrapper");
 
 const Notifications: any = {
     setNotificationHandler: () => { },

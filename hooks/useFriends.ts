@@ -29,8 +29,14 @@ export const useFriends = () => {
     useEffect(() => {
         if (!currentUser) return;
 
-        const uniqueChannelId = `useFriends-${currentUser.id}-${Math.random().toString(36).substring(7)}`;
+        const uniqueChannelId = `useFriends-${currentUser.id}`;
         console.log(`[DEBUG] useFriends: Subscribing to channel: ${uniqueChannelId}`);
+
+        // Cleanup any lingering channel from fast refresh or StrictMode
+        const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${uniqueChannelId}`);
+        if (existingChannel) {
+            supabase.removeChannel(existingChannel);
+        }
 
         const channel = supabase
             .channel(uniqueChannelId)
@@ -45,11 +51,6 @@ export const useFriends = () => {
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'status_views' }, () => {
                 debouncedLoad(currentUser.id);
-            })
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-                if (payload.new.receiver_id === currentUser.id || payload.new.sender_id === currentUser.id || payload.new.group_id) {
-                    debouncedLoad(currentUser.id);
-                }
             })
             .subscribe();
 

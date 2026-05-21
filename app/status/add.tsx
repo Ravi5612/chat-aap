@@ -146,9 +146,10 @@ export default function AddStatus() {
             // Go back instantly! No delay, no spinner!
             router.back();
 
-            // Run the actual media uploading & Supabase posting in the background asynchronously
-            (async () => {
-                try {
+            // Wait 500ms for navigation transition to finish before heavy crypto/network ops
+            setTimeout(() => {
+                (async () => {
+                    try {
                     let mediaUrl = null;
 
                     if (selectedMedia) {
@@ -202,10 +203,11 @@ export default function AddStatus() {
                             active: currentActive.filter((s: any) => s.id !== tempId)
                         }
                     });
-                } finally {
-                    isSubmittingRef.current = false;
-                }
-            })();
+                    } finally {
+                        isSubmittingRef.current = false;
+                    }
+                })();
+            }, 500);
 
         } catch (error: any) {
             console.error('AddStatus Initialization Error:', error);

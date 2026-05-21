@@ -5,7 +5,7 @@ import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
 import FriendListItem from '@/components/chat/FriendListItem';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useStatusActions } from '@/hooks/useStatusActions';
 import { Ionicons } from '@expo/vector-icons';
@@ -130,8 +130,7 @@ function HomeScreen() {
                 const { error } = await supabase
                   .from('friendships')
                   .delete()
-                  .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
-                  .or(`user_id.eq.${friend.id},friend_id.eq.${friend.id}`);
+                  .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${currentUser.id})`);
 
                 if (!error) {
                   loadFriends();
@@ -206,32 +205,33 @@ function HomeScreen() {
     setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`);
   }, []);
 
-  const filteredItems = combinedItems.filter(item => {
-    // Tab filtering
-    let tabMatch = true;
-    if (activeTab === 'all') tabMatch = !item.isArchived && !item.isLocked;
-    else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived && !item.isLocked;
-    else if (activeTab === 'groups') tabMatch = item.isGroup && !item.isArchived && !item.isLocked;
-    else if (activeTab === 'favourites') tabMatch = item.isFavorite && !item.isArchived && !item.isLocked;
-    else if (activeTab === 'archive') tabMatch = item.isArchived && !item.isLocked;
-    else if (activeTab === 'locked') tabMatch = item.isLocked;
+  const filteredItems = useMemo(() => {
+    return combinedItems.filter(item => {
+      // Tab filtering
+      let tabMatch = true;
+      if (activeTab === 'all') tabMatch = !item.isArchived && !item.isLocked;
+      else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived && !item.isLocked;
+      else if (activeTab === 'groups') tabMatch = item.isGroup && !item.isArchived && !item.isLocked;
+      else if (activeTab === 'favourites') tabMatch = item.isFavorite && !item.isArchived && !item.isLocked;
+      else if (activeTab === 'archive') tabMatch = item.isArchived && !item.isLocked;
+      else if (activeTab === 'locked') tabMatch = item.isLocked;
 
-    // Search query filtering
-    const searchMatch = !searchQuery ||
-      (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      // Search query filtering
+      const searchMatch = !searchQuery ||
+        (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    return tabMatch && searchMatch;
+      return tabMatch && searchMatch;
+    });
+  }, [combinedItems, activeTab, searchQuery]);
 
-  });
-
-  const tabCounts = {
+  const tabCounts = useMemo(() => ({
     all: combinedItems.filter(i => !i.isArchived && !i.isLocked).length,
     friends: combinedItems.filter(i => !i.isGroup && !i.isArchived && !i.isLocked).length,
     groups: combinedItems.filter(i => i.isGroup && !i.isArchived && !i.isLocked).length,
     favourites: combinedItems.filter(i => i.isFavorite && !i.isArchived && !i.isLocked).length,
     archive: combinedItems.filter(i => i.isArchived && !i.isLocked).length,
     locked: combinedItems.filter(i => i.isLocked).length,
-  };
+  }), [combinedItems]);
 
 
   const [refreshing, setRefreshing] = useState(false);
@@ -242,6 +242,19 @@ function HomeScreen() {
     await loadFriends(currentUser.id, true); // Force refresh with loader
     setRefreshing(false);
   }, [currentUser, loadFriends]);
+
+  const pendingSentCount = useMemo(() => sentRequests.filter(r => r.status === 'pending').length, [sentRequests]);
+
+  const renderItem = useCallback(({ item }: { item: any }) => (
+    <FriendListItem
+      friend={item}
+      onClick={handleSelectFriend}
+      onLongPress={handleLongPress}
+      isOnline={item.isOnline}
+      onViewUserStatus={handleViewUserStatus}
+      onImageClick={handleImageClick}
+    />
+  ), [handleSelectFriend, handleLongPress, handleViewUserStatus, handleImageClick]);
 
   if (loading && combinedItems.length === 0) {
     return (
@@ -327,9 +340,9 @@ function HomeScreen() {
               style={{ position: 'relative' }}
             >
               <Ionicons name="paper-plane-outline" size={26} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
-              {sentRequests.filter(r => r.status === 'pending').length > 0 && (
+              {pendingSentCount > 0 && (
                 <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: Platform.OS === 'android' ? '#F68537' : 'white' }}>
-                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{sentRequests.filter(r => r.status === 'pending').length}</Text>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{pendingSentCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -357,9 +370,9 @@ function HomeScreen() {
               style={{ position: 'relative' }}
             >
               <Ionicons name="notifications-outline" size={26} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
-              {getCounts().unread > 0 && (
-                <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: Platform.OS === 'android' ? '#F68537' : 'white' }}>
-                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{getCounts().unread}</Text>
+              {getCounts.unread > 0 && (
+                <View style={{ backgroundColor: '#EF4444', borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1, position: 'absolute', top: -5, right: -10 }}>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{getCounts.unread}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -369,7 +382,7 @@ function HomeScreen() {
         <FlatList
           style={{ flex: 1 }}
           data={filteredItems}
-          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          keyExtractor={(item) => item.id?.toString() || item.email?.toString() || 'unknown'}
           contentContainerStyle={{ paddingBottom: 110 }}
           ListHeaderComponent={
             <View>
@@ -429,16 +442,7 @@ function HomeScreen() {
               )}
             </View>
           }
-          renderItem={({ item }) => (
-            <FriendListItem
-              friend={item}
-              onClick={handleSelectFriend}
-              onLongPress={handleLongPress}
-              isOnline={item.isOnline}
-              onViewUserStatus={handleViewUserStatus}
-              onImageClick={handleImageClick}
-            />
-          )}
+          renderItem={renderItem}
           ListEmptyComponent={
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
               <Text style={{ color: '#9CA3AF', textAlign: 'center' }}>

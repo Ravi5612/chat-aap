@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import { Buffer } from 'buffer';
 import * as FileSystem from 'expo-file-system';
 
 export const uploadChatMessageMedia = async (
@@ -24,7 +23,6 @@ export const uploadChatMessageMedia = async (
             contentType = 'audio/m4a';
         } else if (type === 'document') {
             fileName += `_${originalFileName || 'file'}`;
-            // Clean up fileName to avoid spaces and weird characters causing URL issues
             fileName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
             contentType = mimeType || 'application/octet-stream';
         }
@@ -35,23 +33,20 @@ export const uploadChatMessageMedia = async (
         const fileInfo = await FileSystem.getInfoAsync(uri);
         const fileSize = fileInfo.exists ? fileInfo.size : 0;
 
-        // Read file as base64
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-            encoding: 'base64',
-        });
-
-        const binaryData = Buffer.from(base64, 'base64');
+        // Use fetch + arrayBuffer instead of base64 + Buffer to avoid OOM on large files
+        const response = await fetch(uri);
+        const arrayBuffer = await response.arrayBuffer();
 
         const { data, error } = await supabase.storage
             .from('chat-files')
-            .upload(filePath, binaryData, {
+            .upload(filePath, arrayBuffer, {
                 contentType: contentType,
                 cacheControl: '3600',
                 upsert: false
             });
 
         if (error) {
-            console.error('Upload error details:', error);
+            if (__DEV__) console.error('Upload error details:', error);
             throw error;
         }
 
@@ -66,7 +61,7 @@ export const uploadChatMessageMedia = async (
             size: fileSize
         };
     } catch (error) {
-        console.error('Error in uploadChatMessageMedia:', error);
+        if (__DEV__) console.error('Error in uploadChatMessageMedia:', error);
         throw error;
     }
 };
@@ -75,23 +70,20 @@ export const uploadGroupAvatar = async (uri: string) => {
     try {
         const fileName = `group-avatars/${Date.now()}.jpg`;
 
-        // Read file as base64
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-            encoding: 'base64',
-        });
-
-        const binaryData = Buffer.from(base64, 'base64');
+        // Use fetch + arrayBuffer instead of base64 + Buffer to avoid OOM on large files
+        const response = await fetch(uri);
+        const arrayBuffer = await response.arrayBuffer();
 
         const { data, error } = await supabase.storage
             .from('chat-files')
-            .upload(fileName, binaryData, {
+            .upload(fileName, arrayBuffer, {
                 contentType: 'image/jpeg',
                 cacheControl: '3600',
                 upsert: false
             });
 
         if (error) {
-            console.error('Group Avatar Upload error details:', error);
+            if (__DEV__) console.error('Group Avatar Upload error details:', error);
             throw error;
         }
 
@@ -101,7 +93,7 @@ export const uploadGroupAvatar = async (uri: string) => {
 
         return { url: publicUrl };
     } catch (error) {
-        console.error('Error in uploadGroupAvatar:', error);
+        if (__DEV__) console.error('Error in uploadGroupAvatar:', error);
         throw error;
     }
 };
