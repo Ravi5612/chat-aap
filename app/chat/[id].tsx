@@ -659,6 +659,9 @@ function ChatScreen() {
                     </TouchableOpacity>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <TouchableOpacity onPress={() => useDebugStore.getState().toggleVisible()}>
+                        <Ionicons name="bug-outline" size={22} color="#F68537" />
+                    </TouchableOpacity>
                     <TouchableOpacity 
                         onPress={() => {
                             if (isBlocked) Alert.alert("Blocked", "Unblock this user to call.");
@@ -788,10 +791,15 @@ function ChatScreen() {
             />
 
             <MediaViewer
-                visible={viewerVisible}
-                onClose={() => setViewerVisible(false)}
-                imageUri={viewerImage}
+                visible={!!mediaViewerUrl}
+                mediaUrl={mediaViewerUrl || ''}
+                mediaType={mediaViewerUrl?.endsWith('.mp4') ? 'video' : 'image'}
+                onClose={() => setMediaViewerUrl(null)}
+                senderName={friendName || 'User'}
             />
+            
+            <DebugConsole />
+        </View>
 
             <LedgerModal 
                 visible={ledgerVisible}
