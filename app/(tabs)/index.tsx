@@ -115,23 +115,74 @@ function HomeScreen() {
         );
         break;
 
-      case 'delete':
+      case 'unfriend':
         Alert.alert(
-          "Delete Chat",
-          `Are you sure you want to delete your chat with ${friend.name}?`,
+          "Unfriend",
+          `Kya aap sach me ${friend.name} ko unfriend karna chahte ho?`,
           [
             { text: "Cancel", style: "cancel" },
             {
-              text: "Delete",
+              text: "Unfriend",
               style: "destructive",
               onPress: async () => {
-                const { error } = await supabase
-                  .from('friendships')
-                  .delete()
-                  .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${currentUser.id})`);
+                try {
+                  const { error } = await supabase
+                    .from('friendships')
+                    .delete()
+                    .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${currentUser.id})`);
 
-                if (!error) {
-                  loadFriends();
+                  if (error) throw error;
+
+                  const { db } = useDbStore.getState();
+                  if (db) {
+                    await db.runAsync("UPDATE conversations SET last_message = last_message WHERE id = ?", [friend.id]);
+                  }
+
+                  useFriendsStore.setState((state) => ({
+                    friends: state.friends.filter(f => f.id !== friend.id),
+                    combinedItems: state.combinedItems.map(f => f.id === friend.id ? { ...f, isUnfriended: true } : f)
+                  }));
+
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (e: any) {
+                  Alert.alert("Error", `Unfriend nahi ho saka: ${e.message}`);
+                }
+              }
+            }
+          ]
+        );
+        break;
+
+      case 'delete':
+        Alert.alert(
+          "Delete Chat",
+          `Are you sure you want to delete your chat with ${friend.name}? This will only delete the chat for you.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete for Me",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  const { db } = useDbStore.getState();
+                  if (db) {
+                    await clearLocalChat(db, friend.id);
+                    await saveChatClearTimestamp(db, friend.id, new Date().toISOString());
+                    
+                    // Clear locally in Zustand
+                    useChatStore.setState((state) => {
+                        const newCache = { ...state.cache };
+                        if (newCache[friend.id]) newCache[friend.id] = { ...newCache[friend.id], messages: [] };
+                        return { messages: [], cache: newCache };
+                    });
+                    
+                    useFriendsStore.setState((state) => ({
+                        combinedItems: state.combinedItems.filter(i => i.id !== friend.id)
+                    }));
+                  }
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (e) {
+                  Alert.alert("Error", "Failed to clear chat");
                 }
               }
             }

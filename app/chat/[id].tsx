@@ -57,6 +57,8 @@ function ChatScreen() {
     const { blockUser, unblockUser } = useFriendsStore();
     const [iAmBlocked, setIAmBlocked] = useState(false);
     const isBlocked = safeFriendId && blockedUserIds.includes(safeFriendId);
+    // Friendship status — only relevant for 1-on-1 chats
+    const [isFriend, setIsFriend] = useState<boolean | null>(null); // null = still checking
 
     const checkBlockStatus = useCallback(async () => {
         if (!currentUser || !safeFriendId || isGroup === 'true') return;
@@ -70,10 +72,24 @@ function ChatScreen() {
         setIAmBlocked(!!data && !error);
     }, [currentUser, safeFriendId, isGroup]);
 
+    const checkFriendshipStatus = useCallback(async () => {
+        if (!currentUser || !safeFriendId || isGroup === 'true') {
+            setIsFriend(true); // groups are always "friends" for UI purposes
+            return;
+        }
+        const { data } = await supabase
+            .from('friendships')
+            .select('id')
+            .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${safeFriendId}),and(user_id.eq.${safeFriendId},friend_id.eq.${currentUser.id})`)
+            .maybeSingle();
+        setIsFriend(!!data);
+    }, [currentUser, safeFriendId, isGroup]);
+
     useEffect(() => {
         checkBlockStatus();
+        checkFriendshipStatus();
         
-        // Subscribe to block changes to update UI in real-time
+        // Subscribe to block + friendship changes to update UI in real-time
         const channel = supabase
             .channel(`block-status-${safeFriendId}`)
             .on('postgres_changes', { 
@@ -88,10 +104,17 @@ function ChatScreen() {
                 // Refresh "I am blocked" status
                 checkBlockStatus();
             })
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'friendships'
+            }, () => {
+                checkFriendshipStatus();
+            })
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [safeFriendId, checkBlockStatus, currentUser]);
+    }, [safeFriendId, checkBlockStatus, checkFriendshipStatus, currentUser]);
 
     const friendData = useMemo(() => (combinedItems || []).find(f => f?.id === safeFriendId), [combinedItems, safeFriendId]);
 
@@ -533,6 +556,60 @@ function ChatScreen() {
         }
     };
 
+    const handleUnfriend = () => {
+        Alert.alert(
+            "Unfriend",
+            `Kya aap sach me ${friendName} ko unfriend karna chahte ho? Dono ek dusre ko message nahi kar payenge jab tak dobara request na ho.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Unfriend",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            if (!currentUser) return;
+                            // 1. Delete from Supabase (both directions)
+                            const { error } = await supabase
+                                .from('friendships')
+                                .delete()
+                                .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${safeFriendId}),and(user_id.eq.${safeFriendId},friend_id.eq.${currentUser.id})`);
+
+                            if (error) throw error;
+
+                            // 2. Clean local SQLite (messages stay for read-only viewing)
+                            // We do NOT delete messages so both can still read old chat
+                            // Just update conversation record to mark as unfriended
+                            const { db } = useDbStore.getState();
+                            if (db) {
+                                await db.runAsync(
+                                    "UPDATE conversations SET last_message = last_message WHERE id = ?",
+                                    [safeFriendId]
+                                );
+                            }
+
+                            // 3. Update Zustand - mark as unfriended in friends store
+                            useFriendsStore.setState((state) => ({
+                                friends: state.friends.filter(f => f.id !== safeFriendId),
+                                combinedItems: state.combinedItems.map(f =>
+                                    f.id === safeFriendId ? { ...f, isUnfriended: true } : f
+                                )
+                            }));
+
+                            // 4. Update local isFriend state - this triggers read-only UI immediately
+                            setIsFriend(false);
+
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            Alert.alert("Unfriended", `${friendName} ko unfriend kar diya. Ab dono ek dusre ko message nahi kar sakte jab tak dobara request na ho.`);
+                        } catch (e: any) {
+                            console.error('[CHAT] Unfriend failed:', e);
+                            Alert.alert("Error", `Unfriend nahi ho saka: ${e.message || 'Unknown error'}`);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const handleViewProfile = () => { router.push(`/profile/${friendId}` as any); };
 
     const handleLongPress = (message: any, y: number) => {
@@ -693,6 +770,7 @@ function ChatScreen() {
                         onGroupInfo={() => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any)}
                         onClearChat={handleClearChat} 
                         onBlockUser={handleBlockToggle} 
+                        onUnfriend={handleUnfriend}
                         isBlocked={isBlocked} 
                         isMember={isMember} 
                         isGroup={isGroup === 'true'} 
@@ -728,7 +806,51 @@ function ChatScreen() {
                     </View>
                 )}
 
-                {!isBlocked && !iAmBlocked && (
+                {/* Unfriended Banner - shown when friendship has ended */}
+                {isFriend === false && isGroup !== 'true' && (
+                    <View style={{
+                        marginHorizontal: 12,
+                        marginBottom: 10,
+                        borderRadius: 18,
+                        backgroundColor: '#FFF7ED',
+                        borderWidth: 1.5,
+                        borderColor: '#FED7AA',
+                        padding: 16,
+                        alignItems: 'center',
+                        gap: 8,
+                    }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Ionicons name="person-remove-outline" size={20} color="#F68537" />
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: '#C2410C' }}>
+                                Tum dono ab friends nahi ho
+                            </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: '#9A3412', textAlign: 'center', lineHeight: 18 }}>
+                            Purani chat pad sakte ho, lekin message karne ke liye pehle friend request bhejna hoga.
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => router.push(`/profile/${safeFriendId}` as any)}
+                            style={{
+                                marginTop: 4,
+                                backgroundColor: '#F68537',
+                                paddingVertical: 10,
+                                paddingHorizontal: 28,
+                                borderRadius: 24,
+                                elevation: 2,
+                                shadowColor: '#F68537',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 4,
+                            }}
+                        >
+                            <Text style={{ color: 'white', fontWeight: '800', fontSize: 14, letterSpacing: 0.3 }}>
+                                👤 Friend Request Bhejna
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {!isBlocked && !iAmBlocked && isFriend !== false && (
                     <ChatInput
                         onSendMessage={handleSendMessage}
                         onTyping={handleTypingStatus}
