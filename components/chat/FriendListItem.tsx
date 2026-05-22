@@ -1,6 +1,7 @@
 import React, { useRef, memo } from 'react';
 import { View, Text, Image, TouchableOpacity, Animated, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 
 interface FriendListItemProps {
     friend: any;
@@ -11,7 +12,7 @@ interface FriendListItemProps {
     onImageClick?: (friend: any) => void;
 }
 
-const FriendListItem = memo(function FriendListItem({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
+const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
     const hasStatus = friend.statusCount > 0;
     const ringColor = hasStatus
         ? (friend.allStatusesViewed ? '#D1D5DB' : '#10B981')
@@ -158,4 +159,10 @@ const FriendListItem = memo(function FriendListItem({ friend, onClick, onLongPre
     );
 });
 
-export default FriendListItem;
+export default function FriendListItem(props: FriendListItemProps) {
+    return (
+        <ComponentErrorBoundary fallbackName={`Friend List Item (${props.friend?.name || 'Unknown'})`}>
+            <FriendListItemInner {...props} />
+        </ComponentErrorBoundary>
+    );
+}

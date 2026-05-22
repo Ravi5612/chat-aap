@@ -255,3 +255,5 @@ const styles = StyleSheet.create({
     skeletonMyStatus: { height: 120, backgroundColor: 'white', borderRadius: 24, marginBottom: 20, marginTop: 10, opacity: 0.6 },
     skeletonItem: { height: 80, backgroundColor: 'white', borderRadius: 24, marginBottom: 12, opacity: 0.6 }
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

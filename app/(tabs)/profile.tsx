@@ -367,3 +367,5 @@ const styles = StyleSheet.create({
     }
 });
 
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';
+

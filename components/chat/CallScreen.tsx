@@ -26,6 +26,12 @@ interface CallScreenProps {
     endReason?: string;
 }
 
+const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
 export default function CallScreen({
     visible,
     callState,
@@ -423,6 +429,8 @@ export default function CallScreen({
         </Modal>
     );
 }
+
+const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
     container: {

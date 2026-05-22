@@ -21,22 +21,26 @@ export const useDebugStore = create<DebugStore>((set) => ({
     clearLogs: () => set({ logs: [] })
 }));
 
-// Override console methods to capture logs
-const originalLog = console.log;
-const originalWarn = console.warn;
-const originalError = console.error;
+// -------------------------------------------------------------------------
+// Debug console override – ONLY active in development mode
+// -------------------------------------------------------------------------
+if (__DEV__) {
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  const originalError = console.error;
 
-console.log = (...args) => {
+  console.log = (...args) => {
     originalLog(...args);
     useDebugStore.getState().addLog(`INFO: ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`);
-};
+  };
 
-console.warn = (...args) => {
+  console.warn = (...args) => {
     originalWarn(...args);
     useDebugStore.getState().addLog(`WARN: ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`);
-};
+  };
 
-console.error = (...args) => {
+  console.error = (...args) => {
     originalError(...args);
     useDebugStore.getState().addLog(`ERROR: ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`);
-};
+  };
+}

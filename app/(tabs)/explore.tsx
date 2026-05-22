@@ -110,3 +110,5 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

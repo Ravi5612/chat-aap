@@ -159,3 +159,5 @@ export default function UserProfileScreen() {
         </View>
     );
 }
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

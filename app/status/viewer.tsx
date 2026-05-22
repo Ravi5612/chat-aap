@@ -370,8 +370,30 @@ export default function StatusViewer() {
             // 2. Encrypt the reply text
             const encryptedReply = await encryptText(replyText.trim(), chatKey);
 
-            // 3. Insert as an encrypted message
-            const { error } = await supabase.from('messages').insert([{
+            // 3. Optimistically save to local DB
+            const { useDbStore } = await import('@/store/useDbStore');
+            const { saveLocalMessage } = await import('@/lib/localDb');
+            const { db } = useDbStore.getState();
+            
+            const tempId = `temp-${Date.now()}`;
+            const tempMsg: any = {
+                id: tempId,
+                sender_id: currentUser.id,
+                receiver_id: userId,
+                message: replyText.trim(), // plain text for local UI
+                message_type: 'text',
+                status: 'pending',
+                is_read: false,
+                status_id: currentStatusUI.id,
+                created_at: new Date().toISOString()
+            };
+
+            if (db) {
+                saveLocalMessage(db, tempMsg);
+            }
+
+            // 4. Insert as an encrypted message
+            const { data, error } = await supabase.from('messages').insert([{
                 sender_id: currentUser.id,
                 receiver_id: userId,
                 message: encryptedReply, // Now encrypted!
@@ -379,9 +401,19 @@ export default function StatusViewer() {
                 status: 'sent',
                 is_read: false,
                 status_id: currentStatusUI.id
-            }]);
+            }]).select().single();
 
             if (error) throw error;
+
+            // 5. Replace temp message with confirmed message
+            if (db && data) {
+                try {
+                    await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
+                } catch (e) {
+                    console.warn('[DB] Failed to delete temp status reply:', e);
+                }
+                saveLocalMessage(db, { ...data, message: replyText.trim() });
+            }
 
             setReplyText('');
             Alert.alert('Sent', 'Your reply has been sent! 🚀');
@@ -741,3 +773,5 @@ export default function StatusViewer() {
         </View>
     );
 }
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

@@ -3,13 +3,14 @@ import { View, Text, TouchableOpacity, Image, ActivityIndicator, StyleSheet, Lay
 import { useContactSuggestions } from '@/hooks/useContactSuggestions';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export default function ContactSuggestions() {
+function ContactSuggestionsInner() {
     const { suggestions, loading, permissionGranted, loadSuggestions, sendRequest } = useContactSuggestions();
 
     if (permissionGranted === false || suggestions.length === 0) {
@@ -206,3 +207,11 @@ const styles = StyleSheet.create({
         fontWeight: 'bold'
     }
 });
+
+export default function ContactSuggestions() {
+    return (
+        <ComponentErrorBoundary fallbackName="Contact Suggestions">
+            <ContactSuggestionsInner />
+        </ComponentErrorBoundary>
+    );
+}

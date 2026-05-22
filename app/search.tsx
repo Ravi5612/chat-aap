@@ -213,3 +213,5 @@ export default function SearchPeopleScreen() {
         </SafeAreaView>
     );
 }
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

@@ -19,6 +19,7 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import FlyingReaction from './FlyingReaction';
 import MessageStatus from './MessageStatus';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
+import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 
 interface MessageItemProps {
     message: any;
@@ -47,7 +48,7 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
     );
 };
 
-const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
+const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
     const router = useRouter();
     const swipeX = useSharedValue(0);
     const hasVibrated = useSharedValue(false);
@@ -776,4 +777,10 @@ const MessageItem = memo(({ message, isCurrentUser, onLongPress, onReply, onRepl
     );
 }, areEqual);
 
-export default MessageItem;
+export default function MessageItem(props: MessageItemProps) {
+    return (
+        <ComponentErrorBoundary fallbackName={`Message Bubble`}>
+            <MessageItemInner {...props} />
+        </ComponentErrorBoundary>
+    );
+}

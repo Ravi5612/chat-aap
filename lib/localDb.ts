@@ -208,6 +208,14 @@ export const initDatabase = async () => {
             // Columns probably already exist, ignore
         }
 
+        // Migration: Ensure email exists in conversations
+        try {
+            await db.execAsync('ALTER TABLE conversations ADD COLUMN email TEXT;');
+            console.log('[DB] Migration: Added email to conversations');
+        } catch (e) {
+            // Column probably already exists, ignore
+        }
+
         // Migration: Ensure message_type exists in messages
         try {
             await db.execAsync('ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT \'text\';');
@@ -812,11 +820,12 @@ export const getLocalCallLogs = async (db: SQLite.SQLiteDatabase, userId: string
 export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any) => {
     try {
         await db.runAsync(
-            `INSERT OR REPLACE INTO conversations (id, name, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT OR REPLACE INTO conversations (id, name, email, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 conv.id,
                 conv.name || 'Unknown',
+                conv.email || null,
                 conv.img || null,
                 conv.last_message || '',
                 conv.lastActivity || '0',
@@ -841,6 +850,7 @@ export const getLocalConversations = async (db: SQLite.SQLiteDatabase) => {
         );
         return results.map(row => ({
             ...row,
+            email: row.email,
             img: row.avatar,
             unreadCount: row.unread_count,
             isGroup: row.is_group === 1,

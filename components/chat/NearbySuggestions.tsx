@@ -13,7 +13,25 @@ export default function NearbySuggestions() {
 
     const [requestedIds, setRequestedIds] = React.useState<string[]>([]);
 
-    if (!loading && nearbyPeople.length === 0) return null;
+    if (!loading && nearbyPeople.length === 0) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.emptyCard}>
+                    <View style={styles.emptyIconCircle}>
+                        <Ionicons name="location-outline" size={32} color="#F68537" />
+                    </View>
+                    <Text style={styles.emptyTitle}>No Warriors Nearby</Text>
+                    <Text style={styles.emptyText}>
+                        Abhi aapke aas-paas koi bhi warrior online nahi hai. Jaise hi koi aayega, yahan dikh jayega!
+                    </Text>
+                    <View style={styles.emptyHintRow}>
+                        <Ionicons name="radio-outline" size={14} color="#94A3B8" />
+                        <Text style={styles.emptyHint}>Scanning within 1 KM radius</Text>
+                    </View>
+                </View>
+            </View>
+        );
+    }
 
     const sendRequest = async (targetId: string) => {
         if (!currentUser || requestedIds.includes(targetId)) return;
@@ -225,5 +243,56 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 11,
         fontWeight: 'bold',
+    },
+    emptyCard: {
+        backgroundColor: 'white',
+        borderRadius: 20,
+        padding: 24,
+        marginHorizontal: 20,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#FFF1E0',
+        elevation: 2,
+        shadowColor: '#F68537',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+    },
+    emptyIconCircle: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#FFF7ED',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    emptyTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1F2937',
+        marginBottom: 6,
+    },
+    emptyText: {
+        fontSize: 13,
+        color: '#6B7280',
+        textAlign: 'center',
+        lineHeight: 19,
+        paddingHorizontal: 10,
+        marginBottom: 12,
+    },
+    emptyHintRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+    },
+    emptyHint: {
+        fontSize: 11,
+        color: '#94A3B8',
+        fontWeight: '600',
     },
 });

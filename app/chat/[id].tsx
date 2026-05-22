@@ -35,7 +35,7 @@ import {
     markMessageDeliveredLocally
 } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
-import { useDebugStore } from '@/store/useDebugStore';
+
 
 function ChatScreen() {
     const logDebug = useCallback((msg: string) => {}, []);
@@ -794,7 +794,7 @@ function ChatScreen() {
                 onClose={() => setViewerVisible(false)}
             />
             
-            <DebugConsole />
+
             <LedgerModal 
                 visible={ledgerVisible}
                 onClose={() => setLedgerVisible(false)}
@@ -853,7 +853,6 @@ class ChatErrorBoundary extends React.Component<{ children: React.ReactNode }, {
         console.error("[CRITICAL_SCREEN_ERROR]", error, errorInfo);
         this.setState({ errorInfo });
     }
-
     render() {
         if (this.state.hasError) {
             return (
@@ -868,19 +867,8 @@ class ChatErrorBoundary extends React.Component<{ children: React.ReactNode }, {
                             <Text style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10 }}>
                                 {this.state.error?.stack || "No stack trace available"}
                             </Text>
-                            {this.state.errorInfo && (
-                                <Text style={{ color: '#94A3B8', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginTop: 10 }}>
-                                    Component Stack: {this.state.errorInfo.componentStack}
-                                </Text>
-                            )}
                         </ScrollView>
                     </View>
-                    <TouchableOpacity 
-                        onPress={() => this.setState({ hasError: false, error: null, errorInfo: null })}
-                        style={{ backgroundColor: '#F68537', padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 15 }}
-                    >
-                        <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Reloading Chat</Text>
-                    </TouchableOpacity>
                 </SafeAreaView>
             );
         }
@@ -888,10 +876,6 @@ class ChatErrorBoundary extends React.Component<{ children: React.ReactNode }, {
     }
 }
 
-export default function ChatScreenWithErrorBoundary() {
-    return (
-        <ChatErrorBoundary>
-            <ChatScreen />
-        </ChatErrorBoundary>
-    );
-}
+export default ChatScreen;
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

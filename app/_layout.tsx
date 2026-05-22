@@ -22,6 +22,33 @@ import * as Updates from 'expo-updates';
 import { setupDatabase } from '@/lib/database';
 import { useNearbyNotifications } from '@/hooks/useNearbyNotifications';
 import * as SecureStore from 'expo-secure-store';
+import { ErrorBoundaryProps } from 'expo-router';
+import { TouchableOpacity, Text } from 'react-native';
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={{ flex: 1, backgroundColor: '#FFF5E6', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+        <Text style={{ fontSize: 40 }}>⚠️</Text>
+      </View>
+      <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#1F2937', marginBottom: 12, textAlign: 'center' }}>Oops! Something went wrong.</Text>
+      <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 32, lineHeight: 20 }}>
+        Don't worry, your data is safe. Let's try reloading the screen.
+      </Text>
+      <View style={{ backgroundColor: '#F3F4F6', padding: 16, borderRadius: 12, width: '100%', marginBottom: 32 }}>
+        <Text style={{ fontSize: 12, color: '#EF4444', fontFamily: 'monospace' }}>
+          {error?.message || 'Unknown error occurred'}
+        </Text>
+      </View>
+      <TouchableOpacity 
+        onPress={retry}
+        style={{ backgroundColor: '#F68537', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16, width: '100%', alignItems: 'center' }}
+      >
+        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Reload App</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
@@ -44,6 +71,8 @@ export default function RootLayout() {
     }
     onFetchUpdateAsync();
   }, []);
+
+
 
   const colorScheme = useColorScheme();
   const router = useRouter();
@@ -165,7 +194,7 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }} onLayout={() => setIsMounted(true)}>
+    <GestureHandlerRootView style={{ flex: 1 }} onLayout={() => setTimeout(() => setIsMounted(true), 0)}>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="login" options={{ headerShown: false }} />

@@ -118,7 +118,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             // 1. Fetch Blocked Users & Friendships in parallel
             const [blockedRes, friendshipsSent] = await Promise.all([
                 supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId),
-                supabase.from('friendships').select(`is_favorite, is_archived, is_locked, friend_id, friend:profiles!friendships_friend_id_fkey(id, username, email, avatar_url, is_online)`).eq('user_id', userId)
+                supabase.from('friendships').select(`is_favorite, is_archived, is_locked, friend_id, friend:profiles!friendships_friend_id_fkey(id, username, email, phone, avatar_url, is_online, show_email, show_phone)`).eq('user_id', userId)
             ]);
 
             const blockedIds = blockedRes.data?.map(b => b.blocked_id) || [];
@@ -285,7 +285,8 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                 return {
                     id: otherProfile.id,
                     name: otherProfile.username || 'Unknown',
-                    email: otherProfile.email,
+                    email: otherProfile.show_email !== false ? otherProfile.email : null,
+                    phone: otherProfile.show_phone ? otherProfile.phone : null,
                     img: otherProfile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(otherProfile.username || 'User')}&backgroundColor=F68537`,
                     unreadCount: unreadCountsMap[otherProfile.id] || 0,
                     statusCount: sInfo.count,

@@ -184,7 +184,33 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                         if (db) {
                             saveLocalMessage(db, finalMsg);
                             syncLedgerExpense(db, finalMsg, currentUser.id);
+                            
+                            // ✅ DELIVERED FLOW: Mark message as delivered locally
+                            await markMessageDeliveredLocally(db, finalMsg.id);
                         }
+
+                        // Update Supabase in background (non-blocking)
+                        supabase
+                            .from('messages')
+                            .update({ status: 'delivered' })
+                            .eq('id', finalMsg.id)
+                            .eq('status', 'sent')
+                            .then(() => console.log('[DELIVERED] Supabase updated:', finalMsg.id))
+                            .catch(e => console.warn('[DELIVERED] Supabase update failed:', e));
+
+                        // Broadcast 'delivered' back to the sender in real-time
+                        channel.send({
+                            type: 'broadcast',
+                            event: 'status_update',
+                            payload: {
+                                message_id: finalMsg.id,
+                                sender_id: currentUser.id,
+                                status: 'delivered',
+                            }
+                        });
+
+                        // Mark as read (since chat is open)
+                        useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
                     } catch (e) {
                         console.error("ChatRoom: Realtime decryption failed", e);
                         // Silently reload messages to fix the UI

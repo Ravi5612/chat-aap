@@ -184,3 +184,5 @@ export default function NewGroupScreen() {
         </SafeAreaView>
     );
 }
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

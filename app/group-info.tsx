@@ -436,3 +436,5 @@ const styles = StyleSheet.create({
         alignItems: 'center', justifyContent: 'center',
     },
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

@@ -26,7 +26,6 @@ import ChatLockModal from '@/components/chat/ChatLockModal';
 import * as SecureStore from 'expo-secure-store';
 
 function HomeScreen() {
- 
 
   const router = useRouter();
   const swipeHandlers = useSwipeNavigation();
@@ -75,7 +74,6 @@ function HomeScreen() {
         break;
       case 'group':
         if (friend.isGroup) {
-          // TODO: Navigate to group details/edit screen
           Alert.alert("Coming Soon", "Group management is under construction.");
         } else {
           router.push(`/new-group?initialMemberId=${friend.id}` as any);
@@ -141,7 +139,6 @@ function HomeScreen() {
         );
         break;
       case 'lock':
-        // Check if password exists
         const storedPassword = await SecureStore.getItemAsync('chat_lock_password');
         if (!storedPassword) {
             setPendingLockedFriend(friend);
@@ -191,7 +188,6 @@ function HomeScreen() {
         const imageParam = encodeURIComponent(friend.img || '');
         const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
         
-        // Wrap in setTimeout to allow tap animation to render before heavy navigation
         setTimeout(() => {
             router.push(url as any);
         }, 10);
@@ -207,7 +203,6 @@ function HomeScreen() {
 
   const filteredItems = useMemo(() => {
     return combinedItems.filter(item => {
-      // Tab filtering
       let tabMatch = true;
       if (activeTab === 'all') tabMatch = !item.isArchived && !item.isLocked;
       else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived && !item.isLocked;
@@ -216,7 +211,6 @@ function HomeScreen() {
       else if (activeTab === 'archive') tabMatch = item.isArchived && !item.isLocked;
       else if (activeTab === 'locked') tabMatch = item.isLocked;
 
-      // Search query filtering
       const searchMatch = !searchQuery ||
         (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -239,7 +233,7 @@ function HomeScreen() {
   const onRefresh = useCallback(async () => {
     if (!currentUser) return;
     setRefreshing(true);
-    await loadFriends(currentUser.id, true); // Force refresh with loader
+    await loadFriends(currentUser.id, true);
     setRefreshing(false);
   }, [currentUser, loadFriends]);
 
@@ -332,7 +326,7 @@ function HomeScreen() {
               </View>
             </TouchableOpacity>
 
-            {/* Sent Requests - 🆕 Added */}
+            {/* Sent Requests */}
             <TouchableOpacity
               onPress={() => {
                 router.push('/sent-requests' as any);
@@ -399,26 +393,26 @@ function HomeScreen() {
                       <Text style={{ fontSize: 13, fontWeight: '900', color: '#64748B', letterSpacing: 0.5 }}>SUGGESTIONS FROM</Text>
                       <View style={{ flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 20, padding: 2 }}>
                         {showContactSuggestions && (
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => setSuggestionTab('contacts')}
-                            style={{ 
-                              paddingHorizontal: 12, 
-                              paddingVertical: 4, 
-                              borderRadius: 18, 
-                              backgroundColor: suggestionTab === 'contacts' ? '#F68537' : 'transparent' 
+                            style={{
+                              paddingHorizontal: 12,
+                              paddingVertical: 4,
+                              borderRadius: 18,
+                              backgroundColor: suggestionTab === 'contacts' ? '#F68537' : 'transparent'
                             }}
                           >
                             <Text style={{ fontSize: 11, fontWeight: 'bold', color: suggestionTab === 'contacts' ? 'white' : '#64748B' }}>CONTACTS</Text>
                           </TouchableOpacity>
                         )}
                         {showNearbySuggestions && (
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => setSuggestionTab('nearby')}
-                            style={{ 
-                              paddingHorizontal: 12, 
-                              paddingVertical: 4, 
-                              borderRadius: 18, 
-                              backgroundColor: suggestionTab === 'nearby' ? '#F68537' : 'transparent' 
+                            style={{
+                              paddingHorizontal: 12,
+                              paddingVertical: 4,
+                              borderRadius: 18,
+                              backgroundColor: suggestionTab === 'nearby' ? '#F68537' : 'transparent'
                             }}
                           >
                             <Text style={{ fontSize: 11, fontWeight: 'bold', color: suggestionTab === 'nearby' ? 'white' : '#64748B' }}>NEARBY</Text>
@@ -484,7 +478,6 @@ function HomeScreen() {
                       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                       Alert.alert("Chat Unlocked", "This chat is now visible in the main list.");
                   } else {
-                      // After verification, open chat
                       const f = pendingLockedFriend;
                       const nameParam = encodeURIComponent(f.name || 'Chat');
                       const groupParam = f.isGroup ? 'true' : 'false';
@@ -497,7 +490,6 @@ function HomeScreen() {
         />
 
         {/* Profile Image Zoom Modal */}
-
         <Modal
           visible={!!selectedImageForZoom}
           transparent={true}
@@ -525,66 +517,11 @@ function HomeScreen() {
             </View>
           </TouchableOpacity>
         </Modal>
-
- 
       </View>
     </View>
   );
 }
 
-class HomeErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null, errorInfo: any }> {
-    constructor(props: any) {
-        super(props);
-        this.state = { hasError: false, error: null, errorInfo: null };
-    }
+export default HomeScreen;
 
-    static getDerivedStateFromError(error: Error) {
-        return { hasError: true, error };
-    }
-
-    componentDidCatch(error: Error, errorInfo: any) {
-        console.error("[CRITICAL_HOME_ERROR]", error, errorInfo);
-        this.setState({ errorInfo });
-    }
-
-    render() {
-        if (this.state.hasError) {
-            return (
-                <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF5E6', padding: 20, justifyContent: 'center' }}>
-                    <View style={{ backgroundColor: '#FEE2E2', borderLeftWidth: 5, borderColor: '#EF4444', padding: 15, borderRadius: 8, marginBottom: 15 }}>
-                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#991B1B', marginBottom: 5 }}>⚠️ Home Screen Error Caught!</Text>
-                        <Text style={{ fontSize: 14, color: '#B91C1C', fontWeight: '600' }}>Error: {this.state.error?.message}</Text>
-                    </View>
-                    <Text style={{ fontSize: 12, color: '#4B5563', fontWeight: 'bold', marginBottom: 5 }}>STACK TRACE:</Text>
-                    <View style={{ backgroundColor: '#1E293B', padding: 12, borderRadius: 8, flex: 0.8 }}>
-                        <ScrollView>
-                            <Text style={{ color: '#F1F5F9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10 }}>
-                                {this.state.error?.stack || "No stack trace available"}
-                            </Text>
-                            {this.state.errorInfo && (
-                                <Text style={{ color: '#94A3B8', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10, marginTop: 10 }}>
-                                    Component Stack: {this.state.errorInfo.componentStack}
-                                </Text>
-                            )}
-                        </ScrollView>
-                    </View>
-                    <TouchableOpacity 
-                        onPress={() => this.setState({ hasError: false, error: null, errorInfo: null })}
-                        style={{ backgroundColor: '#F68537', padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 15 }}
-                    >
-                        <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Reloading Home</Text>
-                    </TouchableOpacity>
-                </SafeAreaView>
-            );
-        }
-        return this.props.children;
-    }
-}
-
-export default function HomeScreenWithErrorBoundary() {
-    return (
-        <HomeErrorBoundary>
-            <HomeScreen />
-        </HomeErrorBoundary>
-    );
-}
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

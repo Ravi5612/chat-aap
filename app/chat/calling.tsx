@@ -102,3 +102,5 @@ const styles = StyleSheet.create({
         // You'd use Reanimated for a proper pulse, this is a placeholder
     }
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

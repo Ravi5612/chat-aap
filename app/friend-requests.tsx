@@ -120,3 +120,5 @@ export default function FriendRequestsScreen() {
         </SafeAreaView>
     );
 }
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

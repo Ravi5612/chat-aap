@@ -113,3 +113,5 @@ export default function SentRequestsScreen() {
         </SafeAreaView>
     );
 }
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';
