@@ -1,25 +1,17 @@
-import { getMediaCache, saveMediaCache } from '@/lib/localDb';
-import { useDbStore } from '@/store/useDbStore';
+import React, { memo } from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import React, { memo, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated as RNAnimated, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { 
-    useSharedValue, 
-    useAnimatedStyle, 
-    withSpring, 
-    runOnJS,
-    interpolate,
-    Extrapolation
-} from 'react-native-reanimated';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import FlyingReaction from './FlyingReaction';
-import MessageStatus from './MessageStatus';
-import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
+
+import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
+import { useMessageGestures } from '@/hooks/useMessageGestures';
+import { useStatusContext } from '@/hooks/useStatusContext';
+import MessageStatusContext from './MessageStatusContext';
+import MessageContent from './MessageContent';
 
 interface MessageItemProps {
     message: any;
@@ -30,7 +22,7 @@ interface MessageItemProps {
     onImagePress?: (uri: string) => void;
     friendName?: string;
     flyingEmoji?: any;
-    uploadProgress?: number; // ✅ 0-100, only present while uploading
+    uploadProgress?: number;
 }
 
 const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
@@ -40,153 +32,18 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
         prevProps.message === nextProps.message &&
         prevProps.isCurrentUser === nextProps.isCurrentUser &&
         prevProps.friendName === nextProps.friendName &&
-        // Check if flyingEmoji relevancy changed for this message
-        ((prevProps.flyingEmoji?.messageId === prevMsgId) ===
-            (nextProps.flyingEmoji?.messageId === nextMsgId)) &&
-        // If it was and still is relevant, verify ID hasn't changed
-        (!prevMsgId || prevProps.flyingEmoji?.messageId !== prevMsgId ||
-            prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id) &&
-        // ✅ Re-render when upload progress changes
+        ((prevProps.flyingEmoji?.messageId === prevMsgId) === (nextProps.flyingEmoji?.messageId === nextMsgId)) &&
+        (!prevMsgId || prevProps.flyingEmoji?.messageId !== prevMsgId || prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id) &&
         prevProps.uploadProgress === nextProps.uploadProgress
     );
 };
 
 const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji, uploadProgress }: MessageItemProps) => {
-    const router = useRouter();
-    const swipeX = useSharedValue(0);
-    const hasVibrated = useSharedValue(false);
+    const { panGesture, animatedStyle, iconAnimatedStyle } = useMessageGestures(isCurrentUser, message, onReply);
 
-    const panGesture = Gesture.Pan()
-        .activeOffsetX(isCurrentUser ? [-15, 0] : [0, 15]) // Left swipe for me, right swipe for friend
-        .onUpdate((event) => {
-            if (isCurrentUser) {
-                // Swipe left (negative translationX)
-                if (event.translationX < 0) {
-                    swipeX.value = Math.max(event.translationX, -100);
-                    
-                    if (swipeX.value < -60 && !hasVibrated.value) {
-                        hasVibrated.value = true;
-                        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
-                    } else if (swipeX.value >= -60 && hasVibrated.value) {
-                        hasVibrated.value = false;
-                    }
-                } else {
-                    swipeX.value = 0;
-                }
-            } else {
-                // Swipe right (positive translationX)
-                if (event.translationX > 0) {
-                    swipeX.value = Math.min(event.translationX, 100);
-                    
-                    if (swipeX.value > 60 && !hasVibrated.value) {
-                        hasVibrated.value = true;
-                        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
-                    } else if (swipeX.value <= 60 && hasVibrated.value) {
-                        hasVibrated.value = false;
-                    }
-                } else {
-                    swipeX.value = 0;
-                }
-            }
-        })
-        .onEnd((event) => {
-            const triggered = isCurrentUser ? (event.translationX < -60) : (event.translationX > 60);
-            if (triggered) {
-                if (onReply) {
-                    runOnJS(onReply)(message);
-                }
-            }
-            swipeX.value = withSpring(0, { damping: 15, stiffness: 150 });
-            hasVibrated.value = false;
-        });
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: swipeX.value }],
-    }));
-
-    const iconAnimatedStyle = useAnimatedStyle(() => {
-        const absSwipeX = Math.abs(swipeX.value);
-        const opacity = interpolate(
-            absSwipeX,
-            [30, 60],
-            [0, 1],
-            Extrapolation.CLAMP
-        );
-        const scale = interpolate(
-            absSwipeX,
-            [40, 70],
-            [0.8, 1.2],
-            Extrapolation.CLAMP
-        );
-        return {
-            opacity,
-            transform: [{ scale }],
-        };
-    });
-
-    // ✅ If it's a local file://, content:// URI or data:image/ URI, use it immediately — no caching needed
-    const [localImageUrl, setLocalImageUrl] = useState<string | null>(() => {
-        const url = (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
-        return (url?.startsWith('file://') || url?.startsWith('content://') || url?.startsWith('file:/') || url?.startsWith('data:image/')) ? url : null;
-    });
-    const [localVoiceUrl, setLocalVoiceUrl] = useState<string | null>(null);
-    const [imageLoading, setImageLoading] = useState(() => {
-        const url = (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
-        return !(url?.startsWith('file://') || url?.startsWith('content://') || url?.startsWith('file:/') || url?.startsWith('data:image/'));
-    }); // ✅ Track image load state for spinner
-    const [decryptedStatusContent, setDecryptedStatusContent] = useState<string | null>(null);
-    const [decryptedStatusMedia, setDecryptedStatusMedia] = useState<string | null>(null);
-
-    // ✅ Decrypt status_context content when message has a status reply
-    useEffect(() => {
-        const decryptStatusContext = async () => {
-            if (!message.status_context) return;
-            const ctx = message.status_context;
-            try {
-                const { decryptText, getChatKey } = await import('@/utils/chatCrypto');
-                // Status is encrypted with owner's self-key (userId === userId)
-                const statusKey = await getChatKey(ctx.user_id, ctx.user_id);
-
-                let content = ctx.content || '';
-                let mediaUrl = ctx.media_url || '';
-
-                if (content && content.trim().startsWith('{')) {
-                    try { content = await decryptText(content, statusKey); } catch (e) { content = '🔒 Status'; }
-                }
-                if (mediaUrl && mediaUrl.trim().startsWith('{')) {
-                    try { mediaUrl = await decryptText(mediaUrl, statusKey); } catch (e) { mediaUrl = ''; }
-                }
-
-                setDecryptedStatusContent(content);
-                setDecryptedStatusMedia(mediaUrl);
-            } catch (e) {
-                // Fallback: show as-is or placeholder
-                setDecryptedStatusContent(message.status_context?.content?.startsWith('{') ? '🔒 Status' : message.status_context?.content);
-                setDecryptedStatusMedia(message.status_context?.media_url?.startsWith('{') ? '' : message.status_context?.media_url);
-            }
-        };
-
-        decryptStatusContext();
-    }, [message.status_context]);
-
-    const formatTime = (ts: string) => {
-        if (!ts) return '';
-        const date = new Date(ts);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    };
-
-
-
-    const handleLongPress = (event: any) => {
-        if (onLongPress) {
-            onLongPress(message, event.nativeEvent.pageY);
-        }
-    };
-
-    // Media detection logic - Prioritize structured columns
+    // Parse Message
     const isVoiceMessage = message.file_type?.startsWith('audio/') || message.message?.startsWith('[Voice Message]');
     const voiceUri = message.file_url || (message.message?.startsWith('[Voice Message]') ? message.message.split(' ')[2] : null);
-
     const hasImage = message.file_type?.startsWith('image/') || message.message?.includes('[Image]') || message.file_url;
     let imageUrl = (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
     let textContent = message.message;
@@ -197,165 +54,56 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         textContent = parts.slice(2).join(' ');
     }
 
-    if (isVoiceMessage) {
-        if (textContent?.startsWith('[Voice Message]')) {
-            textContent = '';
-        }
-    }
+    if (isVoiceMessage && textContent?.startsWith('[Voice Message]')) textContent = '';
 
-    // Call Log detection
-    const isCallLog = message.message_type === 'call' || !!message.call_details;
-    const callDetails = message.call_details || {};
-
-    // Media Caching Logic
-    useEffect(() => {
-        const handleMediaCache = async () => {
-            const { db } = useDbStore.getState();
-            if (!db) return;
-
-            // Handle Image Caching — skip if already a local file:// or content:// (sent by current user)
-            const isLocalImage = imageUrl?.startsWith('file://') || imageUrl?.startsWith('content://') || imageUrl?.startsWith('file:/') || imageUrl?.startsWith('data:image/');
-            if (imageUrl && !isLocalImage) {
-                const cached = await getMediaCache(db, imageUrl);
-                if (cached) {
-                    setLocalImageUrl(cached);
-                    setImageLoading(false);
-                } else {
-                    try {
-                        const filename = (typeof imageUrl === 'string' ? imageUrl.split('/').pop() : null) || 'media.jpg';
-                        const localUri = `${FileSystem.cacheDirectory}${filename}`;
-                        const download = await FileSystem.downloadAsync(imageUrl, localUri);
-                        if (download.status === 200) {
-                            await saveMediaCache(db, imageUrl, download.uri, 'image');
-                            setLocalImageUrl(download.uri);
-                            setImageLoading(false);
-                        }
-                    } catch (e) {
-                        if (__DEV__) console.error('[CACHE] Image download failed:', e);
-                        setImageLoading(false); // ✅ Even on error, stop showing spinner
-                    }
-                }
-            } else if (isLocalImage) {
-                // Local file — already set in initial state, no loading needed
-                setImageLoading(false);
-            }
-
-            // Handle Voice Caching
-            if (voiceUri && !voiceUri.startsWith('file://')) {
-                const cached = await getMediaCache(db, voiceUri);
-                if (cached) {
-                    setLocalVoiceUrl(cached);
-                } else {
-                    try {
-                        const filename = (typeof voiceUri === 'string' ? voiceUri.split('/').pop() : null) || 'voice.m4a';
-                        const localUri = `${FileSystem.cacheDirectory}${filename}`;
-                        const download = await FileSystem.downloadAsync(voiceUri, localUri);
-                        if (download.status === 200) {
-                            await saveMediaCache(db, voiceUri, download.uri, 'audio');
-                            setLocalVoiceUrl(download.uri);
-                        }
-                    } catch (e) {
-                        console.error('[CACHE] Voice download failed:', e);
-                    }
-                }
-            }
-        };
-
-        handleMediaCache();
-    }, [imageUrl, voiceUri]);
-
-    const isSystemMsg = message.message?.startsWith('SYSTEM_MSG:');
-
-    // Memoize Ledger Parsing to avoid JSON.parse on every render
-    const ledgerData = React.useMemo(() => {
-        if (message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:')) {
-            try {
-                return JSON.parse(message.message.replace('SYSTEM_LEDGER:', ''));
-            } catch (e) {
-                console.error("Ledger parse error:", e);
-                return null;
-            }
-        }
-        return null;
-    }, [message.message, message.message_type]);
-
-    // Contact detection
     const isContactMessage = textContent?.startsWith('[Contact]');
-    let contactName = '';
-    let contactPhone = '';
+    let contactName = '', contactPhone = '';
     if (isContactMessage) {
         const parts = textContent!.substring(9).split('|');
         contactName = parts[0]?.trim() || 'Unknown Contact';
         contactPhone = parts[1]?.trim() || '';
-        textContent = ''; // Hide raw text
+        textContent = '';
     }
 
-    // Location detection
     const isLocationMessage = textContent?.startsWith('[Location]');
-    let locationCoords = '';
-    let locationAddress = '';
+    let locationCoords = '', locationAddress = '';
     if (isLocationMessage) {
         const parts = textContent!.substring(11).split('|');
         locationCoords = parts[0]?.trim() || '';
         locationAddress = parts[1]?.trim() || 'Shared Location';
-        textContent = ''; // Hide raw text
+        textContent = '';
     }
 
-    // Document detection
     const isDocumentMessage = textContent?.startsWith('[Document]') || (message.file_url && message.file_type && !message.file_type.startsWith('image/') && !message.file_type.startsWith('audio/'));
     let documentName = message.file_name || 'Document';
     let documentSize = message.file_size ? `${(message.file_size / 1024 / 1024).toFixed(2)} MB` : '';
     let documentUrl = message.file_url;
-
     if (textContent?.startsWith('[Document]')) {
         const parts = textContent.substring(11).split('|');
         if (!message.file_name) documentName = parts[1]?.trim() || 'Document';
         if (!documentUrl) documentUrl = parts[0]?.trim() || '';
-        textContent = ''; // Hide raw text
+        textContent = '';
     }
 
+    const { localImageUrl, localVoiceUrl, imageLoading } = useMessageMediaCache(message, imageUrl, voiceUri);
+    const { decryptedStatusContent, decryptedStatusMedia } = useStatusContext(message.status_context);
+
+    const formatTime = (ts: string) => {
+        if (!ts) return '';
+        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const handleLongPress = (event: any) => onLongPress?.(message, event.nativeEvent.pageY);
+
+    const isSystemMsg = message.message?.startsWith('SYSTEM_MSG:');
     if (isSystemMsg) {
         const isScreenshot = message.message === 'SYSTEM_MSG: SCREENSHOT_TAKEN';
-
         return (
-            <View style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                marginVertical: 12,
-                paddingHorizontal: 16,
-                width: '100%'
-            }}>
-                <View style={{
-                    backgroundColor: isScreenshot ? '#FEF2F2' : (isCurrentUser ? '#FFF7ED' : '#F9FAFB'),
-                    paddingHorizontal: 14,
-                    paddingVertical: 8,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: isScreenshot ? '#FECACA' : (isCurrentUser ? '#FFEDD5' : '#F3F4F6'),
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 8,
-                    maxWidth: '85%',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 1,
-                    elevation: 1
-                }}>
-                    <Ionicons
-                        name={isScreenshot ? "scan-outline" : "ban-outline"}
-                        size={16}
-                        color={isScreenshot ? '#EF4444' : (isCurrentUser ? '#F97316' : '#6B7280')}
-                    />
-                    <Text style={{
-                        fontSize: 12,
-                        fontWeight: '700',
-                        color: isScreenshot ? '#DC2626' : (isCurrentUser ? '#C2410C' : '#374151'),
-                        fontStyle: 'italic'
-                    }}>
-                        {isScreenshot
-                            ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend')
-                            : (isCurrentUser ? 'You deleted this message' : 'This message was deleted')}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 12, paddingHorizontal: 16, width: '100%' }}>
+                <View style={{ backgroundColor: isScreenshot ? '#FEF2F2' : (isCurrentUser ? '#FFF7ED' : '#F9FAFB'), paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: isScreenshot ? '#FECACA' : (isCurrentUser ? '#FFEDD5' : '#F3F4F6'), flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 1, elevation: 1 }}>
+                    <Ionicons name={isScreenshot ? "scan-outline" : "ban-outline"} size={16} color={isScreenshot ? '#EF4444' : (isCurrentUser ? '#F97316' : '#6B7280')} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: isScreenshot ? '#DC2626' : (isCurrentUser ? '#C2410C' : '#374151'), fontStyle: 'italic' }}>
+                        {isScreenshot ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend') : (isCurrentUser ? 'You deleted this message' : 'This message was deleted')}
                     </Text>
                 </View>
             </View>
@@ -364,484 +112,51 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
     return (
         <View style={{ position: 'relative', width: '100%', overflow: 'visible' }}>
-            <Animated.View
-                style={[
-                    {
-                        position: 'absolute',
-                        top: '40%',
-                        ...(isCurrentUser ? { right: 10 } : { left: 10 })
-                    },
-                    iconAnimatedStyle
-                ]}
-            >
+            <Animated.View style={[{ position: 'absolute', top: '40%', ...(isCurrentUser ? { right: 10 } : { left: 10 }) }, iconAnimatedStyle]}>
                 <Ionicons name="arrow-undo-circle" size={28} color="#F68537" />
             </Animated.View>
 
             <GestureDetector gesture={panGesture}>
-                <Animated.View
-                    style={[
-                        {
-                            width: '100%',
-                            marginBottom: 12,
-                            paddingHorizontal: 16,
-                            flexDirection: 'column',
-                            alignItems: isCurrentUser ? 'flex-end' : 'flex-start'
-                        },
-                        animatedStyle
-                    ]}
-                >
-                <TouchableOpacity
-                    onLongPress={handleLongPress}
-                    activeOpacity={0.9}
-                    style={{
-                        maxWidth: '85%',
-                        borderRadius: 18,
-                        paddingVertical: 4,
-                        paddingHorizontal: 2,
-                        backgroundColor: isCurrentUser ? '#F68537' : 'white',
-                        borderTopRightRadius: isCurrentUser ? 4 : 18,
-                        borderTopLeftRadius: isCurrentUser ? 18 : 4,
-                        elevation: 1,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 1,
-                    }}
-                >
-                    {/* Group Sender Name */}
-                    {!isCurrentUser && message.group_id && (
-                        <Text style={{ paddingHorizontal: 12, paddingTop: 8, fontSize: 11, fontWeight: 'bold', color: '#F68537' }}>
-                            {message.sender?.username || 'User'}
-                        </Text>
-                    )}
-
-                    {/* Status Context */}
-                    {message.status_context && (
-                        <TouchableOpacity
-                            onPress={(e) => {
-                                e.stopPropagation(); // prevent long press or other clicks
-                                Haptics.selectionAsync();
-                                router.push(`/status/viewer?userId=${message.status_context.user_id}`);
-                            }}
-                            activeOpacity={0.7}
-                            style={{
-                                margin: 6,
-                                padding: 8,
-                                borderRadius: 8,
-                                borderLeftWidth: 3,
-                                backgroundColor: isCurrentUser ? 'rgba(0, 0, 0, 0.1)' : 'rgba(246, 133, 55, 0.05)',
-                                borderLeftColor: '#10B981',
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: 10,
-                                minWidth: 200
-                            }}
-                        >
-                            <View style={{ flex: 1 }}>
-                                <Text style={{ fontWeight: '900', fontSize: 10, color: '#10B981', marginBottom: 2, textTransform: 'uppercase' }}>
-                                    Status Reply
-                                </Text>
-                                <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255, 255, 255, 0.9)' : '#4B5563' }} numberOfLines={2}>
-                                    {message.status_context.media_type === 'text'
-                                        ? (decryptedStatusContent || '...')
-                                        : (message.status_context.caption || 'Media Status')}
-                                </Text>
-                            </View>
-                            {message.status_context.media_type !== 'text' && (decryptedStatusMedia || message.status_context.media_url) && (
-                                <Image
-                                    source={{ uri: decryptedStatusMedia || message.status_context.media_url }}
-                                    style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.1)' }}
-                                    contentFit="cover"
-                                />
-                            )}
-                        </TouchableOpacity>
-                    )}
-
-                    {/* Reply Context */}
-                    {message.reply && message.reply.id && !message.status_context && (
-                        <TouchableOpacity
-                            onPress={(e) => {
-                                e.stopPropagation();
-                                Haptics.selectionAsync();
-                                onReplyClick?.(message.reply);
-                            }}
-                            activeOpacity={0.7}
-                            style={{
-                                margin: 6,
-                                padding: 8,
-                                borderRadius: 8,
-                                borderLeftWidth: 4,
-                                backgroundColor: 'rgba(0, 0, 0, 0.05)',
-                                borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537'
-                            }}
-                        >
-                            <Text style={{
-                                fontWeight: 'bold',
-                                fontSize: 11,
-                                color: isCurrentUser ? 'white' : '#F68537'
-                            }}>
-                                {message.reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}
-                            </Text>
-                            <Text style={{
-                                fontSize: 12,
-                                opacity: 0.8,
-                                color: isCurrentUser ? 'white' : '#4B5563'
-                            }} numberOfLines={1}>
-                                {message.reply.message || 'Media'}
-                            </Text>
-                        </TouchableOpacity>
-                    )}
-
-                    {/* Ledger Entry UI */}
-                    {message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:') && (
-                        <View style={{ padding: 12, width: 220 }}>
-                            {(() => {
-                                try {
-                                    const data = ledgerData;
-                                    if (!data) return <Text style={{ color: 'red' }}>Error parsing ledger entry</Text>;
-                                    const isDeneHain = data.type === 'gave' ? !isCurrentUser : isCurrentUser;
-                                    const themeColor = isDeneHain ? '#EF4444' : '#F68537';
-                                    const label = isDeneHain ? 'Dene Hain' : 'Lene Hain';
-
-                                    return (
-                                        <>
-                                            <View style={{
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                marginBottom: 12,
-                                                paddingBottom: 12,
-                                                borderBottomWidth: 1,
-                                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB'
-                                            }}>
-                                                <View style={{
-                                                    width: 40,
-                                                    height: 40,
-                                                    borderRadius: 20,
-                                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}10`,
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    marginRight: 12
-                                                }}>
-                                                    <Ionicons name="receipt" size={20} color={isCurrentUser ? 'white' : themeColor} />
-                                                </View>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }}>Hisab-Kitab</Text>
-                                                </View>
-                                            </View>
-                                            <View>
-                                                <Text style={{ fontSize: 24, fontWeight: '900', color: isCurrentUser ? 'white' : themeColor }}>
-                                                    ₹{data.amount}
-                                                </Text>
-                                                <Text style={{ fontSize: 14, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#64748B', marginTop: 4 }}>
-                                                    {data.description}
-                                                </Text>
-                                                <View style={{
-                                                    marginTop: 10,
-                                                    paddingHorizontal: 10,
-                                                    paddingVertical: 5,
-                                                    borderRadius: 10,
-                                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}20`,
-                                                    alignSelf: 'flex-start',
-                                                    borderWidth: isCurrentUser ? 0 : 1,
-                                                    borderColor: `${themeColor}40`
-                                                }}>
-                                                    <Text style={{ fontSize: 11, fontWeight: '900', color: isCurrentUser ? 'white' : themeColor, textTransform: 'uppercase' }}>
-                                                        {label}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        </>
-                                    );
-                                } catch (e) {
-                                    return <Text style={{ color: 'red' }}>Error parsing ledger entry</Text>;
-                                }
-                            })()}
-                        </View>
-                    )}
-
-                    {/* Image Content */}
-                    {imageUrl && (
-                        <TouchableOpacity
-                            onPress={() => {
-                                onImagePress?.(localImageUrl || imageUrl);
-                            }}
-                            onLongPress={handleLongPress}
-                            delayLongPress={200}
-                        >
-                            <View style={{ width: 256, height: 256, borderRadius: 12, overflow: 'hidden', backgroundColor: '#E5E7EB' }}>
-                                <Image
-                                    source={{ uri: (localImageUrl || imageUrl)?.trim() }}
-                                    style={{ width: 256, height: 256 }}
-                                    contentFit="cover"
-                                    onLoad={() => setImageLoading(false)}
-                                    onError={() => setImageLoading(false)}
-                                />
-                                {/* ✅ Spinner shown while remote image is loading */}
-                                {imageLoading && uploadProgress === undefined && (
-                                    <View style={{
-                                        position: 'absolute', inset: 0,
-                                        backgroundColor: '#E5E7EB',
-                                        alignItems: 'center', justifyContent: 'center'
-                                    }}>
-                                        <ActivityIndicator size="small" color="#F68537" />
-                                    </View>
-                                )}
-                                {/* ✅ Circular upload progress ring */}
-                                {uploadProgress !== undefined && uploadProgress < 100 && (
-                                    <View style={{
-                                        position: 'absolute', inset: 0,
-                                        backgroundColor: 'rgba(0,0,0,0.45)',
-                                        alignItems: 'center', justifyContent: 'center',
-                                        borderRadius: 12,
-                                    }}>
-                                        {/* Outer ring track */}
-                                        <View style={{
-                                            width: 72, height: 72,
-                                            borderRadius: 36,
-                                            borderWidth: 5,
-                                            borderColor: 'rgba(255,255,255,0.25)',
-                                            alignItems: 'center', justifyContent: 'center',
-                                        }}>
-                                            {/* Filled arc — simulated with border segments */}
-                                            <View style={{
-                                                position: 'absolute',
-                                                width: 72, height: 72,
-                                                borderRadius: 36,
-                                                borderWidth: 5,
-                                                borderColor: 'transparent',
-                                                borderTopColor: '#F68537',
-                                                borderRightColor: uploadProgress > 25 ? '#F68537' : 'transparent',
-                                                borderBottomColor: uploadProgress > 50 ? '#F68537' : 'transparent',
-                                                borderLeftColor: uploadProgress > 75 ? '#F68537' : 'transparent',
-                                                transform: [{ rotate: `${(uploadProgress / 100) * 360}deg` }],
-                                            }} />
-                                            {/* Percentage text */}
-                                            <Text style={{
-                                                color: 'white',
-                                                fontSize: 14,
-                                                fontWeight: '900',
-                                                letterSpacing: -0.5,
-                                            }}>{uploadProgress}%</Text>
-                                        </View>
-                                    </View>
-                                )}
-                            </View>
-                        </TouchableOpacity>
-                    )}
-
-                    {/* Voice Message Content */}
-                    {isVoiceMessage && (localVoiceUrl || voiceUri) && (
-                        <VoiceMessagePlayer uri={localVoiceUrl || voiceUri} isCurrentUser={isCurrentUser} />
-                    )}
-
-                    {/* Call Log Content */}
-                    {isCallLog && (
-                        <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 180 }}>
-                            <View style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 20,
-                                backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}>
-                                <Ionicons
-                                    name={callDetails.type === 'video' ? "videocam" : "call"}
-                                    size={20}
-                                    color={isCurrentUser ? 'white' : '#F68537'}
-                                />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={{
-                                    fontSize: 14,
-                                    fontWeight: 'bold',
-                                    color: isCurrentUser ? 'white' : '#1F2937'
-                                }}>
-                                    {callDetails.status === 'missed' ? 'Missed Call' :
-                                        callDetails.type === 'video' ? 'Video Call' : 'Audio Call'}
-                                </Text>
-                                <Text style={{
-                                    fontSize: 12,
-                                    color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280',
-                                    marginTop: 2
-                                }}>
-                                    {callDetails.status === 'completed' ?
-                                        (callDetails.duration > 0 ? `Duration: ${Math.floor(callDetails.duration / 60)}m ${callDetails.duration % 60}s` : 'Call Ended')
-                                        : 'No answer'}
-                                </Text>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Contact Card Content */}
-                    {isContactMessage && (
-                        <View style={{ padding: 12, width: 220 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
-                                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                    <Ionicons name="person" size={20} color={isCurrentUser ? 'white' : '#9CA3AF'} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={1}>{contactName}</Text>
-                                    <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }}>Contact</Text>
-                                </View>
-                            </View>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    import('react-native').then(({ Linking }) => {
-                                        Linking.openURL(`tel:${contactPhone}`);
-                                    });
-                                }}
-                                style={{ alignItems: 'center', paddingVertical: 4 }}
-                            >
-                                <Text style={{ color: isCurrentUser ? 'white' : '#F68537', fontWeight: 'bold', fontSize: 14 }}>Call {contactPhone}</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                    {/* Location Card Content */}
-                    {isLocationMessage && (
-                        <View style={{ padding: 12, width: 220 }}>
-                            <View style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                marginBottom: 12,
-                                paddingBottom: 12,
-                                borderBottomWidth: 1,
-                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB'
-                            }}>
-                                <View style={{
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: 20,
-                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(16, 185, 129, 0.1)',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    marginRight: 12
-                                }}>
-                                    <Ionicons name="location" size={20} color={isCurrentUser ? 'white' : '#10B981'} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={1}>Location</Text>
-                                    <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }} numberOfLines={2}>{locationAddress}</Text>
-                                </View>
-                            </View>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    import('react-native').then(({ Linking }) => {
-                                        Linking.openURL(`https://maps.google.com/?q=${locationCoords}`);
-                                    });
-                                }}
-                                style={{ alignItems: 'center', paddingVertical: 4 }}
-                            >
-                                <Text style={{ color: isCurrentUser ? 'white' : '#10B981', fontWeight: 'bold', fontSize: 14 }}>View on Map</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                    {/* Document Card Content */}
-                    {isDocumentMessage && (
-                        <View style={{ padding: 12, width: 240 }}>
-                            <View style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                marginBottom: 12,
-                                paddingBottom: 12,
-                                borderBottomWidth: 1,
-                                borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB'
-                            }}>
-                                <View style={{
-                                    width: 44,
-                                    height: 44,
-                                    borderRadius: 12,
-                                    backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(124, 58, 237, 0.1)',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    marginRight: 12
-                                }}>
-                                    <Ionicons name="document-text" size={24} color={isCurrentUser ? 'white' : '#7C3AED'} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={2}>{documentName}</Text>
-                                    {documentSize ? (
-                                        <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280', marginTop: 2 }}>{documentSize}</Text>
-                                    ) : null}
-                                </View>
-                            </View>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (documentUrl) {
-                                        import('react-native').then(({ Linking }) => {
-                                            Linking.openURL(documentUrl);
-                                        });
-                                    }
-                                }}
-                                disabled={!documentUrl || message.status === 'sending'}
-                                style={{ alignItems: 'center', paddingVertical: 4 }}
-                            >
-                                <Text style={{ color: isCurrentUser ? 'white' : '#7C3AED', fontWeight: 'bold', fontSize: 14 }}>
-                                    {message.status === 'sending' ? 'Uploading...' : 'Open Document'}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                    <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                        {textContent && textContent.trim() !== '' &&
-                            !(hasImage && textContent.startsWith('Sent ')) &&
-                            !(isVoiceMessage && textContent.startsWith('Sent ')) &&
-                            message.message_type !== 'ledger' && (
-                                <Text style={{
-                                    fontSize: 15,
-                                    lineHeight: 22,
-                                    color: isCurrentUser ? 'white' : '#1F2937',
-                                    fontStyle: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 'italic' : 'normal',
-                                    opacity: (textContent && typeof textContent === 'string' && (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED')) ? 0.7 : 1
-                                }}>
-                                    {textContent && textContent.trim && textContent.trim().startsWith('{"iv":')
-                                        ? 'Decrypting...'
-                                        : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
-                                </Text>
-                            )}
-
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
-                            <Text style={{
-                                fontSize: 10,
-                                color: isCurrentUser ? 'rgba(255, 255, 255, 0.7)' : '#9CA3AF'
-                            }}>
-                                {formatTime(message.created_at)}
-                            </Text>
-                            {isCurrentUser && (
-                                <MessageStatus status={message.status || 'sent'} />
-                            )}
-                        </View>
-                    </View>
-                </TouchableOpacity>
-
-                {/* Reactions Overlay */}
-                {message.reactions && Object.keys(message.reactions).length > 0 && (
-                    <View
-                        style={{
-                            marginTop: -10,
-                            zIndex: 20,
-                            flexDirection: 'row',
-                            gap: 4,
-                            marginRight: isCurrentUser ? 8 : 0,
-                            marginLeft: isCurrentUser ? 0 : 8
-                        }}
+                <Animated.View style={[{ width: '100%', marginBottom: 12, paddingHorizontal: 16, flexDirection: 'column', alignItems: isCurrentUser ? 'flex-end' : 'flex-start' }, animatedStyle]}>
+                    <TouchableOpacity
+                        onLongPress={handleLongPress}
+                        activeOpacity={0.9}
+                        style={{ maxWidth: '85%', borderRadius: 18, paddingVertical: 4, paddingHorizontal: 2, backgroundColor: isCurrentUser ? '#F68537' : 'white', borderTopRightRadius: isCurrentUser ? 4 : 18, borderTopLeftRadius: isCurrentUser ? 18 : 4, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1 }}
                     >
-                        {Object.entries(message.reactions).map(([emoji, count]: any) => (
-                            <View key={emoji} style={{ backgroundColor: 'white', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2, flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={{ fontSize: 12 }}>{emoji}</Text>
-                                {count > 1 && <Text style={{ fontSize: 9, fontWeight: 'bold', marginLeft: 4, color: '#6B7280' }}>{count}</Text>}
-                            </View>
-                        ))}
-                    </View>
-                )}
+                        {!isCurrentUser && message.group_id && <Text style={{ paddingHorizontal: 12, paddingTop: 8, fontSize: 11, fontWeight: 'bold', color: '#F68537' }}>{message.sender?.username || 'User'}</Text>}
 
-                {/* Flying Reaction Layer */}
-                {flyingEmoji && flyingEmoji.messageId === message.id && (
-                    <FlyingReaction key={flyingEmoji.id} emoji={flyingEmoji.emoji} />
-                )}
+                        <MessageStatusContext statusContext={message.status_context} isCurrentUser={isCurrentUser} decryptedStatusContent={decryptedStatusContent} decryptedStatusMedia={decryptedStatusMedia} />
+
+                        {message.reply && message.reply.id && !message.status_context && (
+                            <TouchableOpacity onPress={(e) => { e.stopPropagation(); Haptics.selectionAsync(); onReplyClick?.(message.reply); }} activeOpacity={0.7} style={{ margin: 6, padding: 8, borderRadius: 8, borderLeftWidth: 4, backgroundColor: 'rgba(0, 0, 0, 0.05)', borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537' }}>
+                                <Text style={{ fontWeight: 'bold', fontSize: 11, color: isCurrentUser ? 'white' : '#F68537' }}>{message.reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}</Text>
+                                <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={1}>{message.reply.message || 'Media'}</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        <MessageContent
+                            message={message} isCurrentUser={isCurrentUser} formatTime={formatTime} handleLongPress={handleLongPress} onImagePress={onImagePress}
+                            imageUrl={imageUrl} localImageUrl={localImageUrl} imageLoading={imageLoading} uploadProgress={uploadProgress}
+                            isVoiceMessage={isVoiceMessage} voiceUri={voiceUri} localVoiceUrl={localVoiceUrl} textContent={textContent}
+                            isContactMessage={isContactMessage} contactName={contactName} contactPhone={contactPhone}
+                            isLocationMessage={isLocationMessage} locationCoords={locationCoords} locationAddress={locationAddress}
+                            isDocumentMessage={isDocumentMessage} documentName={documentName} documentSize={documentSize} documentUrl={documentUrl}
+                            hasImage={hasImage}
+                        />
+                    </TouchableOpacity>
+
+                    {message.reactions && Object.keys(message.reactions).length > 0 && (
+                        <View style={{ marginTop: -10, zIndex: 20, flexDirection: 'row', gap: 4, marginRight: isCurrentUser ? 8 : 0, marginLeft: isCurrentUser ? 0 : 8 }}>
+                            {Object.entries(message.reactions).map(([emoji, count]: any) => (
+                                <View key={emoji} style={{ backgroundColor: 'white', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2, flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={{ fontSize: 12 }}>{emoji}</Text>
+                                    {count > 1 && <Text style={{ fontSize: 9, fontWeight: 'bold', marginLeft: 4, color: '#6B7280' }}>{count}</Text>}
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {flyingEmoji && flyingEmoji.messageId === message.id && <FlyingReaction key={flyingEmoji.id} emoji={flyingEmoji.emoji} />}
                 </Animated.View>
             </GestureDetector>
         </View>
@@ -849,9 +164,5 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 }, areEqual);
 
 export default function MessageItem(props: MessageItemProps) {
-    return (
-        <ComponentErrorBoundary fallbackName={`Message Bubble`}>
-            <MessageItemInner {...props} />
-        </ComponentErrorBoundary>
-    );
+    return <ComponentErrorBoundary fallbackName={`Message Bubble`}><MessageItemInner {...props} /></ComponentErrorBoundary>;
 }
