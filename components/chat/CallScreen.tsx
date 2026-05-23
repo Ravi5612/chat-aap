@@ -175,7 +175,43 @@ export default function CallScreen({
         onEndCall();
     };
 
-    // ... (Duration timer logic remains same)
+    // Call duration timer — starts when call becomes 'active', stops on end
+    useEffect(() => {
+        if (callState === 'active') {
+            // Record start time if not already set
+            if (!startTimeRef.current) {
+                startTimeRef.current = Date.now();
+            }
+            // Clear any existing interval
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            // Tick every second
+            intervalRef.current = setInterval(() => {
+                if (startTimeRef.current) {
+                    const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+                    setCallDuration(elapsed);
+                }
+            }, 1000);
+        } else {
+            // Call is not active — stop the timer
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+            // Reset start time when a new call begins (outgoing/incoming)
+            if (callState === 'outgoing' || callState === 'incoming') {
+                startTimeRef.current = null;
+                setCallDuration(0);
+            }
+        }
+
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+        };
+    }, [callState]);
+
 
     const renderRemoteVideos = () => {
         if (remoteUids.length === 0) {
