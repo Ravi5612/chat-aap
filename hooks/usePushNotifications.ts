@@ -106,6 +106,16 @@ async function registerForPushNotificationsAsync() {
             }
             if (finalStatus !== 'granted') {
                 if (__DEV__) console.warn('Failed to get push token for push notification!');
+                
+                // Prompt user to enable notifications in settings if they haven't
+                require('react-native').Alert.alert(
+                    'Enable Notifications',
+                    'ChatWarriors needs notifications to tell you when you get new messages while the app is closed. Please enable them in your settings.',
+                    [
+                        { text: 'Later', style: 'cancel' },
+                        { text: 'Open Settings', onPress: () => require('react-native').Linking.openSettings() }
+                    ]
+                );
                 return;
             }
 
