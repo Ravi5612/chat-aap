@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Text, TouchableOpacity, View, Animated } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'react-native-router-flux'; // wait, expo-router
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
