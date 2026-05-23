@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, TouchableOpacity, Text, Modal, TouchableWithoutFeedback, Dimensions, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -8,6 +8,7 @@ import Animated, {
     withSpring,
     withTiming
 } from 'react-native-reanimated';
+import EmojiPickerModal from './EmojiPickerModal';
 
 const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥', '🙏'];
 
@@ -34,6 +35,7 @@ export default function MessageContextMenu({
 }: MessageContextMenuProps) {
     const scale = useSharedValue(0.9);
     const opacity = useSharedValue(0);
+    const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
 
     useEffect(() => {
         if (visible) {
@@ -43,6 +45,7 @@ export default function MessageContextMenu({
         } else {
             scale.value = withTiming(0.9, { duration: 150 });
             opacity.value = withTiming(0, { duration: 150 });
+            setEmojiPickerVisible(false);
         }
     }, [visible]);
 
@@ -78,55 +81,80 @@ export default function MessageContextMenu({
     );
 
     return (
-        <Modal transparent visible={visible} animationType="none">
-            <TouchableWithoutFeedback onPress={onClose}>
-                <View style={styles.overlay}>
-                    <Animated.View
-                        style={[
-                            styles.menuContainer,
-                            {
-                                top: Math.max(20, adjustedY - 100),
-                                right: isCurrentUser ? 20 : undefined,
-                                left: !isCurrentUser ? 20 : undefined,
-                            },
-                            animatedStyle
-                        ]}
-                    >
-                        {/* Reactions Bar */}
-                        <View style={styles.reactionsBar}>
-                            {REACTIONS.map((emoji) => (
-                                <TouchableOpacity
-                                    key={emoji}
-                                    onPress={() => {
-                                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                        onSelectReaction(emoji);
-                                        onClose();
-                                    }}
-                                    style={styles.reactionButton}
-                                >
-                                    <Text style={styles.reactionText}>{emoji}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
+        <>
+            <Modal transparent visible={visible} animationType="none">
+                <TouchableWithoutFeedback onPress={onClose}>
+                    <View style={styles.overlay}>
+                        <Animated.View
+                            style={[
+                                styles.menuContainer,
+                                {
+                                    top: Math.max(20, adjustedY - 100),
+                                    right: isCurrentUser ? 20 : undefined,
+                                    left: !isCurrentUser ? 20 : undefined,
+                                },
+                                animatedStyle
+                            ]}
+                        >
+                            {/* Reactions Bar */}
+                            <View style={styles.reactionsBar}>
+                                {REACTIONS.map((emoji) => (
+                                    <TouchableOpacity
+                                        key={emoji}
+                                        onPress={() => {
+                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                            onSelectReaction(emoji);
+                                            onClose();
+                                        }}
+                                        style={styles.reactionButton}
+                                    >
+                                        <Text style={styles.reactionText}>{emoji}</Text>
+                                    </TouchableOpacity>
+                                ))}
 
-                        {/* Actions List */}
-                        <View style={styles.actionsList}>
-                            <ActionItem icon="arrow-undo-outline" label="Reply" onPress={() => onAction('reply')} />
-                            <ActionItem icon="copy-outline" label="Copy Text" onPress={() => onAction('copy')} />
-                            <ActionItem icon="share-outline" label="Forward" onPress={() => onAction('forward')} />
-                            {canEdit && <ActionItem icon="create-outline" label="Edit" onPress={() => onAction('edit')} />}
-                            {canEdit && <ActionItem
-                                icon="trash-outline"
-                                label="Delete"
-                                onPress={() => onAction('delete')}
-                                isDestructive={true}
-                                isLast={true}
-                            />}
-                        </View>
-                    </Animated.View>
-                </View>
-            </TouchableWithoutFeedback>
-        </Modal>
+                                {/* "+" button to open full emoji picker */}
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        Haptics.selectionAsync();
+                                        setEmojiPickerVisible(true);
+                                    }}
+                                    style={styles.moreBtnContainer}
+                                >
+                                    <Ionicons name="add" size={20} color="#F68537" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Actions List */}
+                            <View style={styles.actionsList}>
+                                <ActionItem icon="arrow-undo-outline" label="Reply" onPress={() => onAction('reply')} />
+                                <ActionItem icon="copy-outline" label="Copy Text" onPress={() => onAction('copy')} />
+                                <ActionItem icon="share-outline" label="Forward" onPress={() => onAction('forward')} />
+                                {canEdit && <ActionItem icon="create-outline" label="Edit" onPress={() => onAction('edit')} />}
+                                {canEdit && <ActionItem
+                                    icon="trash-outline"
+                                    label="Delete"
+                                    onPress={() => onAction('delete')}
+                                    isDestructive={true}
+                                    isLast={true}
+                                />}
+                            </View>
+                        </Animated.View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Full Emoji Picker - opens on "+" press */}
+            <EmojiPickerModal
+                visible={emojiPickerVisible}
+                onClose={() => setEmojiPickerVisible(false)}
+                onSelect={(emoji) => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    onSelectReaction(emoji);
+                    setEmojiPickerVisible(false);
+                    onClose();
+                }}
+            />
+        </>
     );
 }
 
@@ -137,7 +165,7 @@ const styles = StyleSheet.create({
     },
     menuContainer: {
         position: 'absolute',
-        width: 250,
+        width: 260,
         zIndex: 1000,
     },
     reactionsBar: {
@@ -158,10 +186,19 @@ const styles = StyleSheet.create({
         elevation: 10,
     },
     reactionButton: {
-        paddingHorizontal: 4,
+        paddingHorizontal: 3,
     },
     reactionText: {
         fontSize: 26,
+    },
+    moreBtnContainer: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: 'rgba(246, 133, 55, 0.12)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 2,
     },
     actionsList: {
         backgroundColor: 'rgba(255, 255, 255, 0.95)',
