@@ -142,6 +142,10 @@ export default function CallScreen({
 
     const acceptCall = () => {
         console.log('[CALL_ACTION] Accept button pressed');
+        
+        // Immediately transition UI to active state
+        onAcceptCall();
+
         // Signaling: Tell the caller (or group) we accepted
         const targetId = friend.id;
         const signalChannelName = `calls-signal-${targetId}`;
@@ -165,8 +169,6 @@ export default function CallScreen({
                 }, 1000);
             }
         });
-        // We do NOT call onAcceptCall() here because the payload 'accepted' 
-        // will be caught by useCallManager which then calls setCallActive() globally.
     };
 
     const endCall = () => {
