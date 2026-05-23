@@ -6,6 +6,7 @@ import { Audio } from 'expo-av';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { useCallStore } from '@/store/useCallStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
+import { sendPushNotificationToUser } from '@/utils/sendPushNotification';
 
 const RINGTONE_URL = 'https://vgqasnzpnnmshclnshob.supabase.co/storage/v1/object/public/system/ringtone.mp3';
 import ringingTone from '../assets/audio/ringing_tone.mp3';
@@ -274,11 +275,25 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                 members.forEach(m => {
                     if (m.user_id !== currentUser.id) {
                         sendSignalReliably(m.user_id, offerPayload);
+                        sendPushNotificationToUser(
+                            m.user_id,
+                            currentUser.id,
+                            currentUser.username || 'ChatWarriors',
+                            currentUser.avatar_url || null,
+                            'call'
+                        );
                     }
                 });
             }
         } else {
             sendSignalReliably(friend.id, offerPayload);
+            sendPushNotificationToUser(
+                friend.id,
+                currentUser.id,
+                currentUser.username || 'ChatWarriors',
+                currentUser.avatar_url || null,
+                'call'
+            );
         }
     };
 
