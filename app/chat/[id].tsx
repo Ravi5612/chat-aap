@@ -739,28 +739,22 @@ function ChatScreen() {
                     </TouchableOpacity>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <TouchableOpacity 
-                        onPress={() => {
-                            if (isBlocked) Alert.alert("Blocked", "Unblock this user to call.");
-                            else if (iAmBlocked) Alert.alert("Blocked", "You are blocked by this user.");
-                            else handleStartCall({ id: friendId, name: friendName }, 'video', isGroup === 'true');
-                        }} 
-                        style={{ backgroundColor: (isBlocked || iAmBlocked) ? '#D1D5DB' : '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                        disabled={isBlocked || iAmBlocked}
-                    >
-                        <Ionicons name="videocam" size={18} color="white" />
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                        onPress={() => {
-                            if (isBlocked) Alert.alert("Blocked", "Unblock this user to call.");
-                            else if (iAmBlocked) Alert.alert("Blocked", "You are blocked by this user.");
-                            else handleStartCall({ id: friendId, name: friendName }, 'audio', isGroup === 'true');
-                        }} 
-                        style={{ backgroundColor: (isBlocked || iAmBlocked) ? '#D1D5DB' : '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                        disabled={isBlocked || iAmBlocked}
-                    >
-                        <Ionicons name="call" size={18} color="white" />
-                    </TouchableOpacity>
+                    {isFriend && !isBlocked && !iAmBlocked && (
+                        <>
+                            <TouchableOpacity 
+                                onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video', isGroup === 'true')} 
+                                style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                <Ionicons name="videocam" size={18} color="white" />
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio', isGroup === 'true')} 
+                                style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                <Ionicons name="call" size={18} color="white" />
+                            </TouchableOpacity>
+                        </>
+                    )}
  
                     <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 4 }}>
                         <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
