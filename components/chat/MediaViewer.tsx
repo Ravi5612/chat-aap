@@ -44,19 +44,26 @@ export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerP
 
             // 3. Use unique filename with timestamp to avoid conflicts
             const filename = `chatwarriors_${Date.now()}.${ext}`;
-            const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+            const cacheUri = `${FileSystem.cacheDirectory}${filename}`;
+            let finalUri = imageUri;
 
-            // 4. Download to cache directory
-            const downloadResult = await FileSystem.downloadAsync(imageUri, fileUri, {
-                headers: { 'Accept': 'image/*' }
-            });
-            
-            if (downloadResult.status !== 200) {
-                throw new Error(`Download failed with status: ${downloadResult.status}`);
+            // 4. Handle different URI types
+            if (imageUri.startsWith('data:')) {
+                const base64Data = imageUri.split(',')[1];
+                await FileSystem.writeAsStringAsync(cacheUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+                finalUri = cacheUri;
+            } else if (!imageUri.startsWith('file:')) {
+                const downloadResult = await FileSystem.downloadAsync(imageUri, cacheUri, {
+                    headers: { 'Accept': 'image/*' }
+                });
+                if (downloadResult.status !== 200) {
+                    throw new Error(`Download failed with status: ${downloadResult.status}`);
+                }
+                finalUri = downloadResult.uri;
             }
 
             // 5. Save to media library
-            const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+            const asset = await MediaLibrary.createAssetAsync(finalUri);
 
             // 6. Add to ChatWarriors album
             try {
@@ -72,7 +79,9 @@ export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerP
             }
 
             // 7. Cleanup cache file
-            try { await FileSystem.deleteAsync(fileUri, { idempotent: true }); } catch (_) {}
+            if (finalUri === cacheUri) {
+                try { await FileSystem.deleteAsync(cacheUri, { idempotent: true }); } catch (_) {}
+            }
 
             Alert.alert('✅ Saved!', 'Image saved to your gallery in ChatWarriors album.');
         } catch (error: any) {

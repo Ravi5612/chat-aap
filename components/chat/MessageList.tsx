@@ -32,6 +32,8 @@ export default function MessageList({
     loadingMore = false,
 }: MessageListProps) {
     const flatListRef = useRef<FlatList>(null);
+    // \u2705 Subscribe to upload progress map so image bubbles get live percentage
+    const uploadProgress = useChatStore(state => state.uploadProgress);
 
     // ── Scroll-to-bottom button state ──────────────────────────────────
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -223,9 +225,10 @@ export default function MessageList({
                 onImagePress={onImagePress}
                 friendName={friendName}
                 flyingEmoji={flyingEmoji}
+                uploadProgress={uploadProgress[item.id]}
             />
         );
-    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji, handleScrollToMessage]);
+    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji, handleScrollToMessage, uploadProgress]);
 
 
     // ✅ useCallback - keyExtractor memoize

@@ -1,8 +1,10 @@
-import React, { useRef, memo } from 'react';
-import { View, Text, Image, TouchableOpacity, Animated, Pressable } from 'react-native';
+import React, { useRef, memo, useState } from 'react';
+import { View, Text, Image, TouchableOpacity, Animated, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
-
+import { useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
 interface FriendListItemProps {
     friend: any;
     onClick: (friend: any) => void;
@@ -13,6 +15,52 @@ interface FriendListItemProps {
 }
 
 const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
+    const router = useRouter();
+    const { user: currentUser } = useAuthStore();
+    const [isSending, setIsSending] = useState(false);
+    const [requestSent, setRequestSent] = useState(false);
+
+    const handleAddFriend = async (e: any) => {
+        e.stopPropagation();
+        if (!currentUser || requestSent || isSending) return;
+        
+        setIsSending(true);
+        try {
+            const { error } = await supabase
+                .from('friend_requests')
+                .insert([{
+                    sender_id: currentUser.id,
+                    receiver_id: friend.id,
+                    status: 'pending'
+                }]);
+
+            if (error) {
+                if (error.code === '23505') { // unique violation
+                    setRequestSent(true);
+                    return;
+                }
+                throw error;
+            }
+
+            const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', currentUser.id).single();
+
+            await supabase.from('notifications').insert([{
+                user_id: friend.id,
+                sender_id: currentUser.id,
+                type: 'friend_request',
+                message: `${myProfile?.username || 'Someone'} sent you a friend request.`,
+                is_read: false
+            }]);
+
+            setRequestSent(true);
+            Alert.alert('Success', 'Friend request sent! ✅');
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to send request');
+        } finally {
+            setIsSending(false);
+        }
+    };
+
     const hasStatus = friend.statusCount > 0;
     const ringColor = hasStatus
         ? (friend.allStatusesViewed ? '#D1D5DB' : '#10B981')
@@ -53,7 +101,15 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
                 activeOpacity={0.85}
-                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, width: '100%' }}
+                style={{ 
+                    flexDirection: 'row', 
+                    alignItems: 'center', 
+                    paddingHorizontal: 16, 
+                    paddingVertical: 16, 
+                    width: '100%',
+                    backgroundColor: friend.isUnfriended ? 'rgba(0,0,0,0.02)' : 'transparent',
+                    opacity: friend.isUnfriended ? 0.75 : 1
+                }}
             >
                 <Pressable
                     onPress={(e) => {
@@ -139,8 +195,9 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                                 <Ionicons name="ban-outline" size={14} color="#EF4444" />
                             )}
                             {friend.isUnfriended && !friend.isBlocked && (
-                                <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                                    <Text style={{ fontSize: 9, fontWeight: '800', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Unfriended</Text>
+                                <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FCA5A5', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                                    <Ionicons name="person-remove" size={10} color="#DC2626" />
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: '#DC2626', textTransform: 'uppercase', letterSpacing: 0.5 }}>Unfriended</Text>
                                 </View>
                             )}
                         </View>
@@ -150,12 +207,46 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                         <Text style={{ fontSize: 14, color: friend.isTyping ? '#10B981' : (friend.isUnfriended ? '#9CA3AF' : '#4B5563'), flex: 1, marginRight: 8, fontStyle: (friend.isTyping || friend.isUnfriended) ? 'italic' : 'normal', fontWeight: friend.isTyping ? 'bold' : 'normal' }} numberOfLines={1}>
-                            {friend.isTyping ? 'typing...' : (friend.isUnfriended ? '🔒 Friend request bhejna hoga' : (friend.lastMessage || friend.email || 'Email hidden'))}
+                            {friend.isTyping ? 'typing...' : (friend.isUnfriended ? 'Read-only mode. Add friend to chat.' : (friend.lastMessage || friend.email || 'Email hidden'))}
                         </Text>
-                        {friend.unreadCount > 0 && !friend.isUnfriended && (
-                            <View style={{ backgroundColor: '#F68537', borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 }}>
-                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{friend.unreadCount}</Text>
-                            </View>
+                        
+                        {friend.isUnfriended ? (
+                            <Pressable 
+                                onPress={handleAddFriend}
+                                disabled={requestSent || isSending}
+                                style={({pressed}) => ({
+                                    backgroundColor: requestSent ? '#10B981' : '#F68537',
+                                    paddingHorizontal: 16,
+                                    paddingVertical: 8,
+                                    borderRadius: 20,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    opacity: pressed ? 0.8 : 1,
+                                    elevation: requestSent ? 0 : 4,
+                                    shadowColor: requestSent ? 'transparent' : '#F68537',
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.4,
+                                    shadowRadius: 6,
+                                    borderWidth: 1,
+                                    borderColor: requestSent ? '#059669' : '#EA580C',
+                                })}
+                            >
+                                {isSending ? (
+                                    <ActivityIndicator size="small" color="white" style={{ width: 14, height: 14 }} />
+                                ) : (
+                                    <Ionicons name={requestSent ? "checkmark-circle" : "person-add"} size={14} color="white" />
+                                )}
+                                <Text style={{ color: 'white', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 }}>
+                                    {requestSent ? 'Sent' : 'Add Friend'}
+                                </Text>
+                            </Pressable>
+                        ) : (
+                            friend.unreadCount > 0 && (
+                                <View style={{ backgroundColor: '#F68537', borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                                    <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{friend.unreadCount}</Text>
+                                </View>
+                            )
                         )}
                     </View>
                 </View>

@@ -6,7 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated as RNAnimated, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { 
     useSharedValue, 
     useAnimatedStyle, 
@@ -30,6 +30,7 @@ interface MessageItemProps {
     onImagePress?: (uri: string) => void;
     friendName?: string;
     flyingEmoji?: any;
+    uploadProgress?: number; // ✅ 0-100, only present while uploading
 }
 
 const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
@@ -44,11 +45,13 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
             (nextProps.flyingEmoji?.messageId === nextMsgId)) &&
         // If it was and still is relevant, verify ID hasn't changed
         (!prevMsgId || prevProps.flyingEmoji?.messageId !== prevMsgId ||
-            prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id)
+            prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id) &&
+        // ✅ Re-render when upload progress changes
+        prevProps.uploadProgress === nextProps.uploadProgress
     );
 };
 
-const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
+const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji, uploadProgress }: MessageItemProps) => {
     const router = useRouter();
     const swipeX = useSharedValue(0);
     const hasVibrated = useSharedValue(false);
@@ -121,8 +124,16 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         };
     });
 
-    const [localImageUrl, setLocalImageUrl] = useState<string | null>(null);
+    // ✅ If it's a local file://, content:// URI or data:image/ URI, use it immediately — no caching needed
+    const [localImageUrl, setLocalImageUrl] = useState<string | null>(() => {
+        const url = (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
+        return (url?.startsWith('file://') || url?.startsWith('content://') || url?.startsWith('file:/') || url?.startsWith('data:image/')) ? url : null;
+    });
     const [localVoiceUrl, setLocalVoiceUrl] = useState<string | null>(null);
+    const [imageLoading, setImageLoading] = useState(() => {
+        const url = (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
+        return !(url?.startsWith('file://') || url?.startsWith('content://') || url?.startsWith('file:/') || url?.startsWith('data:image/'));
+    }); // ✅ Track image load state for spinner
     const [decryptedStatusContent, setDecryptedStatusContent] = useState<string | null>(null);
     const [decryptedStatusMedia, setDecryptedStatusMedia] = useState<string | null>(null);
 
@@ -202,11 +213,13 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
             const { db } = useDbStore.getState();
             if (!db) return;
 
-            // Handle Image Caching
-            if (imageUrl && !imageUrl.startsWith('file://')) {
+            // Handle Image Caching — skip if already a local file:// or content:// (sent by current user)
+            const isLocalImage = imageUrl?.startsWith('file://') || imageUrl?.startsWith('content://') || imageUrl?.startsWith('file:/') || imageUrl?.startsWith('data:image/');
+            if (imageUrl && !isLocalImage) {
                 const cached = await getMediaCache(db, imageUrl);
                 if (cached) {
                     setLocalImageUrl(cached);
+                    setImageLoading(false);
                 } else {
                     try {
                         const filename = (typeof imageUrl === 'string' ? imageUrl.split('/').pop() : null) || 'media.jpg';
@@ -215,11 +228,16 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                         if (download.status === 200) {
                             await saveMediaCache(db, imageUrl, download.uri, 'image');
                             setLocalImageUrl(download.uri);
+                            setImageLoading(false);
                         }
                     } catch (e) {
-                        console.error('[CACHE] Image download failed:', e);
+                        if (__DEV__) console.error('[CACHE] Image download failed:', e);
+                        setImageLoading(false); // ✅ Even on error, stop showing spinner
                     }
                 }
+            } else if (isLocalImage) {
+                // Local file — already set in initial state, no loading needed
+                setImageLoading(false);
             }
 
             // Handle Voice Caching
@@ -550,11 +568,64 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                             onLongPress={handleLongPress}
                             delayLongPress={200}
                         >
-                            <Image
-                                source={{ uri: (localImageUrl || imageUrl)?.trim() }}
-                                style={{ width: 256, height: 256, backgroundColor: '#F3F4F6', borderRadius: 12 }}
-                                contentFit="cover"
-                            />
+                            <View style={{ width: 256, height: 256, borderRadius: 12, overflow: 'hidden', backgroundColor: '#E5E7EB' }}>
+                                <Image
+                                    source={{ uri: (localImageUrl || imageUrl)?.trim() }}
+                                    style={{ width: 256, height: 256 }}
+                                    contentFit="cover"
+                                    onLoad={() => setImageLoading(false)}
+                                    onError={() => setImageLoading(false)}
+                                />
+                                {/* ✅ Spinner shown while remote image is loading */}
+                                {imageLoading && uploadProgress === undefined && (
+                                    <View style={{
+                                        position: 'absolute', inset: 0,
+                                        backgroundColor: '#E5E7EB',
+                                        alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        <ActivityIndicator size="small" color="#F68537" />
+                                    </View>
+                                )}
+                                {/* ✅ Circular upload progress ring */}
+                                {uploadProgress !== undefined && uploadProgress < 100 && (
+                                    <View style={{
+                                        position: 'absolute', inset: 0,
+                                        backgroundColor: 'rgba(0,0,0,0.45)',
+                                        alignItems: 'center', justifyContent: 'center',
+                                        borderRadius: 12,
+                                    }}>
+                                        {/* Outer ring track */}
+                                        <View style={{
+                                            width: 72, height: 72,
+                                            borderRadius: 36,
+                                            borderWidth: 5,
+                                            borderColor: 'rgba(255,255,255,0.25)',
+                                            alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            {/* Filled arc — simulated with border segments */}
+                                            <View style={{
+                                                position: 'absolute',
+                                                width: 72, height: 72,
+                                                borderRadius: 36,
+                                                borderWidth: 5,
+                                                borderColor: 'transparent',
+                                                borderTopColor: '#F68537',
+                                                borderRightColor: uploadProgress > 25 ? '#F68537' : 'transparent',
+                                                borderBottomColor: uploadProgress > 50 ? '#F68537' : 'transparent',
+                                                borderLeftColor: uploadProgress > 75 ? '#F68537' : 'transparent',
+                                                transform: [{ rotate: `${(uploadProgress / 100) * 360}deg` }],
+                                            }} />
+                                            {/* Percentage text */}
+                                            <Text style={{
+                                                color: 'white',
+                                                fontSize: 14,
+                                                fontWeight: '900',
+                                                letterSpacing: -0.5,
+                                            }}>{uploadProgress}%</Text>
+                                        </View>
+                                    </View>
+                                )}
+                            </View>
                         </TouchableOpacity>
                     )}
 

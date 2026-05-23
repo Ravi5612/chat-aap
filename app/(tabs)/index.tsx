@@ -1,4 +1,5 @@
-import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, Image, StyleSheet, Platform, Modal, ScrollView, Clipboard } from 'react-native';
+import { View, FlatList, ActivityIndicator, Text, RefreshControl, TouchableOpacity, StyleSheet, Platform, Modal, ScrollView, Clipboard } from 'react-native';
+import { Image } from 'expo-image'; // ✅ expo-image: built-in disk cache — dicebear won't re-fetch on scroll
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
@@ -256,7 +257,7 @@ function HomeScreen() {
     return combinedItems.filter(item => {
       let tabMatch = true;
       if (activeTab === 'all') tabMatch = !item.isArchived && !item.isLocked;
-      else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived && !item.isLocked;
+      else if (activeTab === 'friends') tabMatch = !item.isGroup && !item.isArchived && !item.isLocked && !item.isUnfriended;
       else if (activeTab === 'groups') tabMatch = item.isGroup && !item.isArchived && !item.isLocked;
       else if (activeTab === 'favourites') tabMatch = item.isFavorite && !item.isArchived && !item.isLocked;
       else if (activeTab === 'archive') tabMatch = item.isArchived && !item.isLocked;
@@ -269,14 +270,19 @@ function HomeScreen() {
     });
   }, [combinedItems, activeTab, searchQuery]);
 
-  const tabCounts = useMemo(() => ({
-    all: combinedItems.filter(i => !i.isArchived && !i.isLocked).length,
-    friends: combinedItems.filter(i => !i.isGroup && !i.isArchived && !i.isLocked).length,
-    groups: combinedItems.filter(i => i.isGroup && !i.isArchived && !i.isLocked).length,
-    favourites: combinedItems.filter(i => i.isFavorite && !i.isArchived && !i.isLocked).length,
-    archive: combinedItems.filter(i => i.isArchived && !i.isLocked).length,
-    locked: combinedItems.filter(i => i.isLocked).length,
-  }), [combinedItems]);
+  // ✅ Single-pass tabCounts — was 6 separate .filter() loops (up to 1200 iterations for 200 friends)
+  const tabCounts = useMemo(() => {
+    const counts = { all: 0, friends: 0, groups: 0, favourites: 0, archive: 0, locked: 0 };
+    for (const i of combinedItems) {
+      if (i.isLocked) { counts.locked++; continue; }
+      if (i.isArchived) { counts.archive++; continue; }
+      counts.all++;
+      if (!i.isGroup && !i.isUnfriended) counts.friends++;
+      else if (i.isGroup) counts.groups++;
+      if (i.isFavorite) counts.favourites++;
+    }
+    return counts;
+  }, [combinedItems]);
 
 
   const [refreshing, setRefreshing] = useState(false);
@@ -289,6 +295,8 @@ function HomeScreen() {
   }, [currentUser, loadFriends]);
 
   const pendingSentCount = useMemo(() => sentRequests.filter(r => r.status === 'pending').length, [sentRequests]);
+  // ✅ Memoized — was calling .filter() twice per render inline in JSX
+  const pendingReceivedCount = useMemo(() => receivedRequests.filter(r => r.status === 'pending').length, [receivedRequests]);
 
   const renderItem = useCallback(({ item }: { item: any }) => (
     <FriendListItem
@@ -400,9 +408,9 @@ function HomeScreen() {
               style={{ position: 'relative' }}
             >
               <Ionicons name="people-outline" size={26} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
-              {receivedRequests.filter(r => r.status === 'pending').length > 0 && (
+              {pendingReceivedCount > 0 && (
                 <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1, borderColor: Platform.OS === 'android' ? '#F68537' : 'white' }}>
-                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{receivedRequests.filter(r => r.status === 'pending').length}</Text>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{pendingReceivedCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -427,7 +435,7 @@ function HomeScreen() {
         <FlatList
           style={{ flex: 1 }}
           data={filteredItems}
-          keyExtractor={(item) => item.id?.toString() || item.email?.toString() || 'unknown'}
+          keyExtractor={(item, index) => item.id?.toString() || item.email?.toString() || `item-${index}`}
           contentContainerStyle={{ paddingBottom: 110 }}
           ListHeaderComponent={
             <View>
@@ -552,12 +560,17 @@ function HomeScreen() {
             activeOpacity={1}
             onPress={() => setSelectedImageForZoom(null)}
           >
-            <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+            {/* ✅ BlurView is GPU-heavy on Android — use plain semi-transparent View instead */}
+            {Platform.OS === 'android' ? (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.78)' }]} />
+            ) : (
+              <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+            )}
             <View style={{ width: '85%', aspectRatio: 1, backgroundColor: 'white', borderRadius: 20, overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20 }}>
               <Image
                 source={{ uri: selectedImageForZoom || '' }}
                 style={{ width: '100%', height: '100%' }}
-                resizeMode="cover"
+                contentFit="cover"
               />
               <TouchableOpacity
                 onPress={() => setSelectedImageForZoom(null)}

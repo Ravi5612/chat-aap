@@ -77,12 +77,14 @@ function ChatScreen() {
             setIsFriend(true); // groups are always "friends" for UI purposes
             return;
         }
+        // ✅ Fixed: was using .maybeSingle() which returns null when 2 rows exist
+        //    (both directions A→B and B→A stored). .limit(1) correctly handles this.
         const { data } = await supabase
             .from('friendships')
             .select('id')
             .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${safeFriendId}),and(user_id.eq.${safeFriendId},friend_id.eq.${currentUser.id})`)
-            .maybeSingle();
-        setIsFriend(!!data);
+            .limit(1);
+        setIsFriend(Array.isArray(data) && data.length > 0);
     }, [currentUser, safeFriendId, isGroup]);
 
     useEffect(() => {

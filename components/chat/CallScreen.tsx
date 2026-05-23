@@ -131,6 +131,15 @@ export default function CallScreen({
 
     const { saveCallLog } = useCallLogger(currentUser, friend, callType, callState);
 
+    // Trigger call log save when the call ends
+    useEffect(() => {
+        if (callState === 'ended' && !hasLogged.current) {
+            hasLogged.current = true;
+            const status = (callDuration === 0 && endReason !== 'Call Ended') ? 'missed' : 'completed';
+            saveCallLog(status, callDuration);
+        }
+    }, [callState, callDuration, saveCallLog, endReason]);
+
     const acceptCall = () => {
         console.log('[CALL_ACTION] Accept button pressed');
         // Signaling: Tell the caller (or group) we accepted

@@ -5,7 +5,7 @@ import { ResizeMode, Video } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Text, TextInput, TouchableOpacity, View, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
@@ -23,6 +23,26 @@ export default function StatusViewer() {
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [showViewers, setShowViewers] = useState(false);
     const [statusViewers, setStatusViewers] = useState<any[]>([]);
+
+    const [toastMessage, setToastMessage] = useState('');
+    const toastAnim = useRef(new Animated.Value(0)).current;
+
+    const showToast = (message: string) => {
+        setToastMessage(message);
+        Animated.sequence([
+            Animated.timing(toastAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+            Animated.delay(2000),
+            Animated.timing(toastAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            })
+        ]).start(() => setToastMessage(''));
+    };
 
     // Premium progress and holds
     const [progress, setProgress] = useState(0);
@@ -416,7 +436,7 @@ export default function StatusViewer() {
             }
 
             setReplyText('');
-            Alert.alert('Sent', 'Your reply has been sent! 🚀');
+            showToast('Your reply has been sent! 🚀');
         } catch (error: any) {
             console.error('Error sending status reply:', error);
             Alert.alert('Error', 'Failed to send encrypted reply');
@@ -770,6 +790,31 @@ export default function StatusViewer() {
                     </View>
                 </TouchableOpacity>
             </Modal>
+
+            {/* Floating Toast Notification */}
+            {!!toastMessage && (
+                <Animated.View style={{
+                    position: 'absolute',
+                    bottom: isOwner ? 60 : 120, // Adjust based on input box presence
+                    left: 20,
+                    right: 20,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: toastAnim,
+                    transform: [{
+                        translateY: toastAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [20, 0]
+                        })
+                    }],
+                    zIndex: 100
+                }}>
+                    <View style={{ backgroundColor: '#10B981', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 30, shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="checkmark-circle" size={20} color="white" />
+                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{toastMessage}</Text>
+                    </View>
+                </Animated.View>
+            )}
         </View>
     );
 }

@@ -49,33 +49,26 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
     setOnlineUsers: (onlineUsers) => {
         set({ onlineUsers });
-        const { friends, groups } = get();
-        if (friends.length === 0 && groups.length === 0) return;
+        const { combinedItems } = get();
+        if (combinedItems.length === 0) return;
 
         const currentUserId = useAuthStore.getState().user?.id;
         const isConnected = currentUserId ? !!onlineUsers[currentUserId] : false;
 
-        const friendsWithPresence = friends.map(f => {
-            const isOnline = isConnected ? !!onlineUsers[f.id] : f.db_is_online === true;
-            return {
-                ...f,
-                isOnline,
-                isTyping: onlineUsers[f.id]?.typingTo === currentUserId
-            };
+        // ✅ Optimized: presence updates only change isOnline/isTyping, NOT lastActivity.
+        //    Skip full sort + Map dedup. Just update existing sorted combinedItems in-place.
+        //    Also short-circuit: skip object creation if nothing changed.
+        let anyChanged = false;
+        const updated = combinedItems.map(item => {
+            if (item.isGroup) return item; // Groups have no presence
+            const isOnline = isConnected ? !!onlineUsers[item.id] : item.db_is_online === true;
+            const isTyping = onlineUsers[item.id]?.typingTo === currentUserId;
+            if (item.isOnline === isOnline && item.isTyping === isTyping) return item;
+            anyChanged = true;
+            return { ...item, isOnline, isTyping };
         });
 
-        const combined = [...friendsWithPresence, ...groups];
-        const uniqueItems = Array.from(new Map(combined.map(item => [item.id, item])).values())
-            .sort((a, b) => {
-                const parseDate = (d: any) => {
-                    if (!d || d === '0') return 0;
-                    const t = new Date(d).getTime();
-                    return isNaN(t) ? 0 : t;
-                };
-                return parseDate(b.lastActivity) - parseDate(a.lastActivity);
-            });
-
-        set({ combinedItems: uniqueItems });
+        if (anyChanged) set({ combinedItems: updated });
     },
 
     loadFriends: async (userId, force = false) => {
@@ -92,7 +85,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             ]);
 
             if (localConv && localConv.length > 0) {
-                console.log(`FriendsStore: Instant load of ${localConv.length} chats from Local DB`);
+                if (__DEV__) console.log(`FriendsStore: Instant load of ${localConv.length} chats from Local DB`);
                 set({ 
                     combinedItems: localConv,
                     lockedChatIds: localConv.filter(c => c.isLocked).map(c => c.id),
@@ -143,7 +136,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             if (db) {
                 const localStatuses = await getLocalStatuses(db);
                 if (localStatuses.length > 0) {
-                    console.log(`FriendsStore: Loaded ${localStatuses.length} statuses from Local DB`);
+                    if (__DEV__) console.log(`FriendsStore: Loaded ${localStatuses.length} statuses from Local DB`);
                 }
                 await pruneExpiredStatuses(db);
             }
@@ -262,15 +255,33 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
             // Process Last Activity
             const lastActivityMap: Record<string, string> = {};
+            const recentChatUserIds = new Set<string>();
             (recentMsgsRes.data || []).forEach(m => {
                 const chatId = m.group_id || (m.sender_id === userId ? m.receiver_id : m.sender_id);
-                if (chatId && !lastActivityMap[chatId]) lastActivityMap[chatId] = m.created_at;
+                if (chatId) {
+                    if (!lastActivityMap[chatId]) lastActivityMap[chatId] = m.created_at;
+                    if (!m.group_id) recentChatUserIds.add(chatId);
+                }
             });
+
+            // Find users we have chatted with but are not in friendships (e.g. unfriended)
+            const missingUserIds = Array.from(recentChatUserIds).filter(id => !friendIds.includes(id) && id !== userId);
+            let missingProfiles: any[] = [];
+            if (missingUserIds.length > 0) {
+                const { data } = await supabase.from('profiles').select('id, username, email, phone, avatar_url, is_online, show_email, show_phone').in('id', missingUserIds);
+                if (data) missingProfiles = data;
+            }
 
             // Format Friends
             const { combinedItems: existingItems } = get();
-            const formattedFriends = friendships.map((f: any) => {
-                const otherProfile = f.type === 'sent' ? f.friend : f.user;
+            
+            // Combine active friends with missing profiles (unfriended but have chat history)
+            const allProfilesToFormat = [
+                ...friendships.map((f: any) => ({ otherProfile: f.type === 'sent' ? f.friend : f.user, f, isFriend: true })),
+                ...missingProfiles.map(p => ({ otherProfile: p, f: {}, isFriend: false }))
+            ];
+
+            const formattedFriends = allProfilesToFormat.map(({ otherProfile, f, isFriend }: any) => {
                 if (!otherProfile) return null;
                 const sInfo = statusInfoMap[otherProfile.id] || { count: 0, viewedCount: 0 };
                 
@@ -294,6 +305,8 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
                     db_is_online: otherProfile.is_online,
                     lastActivity: lastActivityMap[otherProfile.id] || '0',
                     isGroup: false,
+                    isFriend: isFriend,
+                    isUnfriended: !isFriend,
                     isFavorite: !!isFavorite,
                     isArchived: !!isArchived,
                     isBlocked: blockedIds.includes(otherProfile.id),

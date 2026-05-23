@@ -26,45 +26,36 @@ export const useFriends = () => {
         }, 500); // 500ms debounce
     };
 
+    // ✅ Merged 2 duplicate useEffects into 1 — both depended on currentUser,
+    //    causing double-fire on mount. Also fixed dep to currentUser?.id to avoid
+    //    re-subscribing when user object reference changes but ID stays same.
     useEffect(() => {
         if (!currentUser) return;
 
+        // Initial load (immediate, not debounced)
+        loadFriends(currentUser.id);
+
+        // Realtime subscription
         const uniqueChannelId = `useFriends-${currentUser.id}`;
-        console.log(`[DEBUG] useFriends: Subscribing to channel: ${uniqueChannelId}`);
+        if (__DEV__) console.log(`[DEBUG] useFriends: Subscribing to channel: ${uniqueChannelId}`);
 
         // Cleanup any lingering channel from fast refresh or StrictMode
         const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${uniqueChannelId}`);
-        if (existingChannel) {
-            supabase.removeChannel(existingChannel);
-        }
+        if (existingChannel) supabase.removeChannel(existingChannel);
 
         const channel = supabase
             .channel(uniqueChannelId)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => {
-                debouncedLoad(currentUser.id);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-                debouncedLoad(currentUser.id);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'statuses' }, () => {
-                debouncedLoad(currentUser.id);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'status_views' }, () => {
-                debouncedLoad(currentUser.id);
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => debouncedLoad(currentUser.id))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => debouncedLoad(currentUser.id))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'statuses' }, () => debouncedLoad(currentUser.id))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'status_views' }, () => debouncedLoad(currentUser.id))
             .subscribe();
 
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
             supabase.removeChannel(channel);
         };
-    }, [currentUser]);
-
-    useEffect(() => {
-        if (currentUser) {
-            loadFriends(currentUser.id);
-        }
-    }, [currentUser]);
+    }, [currentUser?.id]);
 
     return { friends, groups, combinedItems, myStatuses, statusInfo, loading, error, loadFriends: () => currentUser && loadFriends(currentUser.id) };
 };

@@ -229,24 +229,28 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                     const statusOrder = { 'sent': 1, 'delivered': 2, 'read': 3 };
                     const newStatus = updatedMsg.is_read ? 'read' : updatedMsg.status;
 
-                    useChatStore.setState((state) => ({
-                        messages: state.messages.map(msg => {
-                            if (msg.id === updatedMsg.id) {
-                                const currentStatus = msg.status || 'sent';
-                                if (statusOrder[newStatus as keyof typeof statusOrder] > statusOrder[currentStatus as keyof typeof statusOrder]) {
-                                    // ONLY update status fields, NEVER overwrite the message text
-                                    return { 
-                                        ...msg, 
-                                        status: newStatus, 
-                                        is_read: updatedMsg.is_read,
-                                        delivered_at: updatedMsg.delivered_at,
-                                        read_at: updatedMsg.read_at
-                                    };
-                                }
-                            }
-                            return msg;
-                        })
-                    }));
+                    useChatStore.setState((state) => {
+                        // ✅ Optimized: findIndex to locate message, only re-create array if found
+                        const idx = state.messages.findIndex(msg => msg.id === updatedMsg.id);
+                        if (idx === -1) return {}; // message not in list, skip
+
+                        const msg = state.messages[idx];
+                        const currentStatus = msg.status || 'sent';
+                        if ((statusOrder[newStatus as keyof typeof statusOrder] ?? 0) <=
+                            (statusOrder[currentStatus as keyof typeof statusOrder] ?? 0)) {
+                            return {}; // no status upgrade needed
+                        }
+
+                        const newMessages = [...state.messages];
+                        newMessages[idx] = {
+                            ...msg,
+                            status: newStatus,
+                            is_read: updatedMsg.is_read,
+                            delivered_at: updatedMsg.delivered_at,
+                            read_at: updatedMsg.read_at
+                        };
+                        return { messages: newMessages };
+                    });
                 }
             })
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
@@ -359,8 +363,10 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                 const statusOrder = { 'sent': 1, 'delivered': 2, 'read': 3 };
                 const newStatus = update.status;
 
-                useChatStore.setState((state) => ({
-                    messages: state.messages.map(msg => {
+                useChatStore.setState((state) => {
+                    // ✅ Optimized: instead of mapping entire array, only update matching messages
+                    let changed = false;
+                    const newMessages = state.messages.map(msg => {
                         const isMyMessage = msg.sender_id === currentUser.id;
                         if (!isMyMessage) return msg;
 
@@ -372,13 +378,16 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
                             if (update.message_id && msg.id !== update.message_id) return msg;
 
                             const currentStatus = msg.status || 'sent';
-                            if (statusOrder[newStatus as keyof typeof statusOrder] > statusOrder[currentStatus as keyof typeof statusOrder]) {
+                            if ((statusOrder[newStatus as keyof typeof statusOrder] ?? 0) >
+                                (statusOrder[currentStatus as keyof typeof statusOrder] ?? 0)) {
+                                changed = true;
                                 return { ...msg, status: newStatus, is_read: newStatus === 'read' };
                             }
                         }
                         return msg;
-                    })
-                }));
+                    });
+                    return changed ? { messages: newMessages } : {};
+                });
             })
             .on('broadcast', { event: 'message_reaction' }, (payload) => {
                 const { message_id, emoji, reactions } = payload.payload;

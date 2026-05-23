@@ -5,7 +5,7 @@ import { decryptText, encryptText, getChatKey } from '@/utils/chatCrypto';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { Alert } from 'react-native';
 import { create } from 'zustand';
-import { uploadChatMessageMedia } from '../utils/uploadHelper';
+import { uploadChatMessageMediaWithProgress } from '../utils/uploadHelper';
 import { useDbStore } from './useDbStore';
 
 interface ChatState {
@@ -20,11 +20,12 @@ interface ChatState {
     activeChannel: any | null;
     activeChatId: string | null;
     cache: Record<string, { messages: any[], key: Uint8Array }>;
+    uploadProgress: Record<string, number>; // ✅ tempId -> 0-100 percent
 
     // Actions
     initChat: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
-    loadMoreMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>; // ✅ Pagination
+    loadMoreMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string) => Promise<void>;
     reactToMessage: (messageId: string, emoji: string, currentUser: any) => Promise<void>;
     saveEdit: (messageId: string, newText: string, currentUser: any) => Promise<void>;
@@ -41,6 +42,37 @@ export const useChatStore = create<ChatState>((set, get) => {
     let typingTimeout: any = null;
     let lastTypingSent = 0;
 
+    // ✅ Batched markAsRead: collect message IDs and flush together
+    let markAsReadQueue: string[] = [];
+    let markAsReadTimer: any = null;
+    let markAsReadMeta: { currentUser: any; friendId: string; isGroup: boolean; channel: any } | null = null;
+
+    const flushMarkAsRead = async () => {
+        if (markAsReadQueue.length === 0) return;
+        const ids = [...markAsReadQueue];
+        markAsReadQueue = [];
+        const meta = markAsReadMeta;
+        if (!meta) return;
+
+        try {
+            await supabase.from('messages').update({ is_read: true, status: 'read' }).in('id', ids);
+            const { activeChannel } = get();
+            if (activeChannel) {
+                activeChannel.send({
+                    type: 'broadcast',
+                    event: 'status_update',
+                    payload: {
+                        status: 'read',
+                        sender_id: meta.currentUser?.id,
+                        group_id: meta.isGroup ? meta.friendId : null,
+                    }
+                });
+            }
+        } catch (err) {
+            console.error('flushMarkAsRead error:', err);
+        }
+    };
+
     return {
         messages: [],
         loading: false,
@@ -53,6 +85,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         activeChannel: null,
         activeChatId: null,
         cache: {},
+        uploadProgress: {}, // ✅ empty map initially
 
         setFlyingEmoji: (flyingEmoji) => set({ flyingEmoji }),
 
@@ -238,11 +271,11 @@ export const useChatStore = create<ChatState>((set, get) => {
                     // 2. Save fetched messages to Local DB for next time
                     const { db } = useDbStore.getState();
                     if (db) {
+                        // ✅ require() moved outside forEach to avoid repeated module lookups
+                        const { useAuthStore } = require('./useAuthStore');
+                        const currentUserId = useAuthStore.getState().user?.id;
                         finalMessages.forEach(msg => {
                             saveLocalMessage(db, msg);
-                            // Also sync ledger if needed
-                            const { useAuthStore } = require('./useAuthStore');
-                            const currentUserId = useAuthStore.getState().user?.id;
                             if (currentUserId) syncLedgerExpense(db, msg, currentUserId);
                         });
                     }
@@ -403,14 +436,11 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const combinedMessages = [...filteredOlderMessages, ...messages].filter(m => m && m.id);
                 const uniqueMessages = Array.from(new Map(combinedMessages.map(m => [m.id, m])).values());
 
-                set({
+                // ✅ Single atomic set() — merged messages + cache update
+                set((state) => ({
                     messages: uniqueMessages,
                     loadingMore: false,
                     hasMore: data.length === PAGE_SIZE,
-                });
-
-                // Update cache
-                set((state) => ({
                     cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: chatKey } }
                 }));
 
@@ -601,8 +631,9 @@ export const useChatStore = create<ChatState>((set, get) => {
             };
 
             const updatedMessages = [...messages, tempMsg];
-            set({ messages: updatedMessages });
+            // ✅ Merged into single atomic set() call
             set((state) => ({
+                messages: updatedMessages,
                 cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
             }));
 
@@ -637,7 +668,19 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
 
                     if (localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
-                        fileData = await uploadChatMessageMedia(localUri, uploadType, currentUser.id, originalName, docMime);
+                        fileData = await uploadChatMessageMediaWithProgress(
+                            localUri,
+                            uploadType,
+                            currentUser.id,
+                            (percent) => {
+                                // ✅ Update progress for this specific message bubble
+                                set((state) => ({
+                                    uploadProgress: { ...state.uploadProgress, [tempId]: percent }
+                                }));
+                            },
+                            originalName,
+                            docMime
+                        );
                         messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : (isDoc ? 'a document' : 'an image'))}`;
                     }
                 }
@@ -665,10 +708,13 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject };
                 set((state) => {
                     const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
-                    // ✅ Save to SQLite Cache
                     saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
+                    // ✅ Clear progress for this message on success
+                    const newProgress = { ...state.uploadProgress };
+                    delete newProgress[tempId];
                     return {
                         messages: newMessages,
+                        uploadProgress: newProgress,
                         cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
                     };
                 });
@@ -710,8 +756,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                 if (error) throw error;
 
                 const newMessages = messages.map(m => m.id === messageId ? { ...m, reactions } : m);
-                set({ messages: newMessages });
+                // ✅ Single atomic set() call
                 set((state) => ({
+                    messages: newMessages,
                     cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
                 }));
 
@@ -739,8 +786,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                 if (error) throw error;
 
                 const newMessages = messages.map(m => m.id === messageId ? { ...m, message: newText, is_edited: true } : m);
-                set({ messages: newMessages });
+                // ✅ Single atomic set() call
                 set((state) => ({
+                    messages: newMessages,
                     cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
                 }));
 
@@ -888,25 +936,15 @@ export const useChatStore = create<ChatState>((set, get) => {
         },
 
         markAsRead: async (messageId, currentUser, friendId, isGroup) => {
-            const { activeChannel } = get();
-            try {
-                await supabase.from('messages').update({ is_read: true, status: 'read' }).eq('id', messageId);
+            // ✅ Debounced batching: collect IDs for 300ms then flush in one Supabase call
+            markAsReadQueue.push(messageId);
+            markAsReadMeta = { currentUser, friendId, isGroup, channel: get().activeChannel };
 
-                if (activeChannel) {
-                    activeChannel.send({
-                        type: 'broadcast',
-                        event: 'status_update',
-                        payload: {
-                            status: 'read',
-                            sender_id: currentUser.id,
-                            group_id: isGroup ? friendId : null,
-                            message_id: messageId
-                        }
-                    });
-                }
-            } catch (err) {
-                console.error("markAsRead error:", err);
-            }
+            if (markAsReadTimer) clearTimeout(markAsReadTimer);
+            markAsReadTimer = setTimeout(() => {
+                markAsReadTimer = null;
+                flushMarkAsRead();
+            }, 300);
         },
 
         cleanupChat: () => {

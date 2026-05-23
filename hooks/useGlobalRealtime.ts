@@ -12,6 +12,7 @@ import { useDbStore } from '@/store/useDbStore';
 const DEFAULT_MESSAGE_TONE = 'https://raw.githubusercontent.com/Anshuman71/chat-app/master/client/src/assets/notification.mp3';
 
 let globalSoundInstance: Audio.Sound | null = null;
+let globalSoundUrl: string | null = null; // ✅ Track loaded URL to reuse instance
 let isAudioConfigured = false;
 
 // Queue for batching Supabase 'delivered' updates
@@ -65,26 +66,29 @@ export const useGlobalRealtime = (userId: string | null) => {
             }
 
             const soundUrl = profileRef.current?.message_tone || DEFAULT_MESSAGE_TONE;
-            if (__DEV__) console.log('[DEBUG] GlobalRealtime: Playing sound from:', soundUrl);
 
-            // Prevent memory leak: unload previous instance if it exists
-            if (globalSoundInstance) {
-                await globalSoundInstance.unloadAsync().catch(() => {});
+            // ✅ Reuse existing instance if same URL — avoids expensive createAsync on every message
+            if (globalSoundInstance && globalSoundUrl === soundUrl) {
+                await globalSoundInstance.setPositionAsync(0);
+                await globalSoundInstance.playAsync();
+                return;
             }
 
+            // URL changed or first load — unload old, create new persistent instance
+            if (globalSoundInstance) {
+                await globalSoundInstance.unloadAsync().catch(() => {});
+                globalSoundInstance = null;
+                globalSoundUrl = null;
+            }
+
+            if (__DEV__) console.log('[DEBUG] GlobalRealtime: Loading sound:', soundUrl);
             const { sound } = await Audio.Sound.createAsync(
                 { uri: soundUrl },
                 { shouldPlay: true, volume: 1.0 }
             );
-            
-            globalSoundInstance = sound;
 
-            sound.setOnPlaybackStatusUpdate((status: any) => {
-                if (status.didJustFinish) {
-                    sound.unloadAsync().catch(() => { });
-                    globalSoundInstance = null;
-                }
-            });
+            globalSoundInstance = sound;
+            globalSoundUrl = soundUrl;
         } catch (error) {
             if (__DEV__) console.error('[ERROR] GlobalRealtime: Error playing message sound:', error);
         }
