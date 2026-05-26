@@ -40,12 +40,15 @@ export const useCallLogs = () => {
 
     const loadLogs = useCallback(async (offset = 0, isRefresh = false) => {
         try {
+            let hasEnrichedCache = false;
+            
             if (offset === 0 && !isRefresh) {
-                // 1. Instantly load from local SQLite cache to skip loading skeleton
+                // 1. Instantly load from local cache to skip loading skeleton
                 const sqliteCache = getFromCache('call_logs_cache');
                 if (sqliteCache && sqliteCache.logs && sqliteCache.logs.length > 0) {
                     setLogs(sqliteCache.logs);
                     setLoading(false); // Skip loading spinner!
+                    hasEnrichedCache = true;
                 } else {
                     setLoading(true);
                 }
@@ -62,8 +65,8 @@ export const useCallLogs = () => {
                 return;
             }
 
-            // 1. Load from Local DB first for instant UI
-            if (offset === 0) {
+            // 1. Load from Local DB first for instant UI (only if no enriched cache)
+            if (offset === 0 && !hasEnrichedCache) {
                 const { db } = useDbStore.getState();
                 if (db) {
                     const localLogs = await getLocalCallLogs(db, currentUser.id);
