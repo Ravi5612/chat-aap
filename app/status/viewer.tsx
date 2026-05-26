@@ -19,7 +19,7 @@ import StatusOverlay from '@/components/status/StatusOverlay';
 const { width, height } = Dimensions.get('window');
 
 export default function StatusViewer() {
-    const { userId, initialIndex, isArchive, date } = useLocalSearchParams();
+    const { userId, initialIndex, isArchive, date, statusId } = useLocalSearchParams();
     const router = useExpoRouter();
     const insets = useSafeAreaInsets();
     
@@ -35,6 +35,16 @@ export default function StatusViewer() {
 
     // 1. Fetcher Hook
     const { statuses, setStatuses, loading, currentUser } = useStatusFetcher(userId as string, isArchive as string, date as string);
+
+    // If statusId is provided, jump to it once statuses load
+    useEffect(() => {
+        if (!loading && statuses.length > 0 && statusId) {
+            const idx = statuses.findIndex(s => s.id === statusId);
+            if (idx !== -1 && idx !== currentIndex) {
+                setCurrentIndex(idx);
+            }
+        }
+    }, [loading, statuses, statusId]);
 
     const currentStatusUI = statuses[currentIndex];
     const isOwner = !!(currentUser && userId === currentUser.id);

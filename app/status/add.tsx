@@ -228,9 +228,9 @@ export default function AddStatus() {
                                 {/* Mention Button Below Music */}
                                 <TouchableOpacity 
                                     onPress={() => setShowMentionPicker(true)} 
-                                    style={{ position: 'absolute', top: 76, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 24 }}
+                                    style={{ position: 'absolute', top: 76, right: 20, backgroundColor: '#F68537', padding: 12, borderRadius: 24 }}
                                 >
-                                    <Ionicons name="at" size={24} color={mentionedFriends.length > 0 ? "#10B981" : "white"} />
+                                    <Ionicons name="at" size={24} color="white" />
                                 </TouchableOpacity>
                             </View>
                         )}

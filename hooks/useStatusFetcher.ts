@@ -58,7 +58,11 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                     accessibleStatuses = accessibleStatuses.filter((s: any) => {
                         if (s.user_id === currentUser.id) return true;
                         if (s.privacy_type === 'all' || !s.privacy_type) return true;
-                        if (s.privacy_type === 'selected' && s.viewer_ids?.includes(currentUser.id)) return true;
+                        if (s.privacy_type === 'selected') {
+                            const isViewer = s.viewer_ids?.includes(currentUser.id);
+                            const isMentioned = s.mentioned_user_ids?.includes(currentUser.id);
+                            if (isViewer || isMentioned) return true;
+                        }
                         return false;
                     });
                 }
