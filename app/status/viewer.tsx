@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
+import { Audio } from 'expo-av';
 import { useRouter as useExpoRouter } from 'expo-router';
 
 // Hooks
@@ -28,6 +29,9 @@ export default function StatusViewer() {
     const [showViewers, setShowViewers] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const toastAnim = useRef(new Animated.Value(0)).current;
+    
+    // Background Music
+    const [bgMusic, setBgMusic] = useState<Audio.Sound | null>(null);
 
     // 1. Fetcher Hook
     const { statuses, setStatuses, loading, currentUser } = useStatusFetcher(userId as string, isArchive as string, date as string);
@@ -60,6 +64,48 @@ export default function StatusViewer() {
             else viewerVideoRef.current.playAsync();
         }
     }, [paused, currentIndex, statuses]);
+
+    // Handle Music playback
+    useEffect(() => {
+        let sound: Audio.Sound | null = null;
+        
+        const playMusic = async () => {
+            if (bgMusic) {
+                await bgMusic.unloadAsync();
+                setBgMusic(null);
+            }
+            if (currentStatusUI?.audio_url) {
+                try {
+                    const musicData = JSON.parse(currentStatusUI.audio_url);
+                    if (musicData?.url) {
+                        const { sound: newSound } = await Audio.Sound.createAsync(
+                            { uri: musicData.url },
+                            { shouldPlay: !paused, isLooping: true }
+                        );
+                        sound = newSound;
+                        setBgMusic(newSound);
+                    }
+                } catch(e) {}
+            }
+        };
+        
+        if (currentStatusUI) {
+            playMusic();
+        }
+
+        return () => {
+            if (sound) {
+                sound.unloadAsync().catch(() => {});
+            }
+        };
+    }, [currentIndex, statuses, currentStatusUI?.id]);
+
+    useEffect(() => {
+        if (bgMusic) {
+            if (paused) bgMusic.pauseAsync();
+            else bgMusic.playAsync();
+        }
+    }, [paused, bgMusic]);
 
     const handleSendReply = async () => {
         if (!replyText.trim() || !currentUser || !currentStatusUI) return;

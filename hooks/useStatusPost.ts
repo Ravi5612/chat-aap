@@ -14,7 +14,8 @@ export function useStatusPost(
     selectedViewerIds: string[],
     duration: number,
     trimStart: number,
-    trimEnd: number
+    trimEnd: number,
+    selectedMusic?: any
 ) {
     const [loading, setLoading] = useState(false);
     const isSubmittingRef = useRef(false);
@@ -83,12 +84,14 @@ export function useStatusPost(
 
                         const encryptedContent = content.trim() ? await encryptText(content.trim(), statusKey) : null;
                         const encryptedMediaUrl = mediaUrl ? await encryptText(mediaUrl, statusKey) : null;
+                        const encryptedAudioUrl = selectedMusic ? await encryptText(JSON.stringify(selectedMusic), statusKey) : null;
 
                         const statusData = {
                             user_id: user.id,
                             content: encryptedContent,
                             media_type: mediaType,
                             media_url: encryptedMediaUrl,
+                            audio_url: encryptedAudioUrl,
                             background_color: selectedMedia ? null : bgColor,
                             expires_at: tempStatus.expires_at,
                             is_deleted: false,

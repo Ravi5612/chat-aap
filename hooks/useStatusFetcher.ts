@@ -75,6 +75,7 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                     const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
                         let decryptedContent = s.content;
                         let decryptedMediaUrl = s.media_url;
+                        let decryptedAudioUrl = s.audio_url;
 
                         if (s.content && s.content.trim().startsWith('{')) {
                             try { decryptedContent = await decryptText(s.content, statusKey); } catch (e) {}
@@ -82,11 +83,15 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                         if (s.media_url && s.media_url.trim().startsWith('{')) {
                             try { decryptedMediaUrl = await decryptText(s.media_url, statusKey); } catch (e) {}
                         }
+                        if (s.audio_url && s.audio_url.trim().startsWith('{')) {
+                            try { decryptedAudioUrl = await decryptText(s.audio_url, statusKey); } catch (e) {}
+                        }
 
                         return {
                             ...s,
                             content: decryptedContent,
                             media_url: decryptedMediaUrl,
+                            audio_url: decryptedAudioUrl,
                             profiles: profile || { username: 'User', avatar_url: null }
                         };
                     }));

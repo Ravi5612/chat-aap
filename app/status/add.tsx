@@ -13,6 +13,7 @@ import { useStatusPost } from '@/hooks/useStatusPost';
 import StatusHeader from '@/components/status/StatusHeader';
 import StatusVideoPlayer from '@/components/status/StatusVideoPlayer';
 import StatusModals from '@/components/status/StatusModals';
+import MusicPicker from '@/components/status/MusicPicker';
 
 const BG_COLORS = ['#F68537', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#1E293B', '#FF4E50', '#000000'];
 
@@ -25,11 +26,13 @@ export default function AddStatus() {
     const [selectedMedia, setSelectedMedia] = useState<any>(null);
     const [privacy, setPrivacy] = useState<'all' | 'selected'>('all');
     const [selectedViewerIds, setSelectedViewerIds] = useState<string[]>([]);
+    const [selectedMusic, setSelectedMusic] = useState<any>(null);
     
     // UI Modals State
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [showFriendPicker, setShowFriendPicker] = useState(false);
+    const [showMusicPicker, setShowMusicPicker] = useState(false);
     
     // References
     const mediaInputRef = useRef<TextInput>(null);
@@ -45,7 +48,7 @@ export default function AddStatus() {
     } = useVideoTrimmer();
 
     const { handlePost, loading } = useStatusPost(
-        content, selectedMedia, bgColor, privacy, selectedViewerIds, duration, trimStart, trimEnd
+        content, selectedMedia, bgColor, privacy, selectedViewerIds, duration, trimStart, trimEnd, selectedMusic
     );
 
     const pickMedia = async () => {
@@ -114,7 +117,23 @@ export default function AddStatus() {
                                 handleTouch={handleTouch}
                             />
                         ) : (
-                            <Image source={{ uri: selectedMedia.uri }} style={{ width: '100%', height: '100%', contentFit: 'contain' }} />
+                            <View style={{ flex: 1 }}>
+                                <Image source={{ uri: selectedMedia.uri }} style={{ width: '100%', height: '100%', contentFit: 'contain' }} />
+                                
+                                {/* Music Sticker */}
+                                {selectedMusic && (
+                                    <View style={styles.musicSticker}>
+                                        <Image source={{ uri: selectedMusic.cover }} style={styles.musicStickerCover} />
+                                        <View style={{ marginLeft: 8, flex: 1 }}>
+                                            <Text style={styles.musicStickerTitle} numberOfLines={1}>{selectedMusic.title}</Text>
+                                            <Text style={styles.musicStickerArtist} numberOfLines={1}>{selectedMusic.artist}</Text>
+                                        </View>
+                                        <TouchableOpacity onPress={() => setSelectedMusic(null)} style={{ padding: 4 }}>
+                                            <Ionicons name="close-circle" size={20} color="white" />
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
                         )}
 
                         <View style={[styles.mediaInputContainer, { bottom: showEmojiPicker ? 280 : 0, paddingBottom: showEmojiPicker ? 10 : Math.max(insets.bottom, 20) }]}>
@@ -132,6 +151,11 @@ export default function AddStatus() {
                                     onFocus={() => setShowEmojiPicker(false)}
                                     multiline
                                 />
+                                {!isVideo && (
+                                    <TouchableOpacity onPress={() => setShowMusicPicker(true)} style={styles.musicBtn}>
+                                        <Ionicons name="musical-notes" size={20} color={selectedMusic ? "#F68537" : "white"} />
+                                    </TouchableOpacity>
+                                )}
                                 <TouchableOpacity onPress={handlePost} disabled={loading} style={styles.sendBtn}>
                                     {loading ? <ActivityIndicator color="white" size="small" /> : <Ionicons name="send" size={20} color="white" />}
                                 </TouchableOpacity>
@@ -188,6 +212,12 @@ export default function AddStatus() {
                 insetsTop={insets.top}
                 insetsBottom={insets.bottom}
             />
+
+            <MusicPicker 
+                visible={showMusicPicker} 
+                onClose={() => setShowMusicPicker(false)} 
+                onSelectMusic={setSelectedMusic} 
+            />
         </View>
     );
 }
@@ -201,5 +231,10 @@ const styles = StyleSheet.create({
     inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 30, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
     iconBtn: { padding: 6 },
     mediaTextInput: { flex: 1, color: 'white', fontSize: 16, maxHeight: 100, paddingHorizontal: 10 },
-    sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F68537', alignItems: 'center', justifyContent: 'center' }
+    musicBtn: { padding: 8, marginRight: 8 },
+    sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F68537', alignItems: 'center', justifyContent: 'center' },
+    musicSticker: { position: 'absolute', top: 50, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, padding: 6, flexDirection: 'row', alignItems: 'center', width: 200 },
+    musicStickerCover: { width: 40, height: 40, borderRadius: 20 },
+    musicStickerTitle: { color: 'white', fontSize: 14, fontWeight: 'bold' },
+    musicStickerArtist: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
 });

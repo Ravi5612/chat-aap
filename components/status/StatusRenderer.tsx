@@ -44,6 +44,23 @@ export default function StatusRenderer({
                         </Text>
                     </View>
                 )}
+                
+                {/* Music Sticker */}
+                {currentStatusUI.audio_url && (() => {
+                    try {
+                        const music = JSON.parse(currentStatusUI.audio_url);
+                        if (!music.title) return null;
+                        return (
+                            <View style={{ position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, padding: 6, flexDirection: 'row', alignItems: 'center', width: 200, zIndex: 10 }}>
+                                <Image source={{ uri: music.cover }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                                <View style={{ marginLeft: 8, flex: 1 }}>
+                                    <Text style={{ color: 'white', fontSize: 14, fontWeight: 'bold' }} numberOfLines={1}>{music.title}</Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11 }} numberOfLines={1}>{music.artist}</Text>
+                                </View>
+                            </View>
+                        );
+                    } catch(e) { return null; }
+                })()}
             </View>
         );
     }
