@@ -28,16 +28,49 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
       if (notification?.id) {
         await notifee.cancelNotification(notification.id);
       }
-      // Send rejected signal to the caller via Supabase
-      // NOTE: We need the caller_id to send the rejected signal, which should be in the payload.
-      // Let's assume we can broadcast a global reject if we have the user's own ID.
+      
+      const { useCallStore } = require('@/store/useCallStore');
+      const session = useCallStore.getState().callSession;
+      if (session?.friend?.id) {
+          const targetId = session.friend.id;
+          const channel = supabase.channel(`calls-signal-${targetId}`);
+          channel.subscribe(async (status) => {
+              if (status === 'SUBSCRIBED') {
+                  await channel.send({
+                      type: 'broadcast',
+                      event: 'signal',
+                      payload: { type: 'rejected' }
+                  });
+                  setTimeout(() => supabase.removeChannel(channel), 1000);
+              }
+          });
+      }
+      useCallStore.getState().setCallEnded('Call declined');
     }
 
     else if (pressAction?.id === 'end_call') {
       // The user pressed the "Cut" button for an outgoing call.
       console.log('[NOTIFEE_BACKGROUND] User ended outgoing call');
       await cancelOutgoingCall();
-      // Send end signal to the receiver via Supabase
+      
+      const { useCallStore } = require('@/store/useCallStore');
+      const session = useCallStore.getState().callSession;
+      if (session?.friend?.id) {
+          const targetId = session.friend.id;
+          const endType = session.status === 'incoming' ? 'rejected' : 'end';
+          const channel = supabase.channel(`calls-signal-${targetId}`);
+          channel.subscribe(async (status) => {
+              if (status === 'SUBSCRIBED') {
+                  await channel.send({
+                      type: 'broadcast',
+                      event: 'signal',
+                      payload: { type: endType }
+                  });
+                  setTimeout(() => supabase.removeChannel(channel), 1000);
+              }
+          });
+      }
+      useCallStore.getState().endCall();
     }
   }
 

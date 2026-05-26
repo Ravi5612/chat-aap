@@ -58,7 +58,11 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                     accessibleStatuses = accessibleStatuses.filter((s: any) => {
                         if (s.user_id === currentUser.id) return true;
                         if (s.privacy_type === 'all' || !s.privacy_type) return true;
-                        if (s.privacy_type === 'selected' && s.viewer_ids?.includes(currentUser.id)) return true;
+                        if (s.privacy_type === 'selected') {
+                            const isViewer = s.viewer_ids?.includes(currentUser.id);
+                            const isMentioned = s.mentioned_user_ids?.includes(currentUser.id);
+                            if (isViewer || isMentioned) return true;
+                        }
                         return false;
                     });
                 }
@@ -72,9 +76,26 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                 if (accessibleStatuses.length > 0) {
                     const statusKey = await getChatKey(userId, userId);
 
+                    let allMentionedIds: string[] = [];
+                    accessibleStatuses.forEach((s: any) => {
+                        if (s.mentioned_user_ids && Array.isArray(s.mentioned_user_ids)) {
+                            allMentionedIds.push(...s.mentioned_user_ids);
+                        }
+                    });
+                    allMentionedIds = [...new Set(allMentionedIds)];
+
+                    let mentionedProfilesMap: Record<string, any> = {};
+                    if (allMentionedIds.length > 0) {
+                        const { data: mProfiles } = await supabase.from('profiles').select('id, username, avatar_url').in('id', allMentionedIds);
+                        if (mProfiles) {
+                            mProfiles.forEach(p => { mentionedProfilesMap[p.id] = p; });
+                        }
+                    }
+
                     const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
                         let decryptedContent = s.content;
                         let decryptedMediaUrl = s.media_url;
+                        let decryptedAudioUrl = s.audio_url;
 
                         if (s.content && s.content.trim().startsWith('{')) {
                             try { decryptedContent = await decryptText(s.content, statusKey); } catch (e) {}
@@ -82,12 +103,19 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                         if (s.media_url && s.media_url.trim().startsWith('{')) {
                             try { decryptedMediaUrl = await decryptText(s.media_url, statusKey); } catch (e) {}
                         }
+                        if (s.audio_url && s.audio_url.trim().startsWith('{')) {
+                            try { decryptedAudioUrl = await decryptText(s.audio_url, statusKey); } catch (e) {}
+                        }
+
+                        const mentionedProfiles = (s.mentioned_user_ids || []).map((id: string) => mentionedProfilesMap[id]).filter(Boolean);
 
                         return {
                             ...s,
                             content: decryptedContent,
                             media_url: decryptedMediaUrl,
-                            profiles: profile || { username: 'User', avatar_url: null }
+                            audio_url: decryptedAudioUrl,
+                            profiles: profile || { username: 'User', avatar_url: null },
+                            mentionedProfiles
                         };
                     }));
 

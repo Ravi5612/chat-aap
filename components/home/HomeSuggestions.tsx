@@ -26,9 +26,15 @@ export default function HomeSuggestions({
     return (
         <View style={{ marginTop: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, flexWrap: 'wrap', paddingRight: 8 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '900', color: '#64748B', letterSpacing: 0.5 }}>SUGGESTIONS FROM</Text>
-                    <View style={{ flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 20, padding: 2 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, paddingRight: 8 }}>
+                    <Text 
+                        style={{ fontSize: 12, fontWeight: '900', color: '#64748B', letterSpacing: 0.5, flexShrink: 1 }} 
+                        numberOfLines={1} 
+                        adjustsFontSizeToFit
+                    >
+                        SUGGESTIONS FROM
+                    </Text>
+                    <View style={{ flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 20, padding: 2, flexShrink: 0 }}>
                         {showContactSuggestions && (
                             <TouchableOpacity
                                 onPress={() => onSetSuggestionTab('contacts')}

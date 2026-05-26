@@ -1,23 +1,52 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleSheet, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useWindowDimensions } from 'react-native';
 
-// Hooks
-import { useCallActions } from '@/hooks/useCallActions';
-
-// Sub-components
-import { CallEndedOverlay, RemoteVideoArea, CallControls } from './CallScreenComponents';
-
-const formatDuration = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+const CallControls = ({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: any) => {
+    if (callState === 'incoming') {
+        return (
+            <View style={styles.controlsContainer}>
+                <TouchableOpacity onPress={onEnd} style={[styles.controlButton, styles.largeButton, styles.dangerButton]}>
+                    <Ionicons name="close" size={32} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onAccept} style={[styles.controlButton, styles.largeButton, styles.successButton]}>
+                    <Ionicons name="call" size={32} color="white" />
+                </TouchableOpacity>
+            </View>
+        );
+    }
+    
+    return (
+        <View style={styles.controlsContainer}>
+            {callType === 'video' && (
+                <TouchableOpacity onPress={onSwitchCamera} style={styles.controlButton}>
+                    <Ionicons name="camera-reverse" size={24} color="white" />
+                </TouchableOpacity>
+            )}
+            {callType === 'video' && (
+                <TouchableOpacity onPress={onVideo} style={[styles.controlButton, isVideoOff && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                    <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
+                </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={onMute} style={[styles.controlButton, isMuted && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onSpeaker} style={[styles.controlButton, isSpeakerphone && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={24} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onEnd} style={[styles.controlButton, styles.largeButton, styles.dangerButton]}>
+                <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
+            </TouchableOpacity>
+        </View>
+    );
 };
+
 
 interface CallScreenProps {
     visible: boolean;
@@ -40,23 +69,32 @@ export default function CallScreen({
 }: CallScreenProps) {
     const { width, height } = useWindowDimensions();
     const [isSwapped, setIsSwapped] = useState(false);
+    const [showControls, setShowControls] = useState(true);
+    const startTimeRef = useRef<number | null>(null); // NEW: To track when the call actually started
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const lastCallInfo = useRef({
+        state: callState,
+        friend: friend,
+        type: callType,
+        isGroup: isGroup
+    });
+    const hasLogged = useRef(false);
 
     // Draggable PIP
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
-    }));
-    const onGestureEvent = (event: any) => {
-        translateX.value = event.nativeEvent.translationX;
-        translateY.value = event.nativeEvent.translationY;
-    };
-    const onHandlerStateChange = (event: any) => {
-        if (event.nativeEvent.state === State.END) {
-            translateX.value = withSpring(event.nativeEvent.translationX);
-            translateY.value = withSpring(event.nativeEvent.translationY);
-        }
-    };
+    const offsetX = useSharedValue(0);
+    const offsetY = useSharedValue(0);
+
+    const panGesture = Gesture.Pan()
+        .onUpdate((event) => {
+            translateX.value = offsetX.value + event.translationX;
+            translateY.value = offsetY.value + event.translationY;
+        })
+        .onEnd(() => {
+            offsetX.value = translateX.value;
+            offsetY.value = translateY.value;
+        });
 
     // Agora RTC
     const { joined, remoteUids, connectionStatus, isMuted, isVideoOff, isSpeakerphone,
@@ -84,43 +122,44 @@ export default function CallScreen({
         >
             <View style={styles.container}>
                 {/* Minimize Button */}
-                {callState !== 'ended' && onMinimize && (
+
+                {callState !== 'ended' && onMinimize && showControls && (
                     <TouchableOpacity style={styles.minimizeButton} onPress={onMinimize}>
                         <Ionicons name="chevron-down" size={32} color="white" />
                     </TouchableOpacity>
                 )}
 
                 {/* Main Video Area */}
-                <View style={styles.mainVideoContainer}>
-                    {callType === 'video' ? (
-                        <>
-                            {isSwapped && isEngineReady
-                                ? <AgoraVideoView uid={0} style={{ width, height }} channelId={channelId} />
-                                : <RemoteVideoArea remoteUids={remoteUids} friend={friend} callState={callState}
-                                    isGroup={isGroup} isEngineReady={isEngineReady} channelId={channelId} />
-                            }
-                            {!isGroup && remoteUids.length > 0 && (
-                                <>
-                                    {remoteVideoMuted && (
-                                        <View style={styles.videoOffOverlay}>
-                                            <Ionicons name="videocam-off" size={64} color="white" />
-                                            <Text style={{ color: 'white', marginTop: 12 }}>{friend?.name} has turned off camera</Text>
-                                        </View>
-                                    )}
-                                    {remoteAudioMuted && (
-                                        <View style={styles.remoteStatusBadge}>
-                                            <Ionicons name="mic-off" size={16} color="white" />
-                                            <Text style={styles.remoteStatusText}>Muted</Text>
-                                        </View>
-                                    )}
-                                </>
-                            )}
-                        </>
-                    ) : (
-                        <RemoteVideoArea remoteUids={remoteUids} friend={friend} callState={callState}
-                            isGroup={isGroup} isEngineReady={isEngineReady} channelId={channelId} />
-                    )}
-                </View>
+                <TouchableWithoutFeedback onPress={() => setShowControls(p => !p)}>
+                    <View style={styles.mainVideoContainer}>
+                        {callType === 'video' ? (
+                            <>
+                                {isSwapped && isEngineReady
+                                    ? <AgoraVideoView uid={0} style={{ width, height }} channelId={channelId} />
+                                    : renderRemoteVideos()
+                                }
+                                {!isGroup && remoteUids.length > 0 && (
+                                    <>
+                                        {remoteVideoMuted && (
+                                            <View style={styles.videoOffOverlay}>
+                                                <Ionicons name="videocam-off" size={64} color="white" />
+                                                <Text style={{ color: 'white', marginTop: 12 }}>{friend?.name} has turned off camera</Text>
+                                            </View>
+                                        )}
+                                        {remoteAudioMuted && (
+                                            <View style={styles.remoteStatusBadge}>
+                                                <Ionicons name="mic-off" size={16} color="white" />
+                                                <Text style={styles.remoteStatusText}>Muted</Text>
+                                            </View>
+                                        )}
+                                    </>
+                                )}
+                            </>
+                        ) : (
+                            renderRemoteVideos()
+                        )}
+                    </View>
+                </TouchableWithoutFeedback>
 
                 {/* Ended Overlay */}
                 {callState === 'ended' && (
@@ -129,7 +168,7 @@ export default function CallScreen({
 
                 {/* PIP Local Preview */}
                 {callType === 'video' && (callState === 'active' || callState === 'outgoing') && isEngineReady && (
-                    <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
+                    <GestureDetector gesture={panGesture}>
                         <Animated.View style={[styles.pipContainer, animatedStyle]}>
                             <TouchableOpacity activeOpacity={0.8} onPress={() => !isGroup && setIsSwapped(p => !p)} style={{ flex: 1 }}>
                                 <AgoraVideoView
@@ -146,7 +185,7 @@ export default function CallScreen({
                                 )}
                             </TouchableOpacity>
                         </Animated.View>
-                    </PanGestureHandler>
+                    </GestureDetector>
                 )}
 
                 {/* Timer */}
@@ -163,19 +202,23 @@ export default function CallScreen({
                 </View>
 
                 {/* Controls */}
-                <CallControls
-                    callState={callState}
-                    callType={callType}
-                    isMuted={isMuted}
-                    isVideoOff={isVideoOff}
-                    isSpeakerphone={isSpeakerphone}
-                    onMute={toggleMute}
-                    onVideo={toggleVideo}
-                    onSpeaker={toggleSpeakerphone}
-                    onSwitchCamera={switchCamera}
-                    onAccept={acceptCall}
-                    onEnd={endCall}
-                />
+                <View style={styles.controlsWrapper}>
+                    {showControls && (
+                        <CallControls
+                            callState={callState}
+                            callType={callType}
+                            isMuted={isMuted}
+                            isVideoOff={isVideoOff}
+                            isSpeakerphone={isSpeakerphone}
+                            onMute={toggleMute}
+                            onVideo={toggleVideo}
+                            onSpeaker={toggleSpeakerphone}
+                            onSwitchCamera={switchCamera}
+                            onAccept={acceptCall}
+                            onEnd={endCall}
+                        />
+                    )}
+                </View>
             </View>
         </Modal>
     );

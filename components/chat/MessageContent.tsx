@@ -2,8 +2,10 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import MessageStatus from './MessageStatus';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
+import StatusMentionCard from './StatusMentionCard';
 
 interface MessageContentProps {
     message: any;
@@ -41,8 +43,12 @@ export default function MessageContent({
     isDocumentMessage, documentName, documentSize, documentUrl,
     hasImage
 }: MessageContentProps) {
+    const router = useRouter();
     const isCallLog = message.message_type === 'call' || !!message.call_details;
     const callDetails = message.call_details || {};
+    
+    const isStatusMention = textContent?.startsWith('[StatusMention] ');
+    const statusMentionId = isStatusMention ? textContent.replace('[StatusMention] ', '').trim() : null;
 
     const ledgerData = useMemo(() => {
         if (message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:')) {
@@ -191,8 +197,18 @@ export default function MessageContent({
                 </View>
             )}
 
+            {/* Status Mention Card - Premium Design */}
+            {isStatusMention && statusMentionId && (
+                <StatusMentionCard
+                    statusId={statusMentionId}
+                    isCurrentUser={isCurrentUser}
+                    targetUserId={message.sender_id}
+                    router={router}
+                />
+            )}
+
             <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                {textContent && textContent.trim() !== '' && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && message.message_type !== 'ledger' && (
+                {textContent && textContent.trim() !== '' && !isStatusMention && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && message.message_type !== 'ledger' && (
                     <Text style={{ fontSize: 15, lineHeight: 22, color: isCurrentUser ? 'white' : '#1F2937', fontStyle: textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED' ? 'italic' : 'normal', opacity: textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED' ? 0.7 : 1 }}>
                         {textContent.trim().startsWith('{"iv":') ? 'Decrypting...' : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
                     </Text>

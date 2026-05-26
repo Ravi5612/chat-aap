@@ -5,7 +5,6 @@ serve(async (req) => {
     try {
         const payload = await req.json();
         
-        // Check if it's a webhook record
         const record = payload.record;
         if (!record) {
             return new Response(JSON.stringify({ error: "No record found" }), { status: 400 });
@@ -33,11 +32,31 @@ serve(async (req) => {
 
         const senderName = senderProfile?.username || "Someone";
 
-        let pushTokens = [];
-        let title = senderName;
-        let body = "New Message";
+        // Figure out notification body from message type
+        let bodyText = "New Message";
+        const msgType = record.message_type || 'text';
+        if (msgType === 'text') {
+            // Message is encrypted — show generic but friendly text
+            bodyText = "📩 Sent you a message";
+        } else if (msgType === 'image' || record.file_type?.startsWith('image/')) {
+            bodyText = "📷 Sent you a photo";
+        } else if (msgType === 'voice' || record.file_type?.startsWith('audio/')) {
+            bodyText = "🎤 Sent you a voice message";
+        } else if (msgType === 'video' || record.file_type?.startsWith('video/')) {
+            bodyText = "🎥 Sent you a video";
+        } else if (msgType === 'document') {
+            bodyText = "📄 Sent you a document";
+        } else if (msgType === 'ledger') {
+            bodyText = "💰 Sent you a payment request";
+        } else {
+            bodyText = "📩 Sent you a message";
+        }
 
-        // If it's a private message
+        let pushTokens: string[] = [];
+        let title = senderName;
+        let body = bodyText;
+
+        // Private message
         if (receiverId) {
             const { data: receiverProfile } = await supabase
                 .from('profiles')
@@ -49,18 +68,17 @@ serve(async (req) => {
                 pushTokens.push(receiverProfile.push_token);
             }
         } 
-        // If it's a group message
+        // Group message
         else if (groupId) {
-            // Fetch group name
             const { data: groupData } = await supabase
                 .from('groups')
                 .select('name')
                 .eq('id', groupId)
                 .maybeSingle();
                 
-            title = `${senderName} in ${groupData?.name || 'Group'}`;
+            title = `${senderName}`;
+            body = `${groupData?.name || 'Group'}: ${bodyText}`;
 
-            // Fetch all group members EXCEPT the sender
             const { data: groupMembers } = await supabase
                 .from('group_members')
                 .select('user_id')
@@ -78,7 +96,7 @@ serve(async (req) => {
                     if (memberProfiles) {
                         pushTokens = memberProfiles
                             .map(p => p.push_token)
-                            .filter(token => token !== null);
+                            .filter(token => token !== null && token !== undefined);
                     }
                 }
             }
@@ -88,22 +106,24 @@ serve(async (req) => {
             return new Response(JSON.stringify({ message: "No push tokens found" }), { status: 200 });
         }
 
-        console.log(`Sending notification to ${pushTokens.length} devices.`);
+        console.log(`Sending notification to ${pushTokens.length} devices. Title: ${title}`);
 
-        // Expo push payload
+        // ✅ FIXED: title & body at ROOT level so phone shows banner when app is closed
         const messages = pushTokens.map(token => ({
             to: token,
-            // Omit root 'title' and 'body' to make it a data-only notification for FCM, 
-            // so we don't get duplicate notifications when Notifee handles it.
+            title: title,
+            body: body,
+            sound: 'default',
+            priority: 'high',
+            channelId: 'default',
             data: { 
                 title: title,
                 body: body,
                 senderAvatar: senderProfile?.avatar_url || '',
-                senderId: groupId ? groupId : senderId, // Route to group or friend
+                senderId: groupId ? groupId : senderId,
                 messageId: record.id,
                 type: 'message'
             },
-            priority: 'high',
         }));
 
         const response = await fetch("https://exp.host/--/api/v2/push/send", {
@@ -117,9 +137,9 @@ serve(async (req) => {
         });
 
         const result = await response.json();
+        console.log("Expo push result:", JSON.stringify(result));
         
-        // Mark message as delivered for the receiver (optional, since global realtime might handle it)
-        // Only mark if it's a private message for now
+        // Mark message as delivered
         if (receiverId) {
             await supabase
                 .from('messages')

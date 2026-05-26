@@ -148,16 +148,43 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
                 .filter(m => (isGroup ? m.sender_id !== currentUser.id : m.sender_id === friendId) && !m.is_read)
                 .map(m => m.id);
 
+            // Update state locally so any incoming messages we fetched show as read
             if (unreadIds.length > 0) {
-                await supabase.from('messages').update({ is_read: true, status: 'read' }).in('id', unreadIds);
-                const { activeChannel } = get();
-                if (activeChannel) {
-                    activeChannel.send({
-                        type: 'broadcast',
-                        event: 'status_update',
-                        payload: { status: 'read', sender_id: currentUser.id, group_id: isGroup ? friendId : null }
-                    });
+                const activeChatId = get().activeChatId;
+                if (activeChatId === friendId) {
+                    set((state) => ({
+                        messages: state.messages.map(m => unreadIds.includes(m.id) ? { ...m, is_read: true, status: 'read' } : m)
+                    }));
                 }
+            }
+
+            // BULK update all unread messages in the database (not just the 20 fetched ones)
+            try {
+                let updateQuery = supabase.from('messages').update({ is_read: true, status: 'read' });
+                
+                if (isGroup) {
+                    updateQuery = updateQuery.eq('group_id', friendId).neq('sender_id', currentUser.id).eq('is_read', false);
+                } else {
+                    updateQuery = updateQuery.eq('sender_id', friendId).eq('receiver_id', currentUser.id).eq('is_read', false);
+                }
+                
+                // Fire and forget
+                updateQuery.then(({ error }) => {
+                    if (error) {
+                        console.error('Bulk mark as read error:', error);
+                    } else {
+                        const { activeChannel } = get();
+                        if (activeChannel) {
+                            activeChannel.send({
+                                type: 'broadcast',
+                                event: 'status_update',
+                                payload: { status: 'read', sender_id: currentUser.id, group_id: isGroup ? friendId : null }
+                            });
+                        }
+                    }
+                });
+            } catch (bulkErr) {
+                console.error('Bulk mark as read catch:', bulkErr);
             }
         } catch (error: any) {
             console.error('ChatStore: Load error:', error.message);
