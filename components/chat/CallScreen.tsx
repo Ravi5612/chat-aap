@@ -276,55 +276,7 @@ export default function CallScreen({
         }}>
             <View style={styles.container}>
                 {/* Minimize Button */}
-<<<<<<< Updated upstream
-                {callState !== 'ended' && onMinimize && (
-                    <TouchableOpacity 
-                        style={styles.minimizeButton} 
-                        onPress={onMinimize}
-                    >
-                        <Ionicons name="chevron-down" size={32} color="white" />
-                    </TouchableOpacity>
-                )}
-                {/* Main Video Container */}
-                <View style={styles.mainVideoContainer}>
-                    {callType === 'video' ? (
-                        <>
-                            {isSwapped && isEngineReady ? (
-                                <AgoraVideoView uid={0} style={styles.fullVideo} channelId={channelId} />
-                            ) : renderRemoteVideos()}
 
-                            {/* Remote Status Badges (simplified for group) */}
-                            {!isGroup && remoteUids.length > 0 && (
-                                <>
-                                    {remoteVideoMuted && (
-                                        <View style={styles.videoOffOverlay}>
-                                            <Ionicons name="videocam-off" size={64} color="white" />
-                                            <Text style={{ color: 'white', marginTop: 12 }}>{friend.name} has turned off camera</Text>
-                                        </View>
-                                    )}
-                                    {remoteAudioMuted && (
-                                        <View style={styles.remoteStatusBadge}>
-                                            <Ionicons name="mic-off" size={16} color="white" />
-                                            <Text style={styles.remoteStatusText}>Muted</Text>
-                                        </View>
-                                    )}
-                                </>
-                            )}
-                        </>
-                    ) : (
-                        /* Audio Call UI */
-                        <View style={styles.placeholderContainer}>
-                            <View style={styles.avatarContainer}>
-                                <Image 
-                                    source={{ uri: friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537` }} 
-                                    style={styles.fullImage} 
-                                />
-                            </View>
-                            <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
-                            <Text style={styles.callStatus}>
-                                {callState === 'outgoing' ? 'Calling...' :
-                                    callState === 'ringing' ? 'Ringing...' :
-                                    callState === 'incoming' ? 'Incoming Call...' :
                 {callState !== 'ended' && onMinimize && showControls && (
                     <TouchableOpacity style={styles.minimizeButton} onPress={onMinimize}>
                         <Ionicons name="chevron-down" size={32} color="white" />
