@@ -21,9 +21,6 @@ import AudioRecorder from './AudioRecorder';
 import ContactPickerModal from './ContactPickerModal';
 import EmojiPickerModal from './EmojiPickerModal';
 
-import { useMediaPicker } from '@/hooks/chatInput/useMediaPicker';
-import { useLocationPicker } from '@/hooks/chatInput/useLocationPicker';
-import { useDocumentPicker } from '@/hooks/chatInput/useDocumentPicker';
 
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
@@ -61,9 +58,6 @@ export default function ChatInput({
     const insets = useSafeAreaInsets();
     const hasMeasured = insets.top > 0 || insets.bottom > 0;
     const safeBottom = hasMeasured ? insets.bottom : (initialWindowMetrics?.insets?.bottom || 0);
-    const { handlePickImage, handleLaunchCamera } = useMediaPicker(setSelectedImage);
-    const { handleLocation } = useLocationPicker(onSendMessage);
-    const { handleDocument } = useDocumentPicker(onSendMessage);
     const inputRef = useRef<TextInput>(null);
     const typingTimeoutRef = useRef<any>(null);
     const draftTimeoutRef = useRef<any>(null);
@@ -126,6 +120,118 @@ export default function ChatInput({
         setIsRecording(false);
     };
 
+    const launchImagePicker = async (shouldCrop: boolean) => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: shouldCrop,
+                quality: 1,
+            });
+
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('ChatInput PickImage Error:', error);
+            Alert.alert('Error', 'Failed to open gallery');
+        }
+    };
+
+    const handlePickImage = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Allow gallery access to share photos.');
+                return;
+            }
+
+            Alert.alert(
+                'Crop Image?',
+                'Do you want to crop the image before sending?',
+                [
+                    { text: 'No (Fast send)', onPress: () => launchImagePicker(false) },
+                    { text: 'Yes (Crop it)', onPress: () => launchImagePicker(true) },
+                    { text: 'Cancel', style: 'cancel' }
+                ],
+                { cancelable: true }
+            );
+        } catch (error) {
+            console.error('ChatInput PickImage Error:', error);
+        }
+    };
+
+    const launchCamera = async (shouldCrop: boolean) => {
+        try {
+            const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: shouldCrop,
+                quality: 1,
+            });
+
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('ChatInput LaunchCamera Error:', error);
+            Alert.alert('Error', 'Failed to open camera');
+        }
+    };
+
+    const handleLaunchCamera = async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Allow camera access to take photos.');
+                return;
+            }
+
+            // Directly open camera without asking to crop
+            launchCamera(false);
+        } catch (error) {
+            console.error('ChatInput LaunchCamera Error:', error);
+        }
+    };
+
+    const handleLocation = async () => {
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission denied', 'Allow location access to share your location.');
+                return;
+            }
+
+            // Optional: Show a loading indicator if you have state for it, but for now just await
+            const location = await Location.getCurrentPositionAsync({});
+
+            let addressStr = 'Current Location';
+            try {
+                const [geocode] = await Location.reverseGeocodeAsync({
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude
+                });
+
+                if (geocode) {
+                    // Combine available address components
+                    const parts = [
+                        geocode.name,
+                        geocode.street,
+                        geocode.city || geocode.subregion,
+                        geocode.region
+                    ].filter(Boolean);
+
+                    if (parts.length > 0) {
+                        addressStr = parts.join(', ');
+                    }
+                }
+            } catch (geocodeError) {
+                console.log('Reverse geocode failed:', geocodeError);
+            }
+
+            onSendMessage(`[Location] ${location.coords.latitude},${location.coords.longitude} | ${addressStr}`);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to get location. Please try again.');
+        }
+    };
+
     const [contactModalVisible, setContactModalVisible] = useState(false);
 
     const handleContact = async () => {
@@ -134,6 +240,30 @@ export default function ChatInput({
 
     const handleSelectContact = (name: string, phone: string) => {
         onSendMessage(`[Contact] ${name} | ${phone}`);
+    };
+
+    const handleDocument = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*', // allow all files, including .apk
+                copyToCacheDirectory: true,
+            });
+
+            // @ts-ignore
+            if (result.canceled) return;
+
+            // @ts-ignore
+            const asset = result.assets?.[0] ?? result;
+            if (!asset) return;
+
+            const name = asset.name || 'file';
+            const uri = asset.uri;
+            const mimeType = asset.mimeType || 'application/octet-stream';
+
+            onSendMessage(`[Document] ${uri} | ${name} | ${mimeType}`);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to pick document.');
+        }
     };
 
     const handleSelectEmoji = (emoji: string) => {
@@ -286,7 +416,14 @@ export default function ChatInput({
 
                         <TextInput
                             ref={inputRef}
-                            style={styles.textInput}
+                            style={{
+                                flex: 1,
+                                fontSize: 16,
+                                paddingVertical: 10,
+                                paddingHorizontal: 4,
+                                color: '#1F2937',
+                                maxHeight: 120
+                            }}
                             placeholder={editingMessage ? "Edit message..." : "Message"}
                             placeholderTextColor="#94A3B8"
                             value={message}
@@ -314,7 +451,23 @@ export default function ChatInput({
                         )}
                     </View>
 
-                    <TouchableOpacity onPress={handleSubmit} disabled={disabled} style={styles.sendBtn}>
+                    <TouchableOpacity
+                        onPress={handleSubmit}
+                        disabled={disabled}
+                        style={{
+                            height: 48,
+                            width: 48,
+                            borderRadius: 24,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: '#F68537',
+                            elevation: 3,
+                            shadowColor: '#F68537',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.4,
+                            shadowRadius: 3,
+                        }}
+                    >
                         <Ionicons
                             name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic")}
                             size={24}
