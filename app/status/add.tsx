@@ -133,6 +133,13 @@ export default function AddStatus() {
                                         </TouchableOpacity>
                                     </View>
                                 )}
+                                {/* Music Picker Button at Top Right */}
+                                <TouchableOpacity 
+                                    onPress={() => setShowMusicPicker(true)} 
+                                    style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 24 }}
+                                >
+                                    <Ionicons name="musical-notes" size={24} color={selectedMusic ? "#F68537" : "white"} />
+                                </TouchableOpacity>
                             </View>
                         )}
 
@@ -151,11 +158,6 @@ export default function AddStatus() {
                                     onFocus={() => setShowEmojiPicker(false)}
                                     multiline
                                 />
-                                {!isVideo && (
-                                    <TouchableOpacity onPress={() => setShowMusicPicker(true)} style={styles.musicBtn}>
-                                        <Ionicons name="musical-notes" size={20} color={selectedMusic ? "#F68537" : "white"} />
-                                    </TouchableOpacity>
-                                )}
                                 <TouchableOpacity onPress={handlePost} disabled={loading} style={styles.sendBtn}>
                                     {loading ? <ActivityIndicator color="white" size="small" /> : <Ionicons name="send" size={20} color="white" />}
                                 </TouchableOpacity>
