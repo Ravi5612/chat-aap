@@ -1,26 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import {
-    Alert,
-    Image,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
-} from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ReplyPreview from './ReplyPreview';
-
-import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import AttachmentMenu from './AttachmentMenu';
 import AudioRecorder from './AudioRecorder';
 import ContactPickerModal from './ContactPickerModal';
 import EmojiPickerModal from './EmojiPickerModal';
+import { EditingBanner, SelectedImagePreview, NonMemberOverlay } from './ChatInputOverlays';
 
+import { useMediaPicker } from '@/hooks/chatInput/useMediaPicker';
+import { useLocationPicker } from '@/hooks/chatInput/useLocationPicker';
+import { useDocumentPicker } from '@/hooks/chatInput/useDocumentPicker';
 
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
@@ -38,29 +30,29 @@ interface ChatInputProps {
 }
 
 export default function ChatInput({
-    onSendMessage,
-    onTyping,
-    disabled = false,
-    replyingTo,
-    onCancelReply,
-    editingMessage,
-    onCancelEdit,
-    onSaveEdit,
-    isMember = true,
-    isKeyboardOpen = false,
-    initialMessage = '',
-    onDraftChange
+    onSendMessage, onTyping, disabled = false,
+    replyingTo, onCancelReply, editingMessage, onCancelEdit, onSaveEdit,
+    isMember = true, isKeyboardOpen = false, initialMessage = '', onDraftChange
 }: ChatInputProps) {
     const [message, setMessage] = useState(initialMessage);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [emojiModalVisible, setEmojiModalVisible] = useState(false);
+    const [contactModalVisible, setContactModalVisible] = useState(false);
+
     const insets = useSafeAreaInsets();
     const hasMeasured = insets.top > 0 || insets.bottom > 0;
     const safeBottom = hasMeasured ? insets.bottom : (initialWindowMetrics?.insets?.bottom || 0);
+
     const inputRef = useRef<TextInput>(null);
     const typingTimeoutRef = useRef<any>(null);
     const draftTimeoutRef = useRef<any>(null);
+    const lastSentTimeRef = useRef(0);
+    const lastTypingSentRef = useRef(0);
+
+    const { handlePickImage, handleLaunchCamera } = useMediaPicker(setSelectedImage);
+    const { handleLocation } = useLocationPicker(onSendMessage);
+    const { handleDocument } = useDocumentPicker(onSendMessage);
 
     React.useEffect(() => {
         if (editingMessage) {
@@ -71,225 +63,46 @@ export default function ChatInput({
         }
     }, [editingMessage, replyingTo]);
 
-    // Sync draft when loaded asynchronously
     React.useEffect(() => {
-        if (initialMessage) {
-            setMessage(initialMessage);
-        }
+        if (initialMessage) setMessage(initialMessage);
     }, [initialMessage]);
 
-    const lastSentTimeRef = useRef(0);
-
     const handleSubmit = () => {
-        // Prevent accidental double taps on the mic button just after sending
         if (!message.trim() && !selectedImage) {
-            if (Date.now() - lastSentTimeRef.current < 500) {
-                return; // Ignore accidental mic taps immediately after sending
-            }
+            if (Date.now() - lastSentTimeRef.current < 500) return;
             setIsRecording(true);
             return;
         }
-
-
         if (editingMessage && onSaveEdit) {
             onSaveEdit(message.trim());
         } else {
             let finalMessage = message.trim();
-            if (selectedImage) {
-                finalMessage = `[Image] ${selectedImage} ${message.trim()}`;
-            }
+            if (selectedImage) finalMessage = `[Image] ${selectedImage} ${message.trim()}`;
             onSendMessage(finalMessage);
         }
-
         lastSentTimeRef.current = Date.now();
         setMessage('');
         setSelectedImage(null);
-        
-        // Clear draft timeout to prevent ghost draft restoring
         if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
-        if (onDraftChange) onDraftChange(''); 
-        
+        if (onDraftChange) onDraftChange('');
         if (onTyping) {
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             onTyping(false);
         }
     };
 
-    const handleRecordingComplete = (uri: string) => {
-        onSendMessage(`[Voice Message] ${uri}`);
-        setIsRecording(false);
-    };
-
-    const launchImagePicker = async (shouldCrop: boolean) => {
-        try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: shouldCrop,
-                quality: 1,
-            });
-
-            if (!result.canceled) {
-                setSelectedImage(result.assets[0].uri);
-            }
-        } catch (error) {
-            console.error('ChatInput PickImage Error:', error);
-            Alert.alert('Error', 'Failed to open gallery');
-        }
-    };
-
-    const handlePickImage = async () => {
-        try {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'Allow gallery access to share photos.');
-                return;
-            }
-
-            Alert.alert(
-                'Crop Image?',
-                'Do you want to crop the image before sending?',
-                [
-                    { text: 'No (Fast send)', onPress: () => launchImagePicker(false) },
-                    { text: 'Yes (Crop it)', onPress: () => launchImagePicker(true) },
-                    { text: 'Cancel', style: 'cancel' }
-                ],
-                { cancelable: true }
-            );
-        } catch (error) {
-            console.error('ChatInput PickImage Error:', error);
-        }
-    };
-
-    const launchCamera = async (shouldCrop: boolean) => {
-        try {
-            const result = await ImagePicker.launchCameraAsync({
-                allowsEditing: shouldCrop,
-                quality: 1,
-            });
-
-            if (!result.canceled) {
-                setSelectedImage(result.assets[0].uri);
-            }
-        } catch (error) {
-            console.error('ChatInput LaunchCamera Error:', error);
-            Alert.alert('Error', 'Failed to open camera');
-        }
-    };
-
-    const handleLaunchCamera = async () => {
-        try {
-            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'Allow camera access to take photos.');
-                return;
-            }
-
-            // Directly open camera without asking to crop
-            launchCamera(false);
-        } catch (error) {
-            console.error('ChatInput LaunchCamera Error:', error);
-        }
-    };
-
-    const handleLocation = async () => {
-        try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission denied', 'Allow location access to share your location.');
-                return;
-            }
-
-            // Optional: Show a loading indicator if you have state for it, but for now just await
-            const location = await Location.getCurrentPositionAsync({});
-
-            let addressStr = 'Current Location';
-            try {
-                const [geocode] = await Location.reverseGeocodeAsync({
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude
-                });
-
-                if (geocode) {
-                    // Combine available address components
-                    const parts = [
-                        geocode.name,
-                        geocode.street,
-                        geocode.city || geocode.subregion,
-                        geocode.region
-                    ].filter(Boolean);
-
-                    if (parts.length > 0) {
-                        addressStr = parts.join(', ');
-                    }
-                }
-            } catch (geocodeError) {
-                console.log('Reverse geocode failed:', geocodeError);
-            }
-
-            onSendMessage(`[Location] ${location.coords.latitude},${location.coords.longitude} | ${addressStr}`);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to get location. Please try again.');
-        }
-    };
-
-    const [contactModalVisible, setContactModalVisible] = useState(false);
-
-    const handleContact = async () => {
-        setContactModalVisible(true);
-    };
-
-    const handleSelectContact = (name: string, phone: string) => {
-        onSendMessage(`[Contact] ${name} | ${phone}`);
-    };
-
-    const handleDocument = async () => {
-        try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: '*/*', // allow all files, including .apk
-                copyToCacheDirectory: true,
-            });
-
-            // @ts-ignore
-            if (result.canceled) return;
-
-            // @ts-ignore
-            const asset = result.assets?.[0] ?? result;
-            if (!asset) return;
-
-            const name = asset.name || 'file';
-            const uri = asset.uri;
-            const mimeType = asset.mimeType || 'application/octet-stream';
-
-            onSendMessage(`[Document] ${uri} | ${name} | ${mimeType}`);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to pick document.');
-        }
-    };
-
-    const handleSelectEmoji = (emoji: string) => {
-        setMessage(prev => prev + emoji);
-    };
-
-    const lastTypingSentRef = useRef(0);
-
     const handleChangeText = (text: string) => {
         setMessage(text);
-
-        // Debounced Draft Save
         if (onDraftChange) {
             if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
-            draftTimeoutRef.current = setTimeout(() => {
-                onDraftChange(text);
-            }, 500); // Save after 500ms of no typing
+            draftTimeoutRef.current = setTimeout(() => { onDraftChange(text); }, 500);
         }
-
         if (onTyping) {
             const now = Date.now();
             if (now - lastTypingSentRef.current > 3000) {
                 onTyping(true);
                 lastTypingSentRef.current = now;
             }
-
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             typingTimeoutRef.current = setTimeout(() => {
                 onTyping(false);
@@ -301,113 +114,33 @@ export default function ChatInput({
     const bottomPadding = isKeyboardOpen ? 5 : (safeBottom > 0 ? safeBottom : 12);
 
     return (
-        <View style={{
-            backgroundColor: 'transparent',
-            borderTopWidth: 0,
-            // Jab keyboard open ho toh padding kam (5), jab band ho toh buttons ke liye zyada (20)
-            paddingBottom: bottomPadding,
-            position: 'relative'
-        }}>
+        <View style={{ backgroundColor: 'transparent', borderTopWidth: 0, paddingBottom: bottomPadding, position: 'relative' }}>
+            {!isMember && <NonMemberOverlay />}
 
-            {!isMember && (
-                <View style={{
-                    position: 'absolute',
-                    inset: 0,
-                    backgroundColor: 'rgba(249, 250, 251, 0.8)',
-                    zIndex: 100,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    paddingHorizontal: 20
-                }}>
-                    <View style={{
-                        backgroundColor: 'white',
-                        paddingHorizontal: 16,
-                        paddingVertical: 10,
-                        borderRadius: 20,
-                        borderWidth: 1,
-                        borderColor: '#E5E7EB',
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 8,
-                        elevation: 2,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 4
-                    }}>
-                        <Text style={{ fontSize: 18 }}>🚫</Text>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#6B7280' }}>
-                            You are no longer a member of this group
-                        </Text>
-                    </View>
-                </View>
-            )}
             <View style={{ opacity: isMember ? 1 : 0.5, pointerEvents: isMember ? 'auto' : 'none' }}>
                 {isRecording && (
                     <AudioRecorder
-                        onRecordingComplete={handleRecordingComplete}
+                        onRecordingComplete={(uri) => { onSendMessage(`[Voice Message] ${uri}`); setIsRecording(false); }}
                         onCancel={() => setIsRecording(false)}
                     />
                 )}
 
-                <ReplyPreview replyingTo={replyingTo} onCancel={onCancelReply || (() => { })} />
+                <ReplyPreview replyingTo={replyingTo} onCancel={onCancelReply || (() => {})} />
 
                 {editingMessage && (
-                    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFF7ED', borderBottomWidth: 1, borderBottomColor: 'rgba(246, 133, 55, 0.3)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                            <View style={{ width: 4, height: 40, backgroundColor: '#F68537', borderRadius: 9999, marginRight: 12 }} />
-                            <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 12, color: '#F68537', fontWeight: 'bold', marginBottom: 2 }}>Editing message...</Text>
-                                <Text style={{ fontSize: 12, color: '#4B5563' }} numberOfLines={1}>{editingMessage.message}</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity onPress={onCancelEdit} style={{ padding: 4 }}>
-                            <Ionicons name="close-circle" size={20} color="#94A3B8" />
-                        </TouchableOpacity>
-                    </View>
+                    <EditingBanner editingMessage={editingMessage} onCancelEdit={onCancelEdit} />
                 )}
 
                 {selectedImage && !isRecording && (
-                    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center' }}>
-                        <Image source={{ uri: selectedImage as string }} style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16 }} />
-                        <TouchableOpacity onPress={() => setSelectedImage(null)} style={{ position: 'absolute', top: 4, left: 64, backgroundColor: '#EF4444', borderRadius: 9999 }}>
-                            <Ionicons name="close" size={16} color="white" />
-                        </TouchableOpacity>
-                        <Text style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>Image selected</Text>
-                    </View>
+                    <SelectedImagePreview imageUri={selectedImage} onRemove={() => setSelectedImage(null)} />
                 )}
 
-                <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'flex-end',
-                    gap: 6,
-                    paddingHorizontal: 8,
-                    paddingVertical: 10,
-                    opacity: isRecording ? 0 : 1
-                }}>
-                    <View style={{
-                        flex: 1,
-                        backgroundColor: 'white',
-                        borderRadius: 25,
-                        minHeight: 48,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingHorizontal: 6,
-                        elevation: 2,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 2,
-                    }}>
+                <View style={[styles.inputRow, { opacity: isRecording ? 0 : 1 }]}>
+                    <View style={styles.inputBubble}>
                         <TouchableOpacity
                             onPress={() => {
-                                if (emojiModalVisible) {
-                                    setEmojiModalVisible(false);
-                                    inputRef.current?.focus();
-                                } else {
-                                    inputRef.current?.blur();
-                                    setEmojiModalVisible(true);
-                                }
+                                if (emojiModalVisible) { setEmojiModalVisible(false); inputRef.current?.focus(); }
+                                else { inputRef.current?.blur(); setEmojiModalVisible(true); }
                             }}
                             style={{ padding: 8 }}
                         >
@@ -416,14 +149,7 @@ export default function ChatInput({
 
                         <TextInput
                             ref={inputRef}
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                paddingVertical: 10,
-                                paddingHorizontal: 4,
-                                color: '#1F2937',
-                                maxHeight: 120
-                            }}
+                            style={styles.textInput}
                             placeholder={editingMessage ? "Edit message..." : "Message"}
                             placeholderTextColor="#94A3B8"
                             value={message}
@@ -437,37 +163,18 @@ export default function ChatInput({
                             onImage={handlePickImage}
                             onCamera={handleLaunchCamera}
                             onLocation={handleLocation}
-                            onContact={handleContact}
+                            onContact={() => setContactModalVisible(true)}
                             onDocument={handleDocument}
                         />
 
                         {!message.trim() && !selectedImage && (
-                            <TouchableOpacity
-                                onPress={handleLaunchCamera}
-                                style={{ padding: 8 }}
-                            >
+                            <TouchableOpacity onPress={handleLaunchCamera} style={{ padding: 8 }}>
                                 <Ionicons name="camera" size={26} color="#6B7280" />
                             </TouchableOpacity>
                         )}
                     </View>
 
-                    <TouchableOpacity
-                        onPress={handleSubmit}
-                        disabled={disabled}
-                        style={{
-                            height: 48,
-                            width: 48,
-                            borderRadius: 24,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: '#F68537',
-                            elevation: 3,
-                            shadowColor: '#F68537',
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.4,
-                            shadowRadius: 3,
-                        }}
-                    >
+                    <TouchableOpacity onPress={handleSubmit} disabled={disabled} style={styles.sendBtn}>
                         <Ionicons
                             name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic")}
                             size={24}
@@ -480,11 +187,8 @@ export default function ChatInput({
                 {emojiModalVisible && (
                     <EmojiPickerModal
                         visible={emojiModalVisible}
-                        onClose={() => {
-                            setEmojiModalVisible(false);
-                            inputRef.current?.focus();
-                        }}
-                        onSelect={handleSelectEmoji}
+                        onClose={() => { setEmojiModalVisible(false); inputRef.current?.focus(); }}
+                        onSelect={(emoji) => setMessage(prev => prev + emoji)}
                         isInline={true}
                     />
                 )}
@@ -492,11 +196,33 @@ export default function ChatInput({
                 <ContactPickerModal
                     visible={contactModalVisible}
                     onClose={() => setContactModalVisible(false)}
-                    onSelectContact={handleSelectContact}
+                    onSelectContact={(name, phone) => onSendMessage(`[Contact] ${name} | ${phone}`)}
                 />
             </View>
         </View>
     );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+    inputRow: {
+        flexDirection: 'row', alignItems: 'flex-end',
+        gap: 6, paddingHorizontal: 8, paddingVertical: 10,
+    },
+    inputBubble: {
+        flex: 1, backgroundColor: 'white', borderRadius: 25,
+        minHeight: 48, flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 6, elevation: 2, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2,
+    },
+    textInput: {
+        flex: 1, fontSize: 16, paddingVertical: 10,
+        paddingHorizontal: 4, color: '#1F2937', maxHeight: 120,
+    },
+    sendBtn: {
+        height: 48, width: 48, borderRadius: 24,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: '#F68537', elevation: 3,
+        shadowColor: '#F68537', shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4, shadowRadius: 3,
+    },
+});
