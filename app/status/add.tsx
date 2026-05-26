@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
 
 // Custom Hooks
 import { useVideoTrimmer } from '@/hooks/useVideoTrimmer';
@@ -27,6 +28,10 @@ export default function AddStatus() {
     const [privacy, setPrivacy] = useState<'all' | 'selected'>('all');
     const [selectedViewerIds, setSelectedViewerIds] = useState<string[]>([]);
     const [selectedMusic, setSelectedMusic] = useState<any>(null);
+    const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+    const [musicProgress, setMusicProgress] = useState(0);
+    const [musicPosition, setMusicPosition] = useState(0);
+    const [musicDuration, setMusicDuration] = useState(30000);
     
     // UI Modals State
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -40,6 +45,53 @@ export default function AddStatus() {
 
     // Friend list loader
     const { friends } = (require('@/hooks/useFriends').useFriends)();
+
+    const soundRef = useRef<Audio.Sound | null>(null);
+
+    React.useEffect(() => {
+        const playMusic = async () => {
+            if (soundRef.current) {
+                await soundRef.current.unloadAsync();
+                soundRef.current = null;
+            }
+            if (selectedMusic?.url) {
+                try {
+                    // Set audio mode for background playback
+                    await Audio.setAudioModeAsync({
+                        playsInSilentModeIOS: true,
+                        staysActiveInBackground: false,
+                        shouldRouteThroughEarpiece: false,
+                    });
+                    const { sound } = await Audio.Sound.createAsync(
+                        { uri: selectedMusic.url },
+                        { shouldPlay: true, isLooping: true },
+                        (status: any) => {
+                            if (status.isLoaded) {
+                                setIsMusicPlaying(status.isPlaying);
+                                setMusicPosition(status.positionMillis);
+                                if (status.durationMillis) {
+                                    setMusicDuration(status.durationMillis);
+                                    setMusicProgress(status.positionMillis / status.durationMillis);
+                                }
+                            }
+                        }
+                    );
+                    soundRef.current = sound;
+                } catch (error) {
+                    console.error("Error playing preview music", error);
+                }
+            }
+        };
+
+        playMusic();
+
+        return () => {
+            if (soundRef.current) {
+                soundRef.current.unloadAsync();
+                soundRef.current = null;
+            }
+        };
+    }, [selectedMusic]);
 
     // Custom Hooks
     const { 
@@ -73,6 +125,16 @@ export default function AddStatus() {
         } catch (error) {
             console.error('PickMedia Error:', error);
             Alert.alert('Error', 'Failed to open gallery');
+        }
+    };
+
+    const toggleMusic = async () => {
+        if (soundRef.current) {
+            if (isMusicPlaying) {
+                await soundRef.current.pauseAsync();
+            } else {
+                await soundRef.current.playAsync();
+            }
         }
     };
 
@@ -120,6 +182,20 @@ export default function AddStatus() {
                             <View style={{ flex: 1 }}>
                                 <Image source={{ uri: selectedMedia.uri }} style={{ width: '100%', height: '100%', contentFit: 'contain' }} />
                                 
+                                {/* Music Progress Bar */}
+                                {selectedMusic && (
+                                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }}>
+                                        <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.3)', width: '100%' }}>
+                                            <View style={{ height: '100%', backgroundColor: '#F68537', width: `${musicProgress * 100}%` }} />
+                                        </View>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
+                                            <Text style={{ color: 'white', fontSize: 13, fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4, backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
+                                                0:{(Math.floor(musicPosition / 1000)).toString().padStart(2, '0')} / 0:{(Math.floor(musicDuration / 1000)).toString().padStart(2, '0')}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+
                                 {/* Music Sticker */}
                                 {selectedMusic && (
                                     <View style={styles.musicSticker}>
@@ -128,6 +204,11 @@ export default function AddStatus() {
                                             <Text style={styles.musicStickerTitle} numberOfLines={1}>{selectedMusic.title}</Text>
                                             <Text style={styles.musicStickerArtist} numberOfLines={1}>{selectedMusic.artist}</Text>
                                         </View>
+                                        
+                                        <TouchableOpacity onPress={toggleMusic} style={{ padding: 6 }}>
+                                            <Ionicons name={isMusicPlaying ? "pause-circle" : "play-circle"} size={26} color="white" />
+                                        </TouchableOpacity>
+
                                         <TouchableOpacity onPress={() => setSelectedMusic(null)} style={{ padding: 4 }}>
                                             <Ionicons name="close-circle" size={20} color="white" />
                                         </TouchableOpacity>
