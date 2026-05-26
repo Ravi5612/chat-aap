@@ -11,6 +11,46 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useWindowDimensions } from 'react-native';
 
+const CallControls = ({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: any) => {
+    if (callState === 'incoming') {
+        return (
+            <View style={styles.controlsContainer}>
+                <TouchableOpacity onPress={onEnd} style={[styles.controlButton, styles.largeButton, styles.dangerButton]}>
+                    <Ionicons name="close" size={32} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onAccept} style={[styles.controlButton, styles.largeButton, styles.successButton]}>
+                    <Ionicons name="call" size={32} color="white" />
+                </TouchableOpacity>
+            </View>
+        );
+    }
+    
+    return (
+        <View style={styles.controlsContainer}>
+            {callType === 'video' && (
+                <TouchableOpacity onPress={onSwitchCamera} style={styles.controlButton}>
+                    <Ionicons name="camera-reverse" size={24} color="white" />
+                </TouchableOpacity>
+            )}
+            {callType === 'video' && (
+                <TouchableOpacity onPress={onVideo} style={[styles.controlButton, isVideoOff && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                    <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
+                </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={onMute} style={[styles.controlButton, isMuted && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onSpeaker} style={[styles.controlButton, isSpeakerphone && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={24} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onEnd} style={[styles.controlButton, styles.largeButton, styles.dangerButton]}>
+                <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
+            </TouchableOpacity>
+        </View>
+    );
+};
+
+
 interface CallScreenProps {
     visible: boolean;
     callState: 'incoming' | 'outgoing' | 'ringing' | 'active' | 'ended';
@@ -50,6 +90,7 @@ export default function CallScreen({
     const { width, height } = useWindowDimensions();
     const [callDuration, setCallDuration] = useState(0);
     const [isSwapped, setIsSwapped] = useState(false);
+    const [showControls, setShowControls] = useState(true);
     const startTimeRef = useRef<number | null>(null); // NEW: To track when the call actually started
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const lastCallInfo = useRef({
@@ -290,8 +331,7 @@ export default function CallScreen({
                             <>
                                 {isSwapped && isEngineReady
                                     ? <AgoraVideoView uid={0} style={{ width, height }} channelId={channelId} />
-                                    : <RemoteVideoArea remoteUids={remoteUids} friend={friend} callState={callState}
-                                        isGroup={isGroup} isEngineReady={isEngineReady} channelId={channelId} />
+                                    : renderRemoteVideos()
                                 }
                                 {!isGroup && remoteUids.length > 0 && (
                                     <>
@@ -311,8 +351,7 @@ export default function CallScreen({
                                 )}
                             </>
                         ) : (
-                            <RemoteVideoArea remoteUids={remoteUids} friend={friend} callState={callState}
-                                isGroup={isGroup} isEngineReady={isEngineReady} channelId={channelId} />
+                            renderRemoteVideos()
                         )}
                     </View>
                 </TouchableWithoutFeedback>

@@ -27,7 +27,7 @@ export const displayIncomingCall = async (callerName: string, channelName: strin
       actions: [
         {
           title: 'Accept',
-          pressAction: { id: 'answer' },
+          pressAction: { id: 'answer', launchActivity: 'default' },
         },
         {
           title: 'Deny',
@@ -52,6 +52,7 @@ export const displayOutgoingCall = async (friendName: string, status: 'Calling..
       body: `Calling ${friendName}`,
       android: {
         channelId,
+        onlyAlertOnce: true,
         pressAction: {
           id: 'default',
         },

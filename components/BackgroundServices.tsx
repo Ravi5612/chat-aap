@@ -139,29 +139,29 @@ export const BackgroundServices = () => {
             />
             {isMinimized && callSession && callSession.status !== 'ended' && (
                 <>
-                    {/* Change status bar background to premium gold like the terminal text */}
-                    <StatusBar backgroundColor="#e2b13c" barStyle="light-content" />
-                    {/* Thin clickable strip exactly over the status bar area */}
                     <TouchableOpacity 
                         onPress={() => setMinimized(false)}
-                        activeOpacity={0.85}
-                        hitSlop={{ bottom: 25, top: 10 }}
+                        activeOpacity={0.9}
                         style={{
                             position: 'absolute',
-                            top: 0,
+                            top: Constants.statusBarHeight || 40,
                             left: 0,
                             right: 0,
-                            height: Constants.statusBarHeight || 40,
-                            backgroundColor: '#e2b13c',
+                            height: 40,
+                            backgroundColor: '#10B981', // Sleek WhatsApp-like green
                             flexDirection: 'row',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            elevation: 99,
+                            elevation: 5,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 3,
                             zIndex: 9999,
                         }}
                     >
-                        <Ionicons name="call" size={12} color="white" style={{ marginRight: 5 }} />
-                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.3 }}>
+                        <Ionicons name="call" size={14} color="white" style={{ marginRight: 8 }} />
+                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13, letterSpacing: 0.5 }}>
                             Tap to return to call
                         </Text>
                     </TouchableOpacity>

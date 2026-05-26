@@ -202,7 +202,7 @@ export default function MessageContent({
                 <StatusMentionCard
                     statusId={statusMentionId}
                     isCurrentUser={isCurrentUser}
-                    targetUserId={isCurrentUser ? message.receiver_id : message.sender_id}
+                    targetUserId={message.sender_id}
                     router={router}
                 />
             )}
