@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import MessageStatus from './MessageStatus';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
+import StatusMentionCard from './StatusMentionCard';
 
 interface MessageContentProps {
     message: any;
@@ -196,26 +197,14 @@ export default function MessageContent({
                 </View>
             )}
 
-            {/* Status Mention Card */}
+            {/* Status Mention Card - Premium Design */}
             {isStatusMention && statusMentionId && (
-                <View style={{ padding: 12, width: 220 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
-                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                            <Ionicons name="at" size={24} color={isCurrentUser ? 'white' : '#F68537'} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={2}>
-                                {isCurrentUser ? 'You mentioned them' : 'Mentioned you in a status'}
-                            </Text>
-                        </View>
-                    </View>
-                    <TouchableOpacity 
-                        onPress={() => router.push(`/status/viewer?userId=${isCurrentUser ? message.receiver_id : message.sender_id}&statusId=${statusMentionId}`)} 
-                        style={{ alignItems: 'center', paddingVertical: 4 }}
-                    >
-                        <Text style={{ color: isCurrentUser ? 'white' : '#F68537', fontWeight: 'bold', fontSize: 14 }}>View Status</Text>
-                    </TouchableOpacity>
-                </View>
+                <StatusMentionCard
+                    statusId={statusMentionId}
+                    isCurrentUser={isCurrentUser}
+                    targetUserId={isCurrentUser ? message.receiver_id : message.sender_id}
+                    router={router}
+                />
             )}
 
             <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
