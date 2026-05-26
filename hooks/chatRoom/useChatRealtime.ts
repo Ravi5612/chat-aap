@@ -108,9 +108,10 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                         }
 
                         // Update Supabase in background
+                        const now = new Date().toISOString();
                         supabase
                             .from('messages')
-                            .update({ status: 'delivered' })
+                            .update({ status: 'delivered', delivered_at: now })
                             .eq('id', finalMsg.id)
                             .eq('status', 'sent')
                             .then(() => console.log('[DELIVERED] Supabase updated:', finalMsg.id))
@@ -124,6 +125,7 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                                 message_id: finalMsg.id,
                                 sender_id: currentUser.id,
                                 status: 'delivered',
+                                delivered_at: now
                             }
                         });
 
@@ -227,9 +229,10 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                         await markMessageDeliveredLocally(db, finalMsg.id);
                     }
 
+                    const now = new Date().toISOString();
                     supabase
                         .from('messages')
-                        .update({ status: 'delivered' })
+                        .update({ status: 'delivered', delivered_at: now })
                         .eq('id', finalMsg.id)
                         .eq('status', 'sent')
                         .then(() => {})
@@ -238,7 +241,7 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                     channel.send({
                         type: 'broadcast',
                         event: 'status_update',
-                        payload: { message_id: finalMsg.id, sender_id: currentUser.id, status: 'delivered' }
+                        payload: { message_id: finalMsg.id, sender_id: currentUser.id, status: 'delivered', delivered_at: now }
                     });
 
                     useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
@@ -274,7 +277,13 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                             if ((statusOrder[newStatus as keyof typeof statusOrder] ?? 0) >
                                 (statusOrder[currentStatus as keyof typeof statusOrder] ?? 0)) {
                                 changed = true;
-                                return { ...msg, status: newStatus, is_read: newStatus === 'read' };
+                                return { 
+                                    ...msg, 
+                                    status: newStatus, 
+                                    is_read: newStatus === 'read',
+                                    delivered_at: update.delivered_at || msg.delivered_at,
+                                    read_at: update.read_at || msg.read_at
+                                };
                             }
                         }
                         return msg;

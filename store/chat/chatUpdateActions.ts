@@ -20,7 +20,8 @@ const flushMarkAsRead = async (get: StoreGet) => {
     if (!meta) return;
 
     try {
-        await supabase.from('messages').update({ is_read: true, status: 'read' }).in('id', ids);
+        const now = new Date().toISOString();
+        await supabase.from('messages').update({ is_read: true, status: 'read', read_at: now }).in('id', ids);
         const { activeChannel } = get();
         if (activeChannel) {
             activeChannel.send({
@@ -28,6 +29,7 @@ const flushMarkAsRead = async (get: StoreGet) => {
                 event: 'status_update',
                 payload: {
                     status: 'read',
+                    read_at: now,
                     sender_id: meta.currentUser?.id,
                     group_id: meta.isGroup ? meta.friendId : null,
                 }
