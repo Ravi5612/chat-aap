@@ -18,6 +18,7 @@ import { useFriendsStore } from '@/store/useFriendsStore';
 import { useDbStore } from '@/store/useDbStore';
 import { SplashScreen } from '@/components/SplashScreen';
 import { BackgroundServices } from '@/components/BackgroundServices';
+import { CallOverlay } from '@/components/CallOverlay';
 import * as Updates from 'expo-updates';
 import { setupDatabase } from '@/lib/database';
 import { useNearbyNotifications } from '@/hooks/useNearbyNotifications';
@@ -204,6 +205,7 @@ export default function RootLayout() {
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
           <BackgroundServices />
+          <CallOverlay />
           <StatusBar style="auto" />
         </ThemeProvider>
     </GestureHandlerRootView>

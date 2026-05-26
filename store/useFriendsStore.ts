@@ -82,9 +82,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
             ]);
 
             if (localConv && localConv.length > 0) {
+                const filteredLocalConv = localConv.filter((c: any) => c.id !== userId);
                 set({ 
-                    combinedItems: localConv,
-                    lockedChatIds: localConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
+                    combinedItems: filteredLocalConv,
+                    lockedChatIds: filteredLocalConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
                     loading: false 
                 });
             }

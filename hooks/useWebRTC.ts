@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { displayOutgoingCall, cancelOutgoingCall } from '../utils/notifeeCalling';
 let WebRTCModule: any = {};
 try {
     // We use require instead of import to prevent top-level crash in Expo Go
@@ -191,6 +192,21 @@ export const useWebRTC = ({
 
             const signalChannelName = `calls-signal-${friend.id}`;
             if (__DEV__) console.log('[DEBUG] WebRTC: Sending offer to:', signalChannelName);
+            
+            // Show outgoing call notification
+            displayOutgoingCall(friend?.username || 'Someone');
+
+            // Trigger offline wake-up via Edge Function
+            supabase.functions.invoke('call-signal', {
+                body: {
+                    recipient_id: friend.id,
+                    caller_name: currentUser?.username || 'Someone',
+                    channel_name: signalChannelName
+                }
+            }).catch(err => {
+                if (__DEV__) console.error("Failed to wake up offline user", err);
+            });
+
             const personalChannel = supabase.channel(signalChannelName);
             let timeoutId: any;
             
@@ -242,6 +258,7 @@ export const useWebRTC = ({
                     payload: { type: 'answer', sdp: answer }
                 });
             }
+            cancelOutgoingCall();
             onAcceptCallRef.current();
         } catch (err: any) {
             if (__DEV__) console.error("Failed to accept call:", err);
@@ -252,6 +269,7 @@ export const useWebRTC = ({
         if (channelRef.current) {
             channelRef.current.send({ type: 'broadcast', event: 'signal', payload: { type: 'end' } });
         }
+        cancelOutgoingCall();
         onEndCallRef.current();
     }, []);
 

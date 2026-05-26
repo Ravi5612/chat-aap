@@ -23,6 +23,8 @@ export default function ProfileScreen() {
         syncProfile();
     }, []);
 
+
+
     const handleLogout = async () => {
         Alert.alert('Logout', 'Are you sure you want to sign out?', [
             { text: 'Cancel', style: 'cancel' },
@@ -185,6 +187,8 @@ export default function ProfileScreen() {
                         </View>
                         <Text style={styles.logoutText}>Logout</Text>
                     </TouchableOpacity>
+
+
 
                     <View style={{ height: 40 }} />
                 </ScrollView>

@@ -1,110 +1,130 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useRouter } from 'expo-router';
 
-const VALID_NOTIFICATION_TYPES = [
-    'friend_request',
-    'friend_accepted',
-    'friend_cancelled',
-    'system',
-    'status_reply'
-];
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+    }),
+});
 
-export interface Notification {
-    id: string;
-    type: string;
-    is_read: boolean;
-    user_id: string;
-    [key: string]: any;
-}
-
-export const useNotifications = () => {
-    const { user: currentUser } = useAuthStore();
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    const fetchNotifications = useCallback(async () => {
-        if (!currentUser?.id) {
-            setLoading(false);
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const { data, error } = await supabase
-                .from('notifications')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .in('type', VALID_NOTIFICATION_TYPES)
-                .order('created_at', { ascending: false });
-
-            if (!error) {
-                setNotifications(data || []);
-            }
-        } catch (e) {
-            if (__DEV__) console.error("Error fetching notifications:", e);
-        } finally {
-            setLoading(false);
-        }
-    }, [currentUser?.id]);
+export const useNotifications = (userId: string | null) => {
+    const [expoPushToken, setExpoPushToken] = useState<string | undefined>(undefined);
+    const notificationListener = useRef<Notifications.Subscription>();
+    const responseListener = useRef<Notifications.Subscription>();
+    const router = useRouter();
 
     useEffect(() => {
-        if (!currentUser?.id) return;
-        
-        fetchNotifications();
+        if (!userId) return;
 
-        const channel = supabase
-            .channel(`notifications-realtime-${currentUser.id}`)
-            .on('postgres_changes', { 
-                event: 'INSERT', 
-                schema: 'public', 
-                table: 'notifications',
-                filter: `user_id=eq.${currentUser.id}`
-            }, (payload) => {
-                if (!VALID_NOTIFICATION_TYPES.includes(payload.new.type)) return;
-                setNotifications(prev => [payload.new as Notification, ...prev]);
-            })
-            .on('postgres_changes', { 
-                event: 'UPDATE', 
-                schema: 'public', 
-                table: 'notifications',
-                filter: `user_id=eq.${currentUser.id}`
-            }, (payload) => {
-                setNotifications(prev => prev.map(n => n.id === payload.new.id ? payload.new as Notification : n));
-            })
-            .on('postgres_changes', { 
-                event: 'DELETE', 
-                schema: 'public', 
-                table: 'notifications',
-                // Filter doesn't always work on DELETE depending on Replica Identity, but we can try
-                filter: `user_id=eq.${currentUser.id}`
-            }, (payload) => {
-                setNotifications(prev => prev.filter(n => n.id !== payload.old.id));
-            })
-            .subscribe();
+        registerForPushNotificationsAsync().then(token => {
+            if (token) {
+                setExpoPushToken(token);
+                saveTokenToDb(userId, token);
+            }
+        });
+
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+            // Foreground notification received
+        });
+
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+            const data = response.notification.request.content.data;
+            if (data?.senderId) {
+                router.push(`/chat/${data.senderId}` as any);
+            }
+        });
 
         return () => {
-            supabase.removeChannel(channel);
+            if (notificationListener.current) {
+                Notifications.removeNotificationSubscription(notificationListener.current);
+            }
+            if (responseListener.current) {
+                Notifications.removeNotificationSubscription(responseListener.current);
+            }
         };
-    }, [currentUser?.id, fetchNotifications]);
+    }, [userId]);
 
-    const markAsRead = useCallback(async (notificationId: string) => {
+    const saveTokenToDb = async (uid: string, token: string) => {
         try {
-            const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);
-            if (error) throw error;
-            setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
-        } catch (error) { 
-            if (__DEV__) console.error("Error marking notification as read:", error);
+            // Check current token in DB to avoid unnecessary updates
+            const { data } = await supabase
+                .from('profiles')
+                .select('push_token')
+                .eq('id', uid)
+                .single();
+
+            if (data?.push_token === token) return; // Already saved
+
+            console.log('[PUSH] Saving new token to Supabase:', token);
+            const { error } = await supabase
+                .from('profiles')
+                .update({ push_token: token })
+                .eq('id', uid);
+
+            if (error) {
+                console.error('[PUSH] Failed to save token:', error);
+            } else {
+                console.log('[PUSH] Token saved successfully');
+            }
+        } catch (error) {
+            console.error('[PUSH] Error saving token:', error);
         }
-    }, []);
+    };
 
-    const getCounts = useMemo(() => {
-        return {
-            total: notifications.length,
-            unread: notifications.filter(n => !n.is_read).length,
-            friendRequest: notifications.filter(n => n.type === 'friend_request' || n.type === 'friend_accepted').length
-        };
-    }, [notifications]);
-
-    return { notifications, loading, markAsRead, getCounts, refresh: fetchNotifications };
+    const getCounts = { unread: 0 }; // TODO: Implement real unread logic
+    return { expoPushToken, getCounts };
 };
+
+async function registerForPushNotificationsAsync() {
+    let token;
+
+    if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+        });
+    }
+
+    if (Device.isDevice) {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+            console.log('Failed to get push token for push notification!');
+            return;
+        }
+        
+        try {
+            const projectId =
+                Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+            
+            if (!projectId) {
+                console.warn('Project ID not found');
+            }
+            
+            token = (
+                await Notifications.getExpoPushTokenAsync({
+                    projectId,
+                })
+            ).data;
+        } catch (e) {
+            console.warn('Could not get push token:', e);
+        }
+    } else {
+        console.log('Must use physical device for Push Notifications');
+    }
+
+    return token;
+}

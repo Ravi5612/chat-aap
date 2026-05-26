@@ -32,6 +32,7 @@ export const useAgora = ({
     const [remoteUids, setRemoteUids] = useState<number[]>([]);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
+    const [isSpeakerphone, setIsSpeakerphone] = useState(callType === 'video'); // Default true for video, false for audio
     const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
     const [remoteVideoMuted, setRemoteVideoMuted] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('Initializing...');
@@ -267,16 +268,26 @@ export const useAgora = ({
         }
     };
 
+    const toggleSpeakerphone = () => {
+        if (engine.current) {
+            const newState = !isSpeakerphone;
+            engine.current.setEnableSpeakerphone(newState);
+            setIsSpeakerphone(newState);
+        }
+    };
+
     return {
         joined,
         remoteUids,
         isMuted,
         isVideoOff,
+        isSpeakerphone,
         remoteAudioMuted,
         remoteVideoMuted,
         connectionStatus,
         toggleMute,
         toggleVideo,
+        toggleSpeakerphone,
         switchCamera,
         leave,
         channelId: channelName.current,

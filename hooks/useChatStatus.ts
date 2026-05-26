@@ -8,8 +8,19 @@ export function useChatStatus(currentUser: any, safeFriendId: string, isGroup: b
     const blockedUserIds = useFriendsStore(state => state.blockedUserIds);
     
     const isBlocked = safeFriendId ? blockedUserIds.includes(safeFriendId) : false;
+    const friendData = useMemo(() => (combinedItems || []).find(f => f?.id === safeFriendId), [combinedItems, safeFriendId]);
+    
     const [iAmBlocked, setIAmBlocked] = useState(false);
-    const [isFriend, setIsFriend] = useState<boolean | null>(null);
+    
+    // Initialize from local state to avoid 4-5 second network delay for known friends
+    const [isFriend, setIsFriend] = useState<boolean | null>(() => {
+        if (isGroup) return true;
+        const localFriend = (useFriendsStore.getState().combinedItems || []).find(f => f?.id === safeFriendId);
+        if (localFriend && localFriend.isUnfriended !== undefined) {
+            return !localFriend.isUnfriended;
+        }
+        return null;
+    });
 
     const checkBlockStatus = useCallback(async () => {
         if (!currentUser || !safeFriendId || isGroup) return;
@@ -35,6 +46,13 @@ export function useChatStatus(currentUser: any, safeFriendId: string, isGroup: b
         setIsFriend(Array.isArray(data) && data.length > 0);
     }, [currentUser, safeFriendId, isGroup]);
 
+    // Keep isFriend in sync with local friendData if it updates
+    useEffect(() => {
+        if (friendData && friendData.isUnfriended !== undefined) {
+            setIsFriend(!friendData.isUnfriended);
+        }
+    }, [friendData]);
+
     useEffect(() => {
         checkBlockStatus();
         checkFriendshipStatus();
@@ -53,7 +71,7 @@ export function useChatStatus(currentUser: any, safeFriendId: string, isGroup: b
         return () => { supabase.removeChannel(channel); };
     }, [safeFriendId, checkBlockStatus, checkFriendshipStatus, currentUser]);
 
-    const friendData = useMemo(() => (combinedItems || []).find(f => f?.id === safeFriendId), [combinedItems, safeFriendId]);
+    
     
     const isUserOnline = useMemo(() => {
         if (!safeFriendId) return false;

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { showLocalNotification } from './usePushNotifications';
 import { decryptText, getChatKey } from '@/utils/chatCrypto';
 import { Audio } from 'expo-av';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -155,11 +154,6 @@ export const useGlobalRealtime = (userId: string | null) => {
                         if (__DEV__) console.warn('[DEBUG] GlobalRealtime: Decryption failed');
                     }
 
-                    showLocalNotification(
-                        senderName,
-                        content,
-                        { senderId: payload.new.sender_id, messageId: payload.new.id }
-                    );
                 } catch (err) {
                     if (__DEV__) console.error('[ERROR] GlobalRealtime Message Handler:', err);
                 }

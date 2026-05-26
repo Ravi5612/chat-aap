@@ -216,6 +216,14 @@ export const initDatabase = async () => {
             // Column probably already exists, ignore
         }
 
+        // Migration: Ensure is_unfriended exists in conversations
+        try {
+            await db.execAsync('ALTER TABLE conversations ADD COLUMN is_unfriended INTEGER DEFAULT 0;');
+            console.log('[DB] Migration: Added is_unfriended to conversations');
+        } catch (e) {
+            // Column probably already exists, ignore
+        }
+
         // Migration: Ensure message_type exists in messages
         try {
             await db.execAsync('ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT \'text\';');
@@ -820,8 +828,8 @@ export const getLocalCallLogs = async (db: SQLite.SQLiteDatabase, userId: string
 export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any) => {
     try {
         await db.runAsync(
-            `INSERT OR REPLACE INTO conversations (id, name, email, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT OR REPLACE INTO conversations (id, name, email, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived, is_unfriended) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 conv.id,
                 conv.name || 'Unknown',
@@ -833,7 +841,8 @@ export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any
                 conv.isGroup ? 1 : 0,
                 conv.isLocked ? 1 : 0,
                 conv.isFavorite ? 1 : 0,
-                conv.isArchived ? 1 : 0
+                conv.isArchived ? 1 : 0,
+                conv.isUnfriended ? 1 : 0
             ]
         );
 
@@ -857,6 +866,7 @@ export const getLocalConversations = async (db: SQLite.SQLiteDatabase) => {
             isLocked: row.is_locked === 1,
             isFavorite: row.is_favorite === 1,
             isArchived: row.is_archived === 1,
+            isUnfriended: row.is_unfriended === 1,
             lastActivity: row.last_message_at
         }));
 

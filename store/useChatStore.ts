@@ -7,7 +7,6 @@ import { Alert } from 'react-native';
 import { create } from 'zustand';
 import { uploadChatMessageMediaWithProgress } from '../utils/uploadHelper';
 import { useDbStore } from './useDbStore';
-import { sendPushNotificationToUser } from '@/utils/sendPushNotification';
 
 interface ChatState {
     messages: any[];
@@ -740,16 +739,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }
 
                 // Send push notification to the recipient (background)
-                if (!isGroup) {
-                    sendPushNotificationToUser(
-                        friendId,
-                        currentUser.id,
-                        currentUser.username || 'ChatWarriors',
-                        currentUser.avatar_url || null,
-                        'message',
-                        data.id
-                    );
-                }
+                // if (!isGroup) {
+                //    Push notifications are now handled by Supabase Database Webhooks automatically.
+                // }
             } catch (error: any) {
                 console.error("SendMessage Error:", error);
                 // ⚠️ We do NOT delete the message from the list! It will stay as 'pending' (clock icon)

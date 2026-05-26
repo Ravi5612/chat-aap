@@ -55,7 +55,7 @@ export default function ChatModals({
             <MediaViewer
                 visible={viewerVisible}
                 onClose={() => setViewerVisible(false)}
-                imageUrl={viewerImage || ''}
+                imageUri={viewerImage || ''}
             />
 
             <CallScreen />

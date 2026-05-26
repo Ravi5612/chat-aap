@@ -136,7 +136,7 @@ export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerP
                     <View style={styles.imageContainer}>
                         {imageUri && (
                             <Image
-                                source={{ uri: imageUri }}
+                                source={{ uri: imageUri.trim() }}
                                 style={styles.fullImage}
                                 contentFit="contain"
                                 transition={300}
@@ -176,12 +176,13 @@ const styles = StyleSheet.create({
     },
     imageContainer: {
         flex: 1,
-        width: WINDOW_WIDTH,
+        width: '100%',
         justifyContent: 'center',
         alignItems: 'center',
     },
     fullImage: {
-        width: WINDOW_WIDTH,
+        width: '100%',
         height: '100%',
+        flex: 1,
     }
 });

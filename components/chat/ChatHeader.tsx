@@ -87,13 +87,13 @@ export default function ChatHeader({
                 {isFriend && !isBlocked && !iAmBlocked && (
                     <>
                         <TouchableOpacity 
-                            onPress={() => handleStartCall({ id: friendId, name: friendName }, 'video', isGroup)} 
+                            onPress={() => handleStartCall({ id: friendId, name: friendName, img: friendImage }, 'video', isGroup)} 
                             style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
                         >
                             <Ionicons name="videocam" size={18} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity 
-                            onPress={() => handleStartCall({ id: friendId, name: friendName }, 'audio', isGroup)} 
+                            onPress={() => handleStartCall({ id: friendId, name: friendName, img: friendImage }, 'audio', isGroup)} 
                             style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
                         >
                             <Ionicons name="call" size={18} color="white" />

@@ -90,15 +90,21 @@ export default function MessageContent({
             {/* Image Content */}
             {imageUrl && (
                 <TouchableOpacity onPress={() => onImagePress?.((localImageUrl || imageUrl) as string)} onLongPress={handleLongPress} delayLongPress={200}>
-                    <View style={{ width: 256, height: 256, borderRadius: 12, overflow: 'hidden', backgroundColor: '#E5E7EB' }}>
-                        <Image source={{ uri: (localImageUrl || imageUrl)?.trim() || '' }} style={{ width: 256, height: 256 }} contentFit="cover" />
+                    <View style={{ width: 256, height: 256, borderRadius: 12, overflow: 'hidden', backgroundColor: '#374151' }}>
+                        <Image 
+                            source={{ uri: (localImageUrl || imageUrl)?.trim() || '' }} 
+                            placeholder={localImageUrl ? { uri: localImageUrl.trim() } : null}
+                            style={{ width: 256, height: 256 }} 
+                            contentFit="cover" 
+                            transition={300}
+                        />
                         {imageLoading && uploadProgress === undefined && (
-                            <View style={{ position: 'absolute', inset: 0, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}>
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' }}>
                                 <ActivityIndicator size="small" color="#F68537" />
                             </View>
                         )}
-                        {uploadProgress !== undefined && uploadProgress < 100 && (
-                            <View style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
+                        {uploadProgress !== undefined && uploadProgress <= 100 && (
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
                                 <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' }}>
                                     <View style={{ position: 'absolute', width: 72, height: 72, borderRadius: 36, borderWidth: 5, borderColor: 'transparent', borderTopColor: '#F68537', borderRightColor: uploadProgress > 25 ? '#F68537' : 'transparent', borderBottomColor: uploadProgress > 50 ? '#F68537' : 'transparent', borderLeftColor: uploadProgress > 75 ? '#F68537' : 'transparent', transform: [{ rotate: `${(uploadProgress / 100) * 360}deg` }] }} />
                                     <Text style={{ color: 'white', fontSize: 14, fontWeight: '900', letterSpacing: -0.5 }}>{uploadProgress}%</Text>

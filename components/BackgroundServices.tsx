@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useNotifications } from '@/hooks/useNotifications';
 import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useInitialPermissions } from '@/hooks/useInitialPermissions';
@@ -96,7 +96,7 @@ export const BackgroundServices = () => {
     useInitialPermissions();
 
     // 2. Global Services
-    usePushNotifications(session?.user?.id || null);
+    useNotifications(session?.user?.id || null);
     useGlobalRealtime(session?.user?.id || null);
 
     // 3. Call Management

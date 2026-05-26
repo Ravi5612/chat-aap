@@ -112,10 +112,12 @@ export default function CallScreen({
         connectionStatus,
         isMuted,
         isVideoOff,
+        isSpeakerphone,
         remoteAudioMuted,
         remoteVideoMuted,
         toggleMute,
         toggleVideo,
+        toggleSpeakerphone,
         switchCamera,
         channelId,
         isEngineReady
@@ -218,11 +220,10 @@ export default function CallScreen({
             return (
                 <View style={styles.placeholderContainer}>
                     <View style={styles.avatarContainer}>
-                        {friend.avatar_url || friend.img ? (
-                            <Image source={{ uri: friend.avatar_url || friend.img }} style={styles.fullImage} />
-                        ) : (
-                            <Ionicons name="person" size={64} color="#94A3B8" />
-                        )}
+                        <Image 
+                            source={{ uri: friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537` }} 
+                            style={styles.fullImage} 
+                        />
                     </View>
                     <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
                     <Text style={styles.callStatus}>
@@ -313,11 +314,10 @@ export default function CallScreen({
                         /* Audio Call UI */
                         <View style={styles.placeholderContainer}>
                             <View style={styles.avatarContainer}>
-                                {friend.avatar_url || friend.img ? (
-                                    <Image source={{ uri: friend.avatar_url || friend.img }} style={styles.fullImage} />
-                               ) : (
-                                    <Ionicons name="person" size={64} color="#94A3B8" />
-                                )}
+                                <Image 
+                                    source={{ uri: friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537` }} 
+                                    style={styles.fullImage} 
+                                />
                             </View>
                             <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
                             <Text style={styles.callStatus}>
@@ -336,11 +336,10 @@ export default function CallScreen({
                     <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#111827', zIndex: 1000 }]}>
                         <View style={styles.placeholderContainer}>
                             <View style={[styles.avatarContainer, { borderColor: '#EF4444' }]}>
-                                {friend.avatar_url || friend.img ? (
-                                    <Image source={{ uri: friend.avatar_url || friend.img }} style={styles.fullImage} />
-                                ) : (
-                                    <Ionicons name="person" size={64} color="#94A3B8" />
-                                )}
+                                <Image 
+                                    source={{ uri: friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537` }} 
+                                    style={styles.fullImage} 
+                                />
                             </View>
                             <Text style={styles.friendName}>{friend.name || friend.username || 'Friend'}</Text>
                             <Text style={[styles.callStatus, { color: '#EF4444', marginTop: 12 }]}>
@@ -434,6 +433,21 @@ export default function CallScreen({
                                 style={[styles.controlButton, styles.successButton, styles.largeButton]}
                             >
                                 <Ionicons name="call" size={28} color="white" />
+                            </TouchableOpacity>
+                        )}
+
+                        {callType === 'audio' && (
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (__DEV__) console.log('[CALL_ACTION] Speaker toggled');
+                                    toggleSpeakerphone();
+                                }}
+                                style={[
+                                    styles.controlButton,
+                                    !isSpeakerphone && { backgroundColor: '#4B5563' } // Darker when off (earpiece mode)
+                                ]}
+                            >
+                                <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={22} color="white" />
                             </TouchableOpacity>
                         )}
 

@@ -270,7 +270,19 @@ export async function fetchAndFormatFriendsData(
         });
 
     if (db) {
-        sortedItems.forEach(item => saveLocalConversation(db, item));
+        // Save the valid ones (excluding self)
+        sortedItems.forEach(item => {
+            if (item.id !== userId) {
+                saveLocalConversation(db, item);
+            }
+        });
+        
+        // Ensure current user is never in the local conversations table
+        try {
+            await db.runAsync('DELETE FROM conversations WHERE id = ?', [userId]);
+        } catch (e) {
+            console.error('Failed to delete self from conversations', e);
+        }
     }
 
     return {

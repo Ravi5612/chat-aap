@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Alert } from 'react-native';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { supabase } from '@/lib/supabase';
 import { Audio } from 'expo-av';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { useCallStore } from '@/store/useCallStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
-import { sendPushNotificationToUser } from '@/utils/sendPushNotification';
 
 const RINGTONE_URL = 'https://vgqasnzpnnmshclnshob.supabase.co/storage/v1/object/public/system/ringtone.mp3';
 import ringingTone from '../assets/audio/ringing_tone.mp3';
@@ -14,6 +13,7 @@ const DIAL_TONE_URL = ringingTone;
 import callingTone from '../assets/audio/calling_tone.mp3';
 const CALLING_TONE_URL = callingTone;
 let isAudioModeConfigured = false;
+import { displayOutgoingCall, cancelOutgoingCall, cancelIncomingCall } from '@/utils/notifeeCalling';
 
 export const useCallManager = (currentUser: any, combinedItems: any[], isListener = true, profile: any = null) => {
     const { callSession, setCallSession, setCallActive, setCallEnded, endCall: endGlobalCall } = useCallStore();
@@ -246,6 +246,47 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         };
     }, [currentUser?.id, isListener]); // Removed combinedItems to fix channel disconnecting bug!
 
+    useEffect(() => {
+        if (!callSession) {
+            cancelOutgoingCall();
+            cancelIncomingCall();
+            return;
+        }
+
+        // If it's an outgoing call that was initiated by us
+        if (['outgoing', 'ringing', 'active'].includes(callSession.status) && callSession.type !== 'incoming') {
+            let statusText = 'Calling...';
+            if (callSession.status === 'ringing') statusText = 'Ringing...';
+            if (callSession.status === 'active') statusText = 'Active (0:00)';
+            
+            displayOutgoingCall(callSession.friend?.name || 'Someone', statusText, callSession.friend?.avatar_url);
+
+            let interval: NodeJS.Timeout;
+            if (callSession.status === 'active') {
+                let seconds = 0;
+                interval = setInterval(() => {
+                    seconds++;
+                    const m = Math.floor(seconds / 60);
+                    const s = seconds % 60;
+                    const timeStr = `${m}:${s.toString().padStart(2, '0')}`;
+                    displayOutgoingCall(callSession.friend?.name || 'Someone', `Active (${timeStr})`, callSession.friend?.avatar_url);
+                }, 1000);
+            }
+
+            return () => {
+                if (interval) clearInterval(interval);
+            };
+        } else {
+            // Cancel outgoing notification if it's incoming or ended
+            cancelOutgoingCall();
+        }
+        
+        // Ensure incoming call notification is cancelled when active or ended
+        if (callSession.status === 'active' || callSession.status === 'ended') {
+            cancelIncomingCall();
+        }
+    }, [callSession?.status, callSession?.friend?.name, callSession?.friend?.avatar_url]);
+
     const handleStartCall = async (friend: any, type: 'audio' | 'video' = 'video', isGroup: boolean = false) => {
         if (__DEV__) console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type, 'IsGroup:', isGroup);
         
@@ -275,30 +316,41 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                 members.forEach(m => {
                     if (m.user_id !== currentUser.id) {
                         sendSignalReliably(m.user_id, offerPayload);
-                        sendPushNotificationToUser(
-                            m.user_id,
-                            currentUser.id,
-                            currentUser.username || 'ChatWarriors',
-                            currentUser.avatar_url || null,
-                            'call'
-                        );
+                        // Wake up the device via push notification
+                        supabase.functions.invoke('call-signal', {
+                            body: { 
+                                recipient_id: m.user_id, 
+                                caller_name: currentUser.username, 
+                                channel_name: 'group' // Not strictly used for connection anymore, just for old compatibility
+                            }
+                        }).then(({ error }) => {
+                            if (error) console.error("Signal Error", error.message);
+                        });
                     }
                 });
             }
         } else {
             sendSignalReliably(friend.id, offerPayload);
-            sendPushNotificationToUser(
-                friend.id,
-                currentUser.id,
-                currentUser.username || 'ChatWarriors',
-                currentUser.avatar_url || null,
-                'call'
-            );
+            // Wake up the device via push notification
+            supabase.functions.invoke('call-signal', {
+                body: { 
+                    recipient_id: friend.id, 
+                    caller_name: currentUser.username, 
+                    channel_name: 'private'
+                }
+            }).then(({ data, error }) => {
+                if (error) {
+                    console.error("Push Server Error", JSON.stringify(error));
+                }
+            }).catch(e => {
+                console.error("Push Catch Error", e.message);
+            });
         }
     };
 
     const endCall = () => {
-        if (__DEV__) console.log('[DEBUG] CallManager: Manual end call triggered');
+        if (__DEV__) console.log('[CALL_ACTION] Ending call locally');
+        cancelOutgoingCall();
         const endType = callSession?.status === 'incoming' ? 'rejected' : 'end';
         if (callSession?.friend?.id) {
             sendSignalReliably(callSession.friend.id, { type: endType });

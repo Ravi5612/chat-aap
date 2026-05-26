@@ -423,9 +423,9 @@ function HomeScreen() {
               style={{ position: 'relative' }}
             >
               <Ionicons name="notifications-outline" size={26} color={Platform.OS === 'android' ? 'white' : '#F68537'} />
-              {getCounts.unread > 0 && (
+              {(getCounts?.unread ?? 0) > 0 && (
                 <View style={{ backgroundColor: '#EF4444', borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1, position: 'absolute', top: -5, right: -10 }}>
-                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{getCounts.unread}</Text>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>{getCounts?.unread}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -448,7 +448,7 @@ function HomeScreen() {
               {activeTab === 'all' && !searchQuery && (showContactSuggestions || showNearbySuggestions) && (
                 <View style={{ marginTop: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, flexWrap: 'wrap', paddingRight: 8 }}>
                       <Text style={{ fontSize: 13, fontWeight: '900', color: '#64748B', letterSpacing: 0.5 }}>SUGGESTIONS FROM</Text>
                       <View style={{ flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 20, padding: 2 }}>
                         {showContactSuggestions && (
