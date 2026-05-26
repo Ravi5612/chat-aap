@@ -755,7 +755,13 @@ export const useChatStore = create<ChatState>((set, get) => {
             if (!currentUser || !activeChatId) return;
             try {
                 const reactions = { ...(messages.find(m => m.id === messageId)?.reactions || {}) };
-                reactions[emoji] = (reactions[emoji] || 0) + 1;
+                
+                // Toggle off if they tap the same emoji again, else set their new emoji
+                if (reactions[currentUser.id] === emoji) {
+                    delete reactions[currentUser.id];
+                } else {
+                    reactions[currentUser.id] = emoji;
+                }
 
                 const { error } = await supabase.from('messages').update({ reactions }).eq('id', messageId);
                 if (error) throw error;

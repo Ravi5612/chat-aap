@@ -147,12 +147,24 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
                     {message.reactions && Object.keys(message.reactions).length > 0 && (
                         <View style={{ marginTop: -10, zIndex: 20, flexDirection: 'row', gap: 4, marginRight: isCurrentUser ? 8 : 0, marginLeft: isCurrentUser ? 0 : 8 }}>
-                            {Object.entries(message.reactions).map(([emoji, count]: any) => (
-                                <View key={emoji} style={{ backgroundColor: 'white', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2, flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={{ fontSize: 12 }}>{emoji}</Text>
-                                    {count > 1 && <Text style={{ fontSize: 9, fontWeight: 'bold', marginLeft: 4, color: '#6B7280' }}>{count}</Text>}
-                                </View>
-                            ))}
+                            {(() => {
+                                const aggregated: Record<string, number> = {};
+                                Object.entries(message.reactions).forEach(([key, value]) => {
+                                    if (key.length === 36) {
+                                        // new format: key = userId, value = emoji
+                                        aggregated[value as string] = (aggregated[value as string] || 0) + 1;
+                                    } else {
+                                        // old format: key = emoji, value = count
+                                        aggregated[key] = (aggregated[key] || 0) + (value as number);
+                                    }
+                                });
+                                return Object.entries(aggregated).map(([emoji, count]) => (
+                                    <View key={emoji} style={{ backgroundColor: 'white', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999, borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2, flexDirection: 'row', alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 12 }}>{emoji}</Text>
+                                        {count > 1 && <Text style={{ fontSize: 9, fontWeight: 'bold', marginLeft: 4, color: '#6B7280' }}>{count}</Text>}
+                                    </View>
+                                ));
+                            })()}
                         </View>
                     )}
 
