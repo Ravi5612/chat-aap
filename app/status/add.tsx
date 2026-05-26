@@ -15,6 +15,7 @@ import StatusHeader from '@/components/status/StatusHeader';
 import StatusVideoPlayer from '@/components/status/StatusVideoPlayer';
 import StatusModals from '@/components/status/StatusModals';
 import MusicPicker from '@/components/status/MusicPicker';
+import MentionPickerModal from '@/components/status/MentionPickerModal';
 
 const BG_COLORS = ['#F68537', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#1E293B', '#FF4E50', '#000000'];
 
@@ -38,6 +39,8 @@ export default function AddStatus() {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [showFriendPicker, setShowFriendPicker] = useState(false);
     const [showMusicPicker, setShowMusicPicker] = useState(false);
+    const [showMentionPicker, setShowMentionPicker] = useState(false);
+    const [mentionedFriends, setMentionedFriends] = useState<any[]>([]);
     
     // References
     const mediaInputRef = useRef<TextInput>(null);
@@ -100,7 +103,7 @@ export default function AddStatus() {
     } = useVideoTrimmer();
 
     const { handlePost, loading } = useStatusPost(
-        content, selectedMedia, bgColor, privacy, selectedViewerIds, duration, trimStart, trimEnd, selectedMusic
+        content, selectedMedia, bgColor, privacy, selectedViewerIds, duration, trimStart, trimEnd, selectedMusic, mentionedFriends
     );
 
     const pickMedia = async () => {
@@ -221,10 +224,29 @@ export default function AddStatus() {
                                 >
                                     <Ionicons name="musical-notes" size={24} color="white" />
                                 </TouchableOpacity>
+
+                                {/* Mention Button Below Music */}
+                                <TouchableOpacity 
+                                    onPress={() => setShowMentionPicker(true)} 
+                                    style={{ position: 'absolute', top: 76, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 24 }}
+                                >
+                                    <Ionicons name="at" size={24} color={mentionedFriends.length > 0 ? "#10B981" : "white"} />
+                                </TouchableOpacity>
                             </View>
                         )}
 
                         <View style={[styles.mediaInputContainer, { bottom: showEmojiPicker ? 280 : 0, paddingBottom: showEmojiPicker ? 10 : Math.max(insets.bottom, 20) }]}>
+                            {/* Display Mentions Summary */}
+                            {mentionedFriends.length > 0 && (
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
+                                    {mentionedFriends.map((f, i) => (
+                                        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 8, borderWidth: 1, borderColor: '#10B981' }}>
+                                            <Ionicons name="at" size={14} color="#10B981" />
+                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13, marginLeft: 2 }}>{f.name}</Text>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            )}
                             <View style={styles.inputWrapper}>
                                 <TouchableOpacity onPress={() => { if (showEmojiPicker) { setShowEmojiPicker(false); mediaInputRef.current?.focus(); } else { Keyboard.dismiss(); setShowEmojiPicker(true); } }} style={styles.iconBtn}>
                                     <Ionicons name={showEmojiPicker ? "keyboard-outline" : "happy-outline"} size={24} color="white" />
@@ -300,6 +322,15 @@ export default function AddStatus() {
                 visible={showMusicPicker} 
                 onClose={() => setShowMusicPicker(false)} 
                 onSelectMusic={setSelectedMusic} 
+            />
+
+            <MentionPickerModal
+                visible={showMentionPicker}
+                onClose={() => setShowMentionPicker(false)}
+                friends={friends}
+                mentionedFriends={mentionedFriends}
+                setMentionedFriends={setMentionedFriends}
+                insetsTop={insets.top}
             />
         </View>
     );

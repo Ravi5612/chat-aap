@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import MessageStatus from './MessageStatus';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
 
@@ -41,8 +42,12 @@ export default function MessageContent({
     isDocumentMessage, documentName, documentSize, documentUrl,
     hasImage
 }: MessageContentProps) {
+    const router = useRouter();
     const isCallLog = message.message_type === 'call' || !!message.call_details;
     const callDetails = message.call_details || {};
+    
+    const isStatusMention = textContent?.startsWith('[StatusMention] ');
+    const statusMentionId = isStatusMention ? textContent.replace('[StatusMention] ', '').trim() : null;
 
     const ledgerData = useMemo(() => {
         if (message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:')) {
@@ -191,8 +196,30 @@ export default function MessageContent({
                 </View>
             )}
 
+            {/* Status Mention Card */}
+            {isStatusMention && statusMentionId && (
+                <View style={{ padding: 12, width: 220 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
+                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                            <Ionicons name="at" size={24} color={isCurrentUser ? 'white' : '#F68537'} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={2}>
+                                {isCurrentUser ? 'You mentioned them' : 'Mentioned you in a status'}
+                            </Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity 
+                        onPress={() => router.push(`/status/viewer?userId=${isCurrentUser ? message.receiver_id : message.sender_id}&statusId=${statusMentionId}`)} 
+                        style={{ alignItems: 'center', paddingVertical: 4 }}
+                    >
+                        <Text style={{ color: isCurrentUser ? 'white' : '#F68537', fontWeight: 'bold', fontSize: 14 }}>View Status</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                {textContent && textContent.trim() !== '' && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && message.message_type !== 'ledger' && (
+                {textContent && textContent.trim() !== '' && !isStatusMention && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && message.message_type !== 'ledger' && (
                     <Text style={{ fontSize: 15, lineHeight: 22, color: isCurrentUser ? 'white' : '#1F2937', fontStyle: textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED' ? 'italic' : 'normal', opacity: textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED' ? 0.7 : 1 }}>
                         {textContent.trim().startsWith('{"iv":') ? 'Decrypting...' : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
                     </Text>

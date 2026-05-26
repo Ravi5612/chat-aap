@@ -72,6 +72,22 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                 if (accessibleStatuses.length > 0) {
                     const statusKey = await getChatKey(userId, userId);
 
+                    let allMentionedIds: string[] = [];
+                    accessibleStatuses.forEach((s: any) => {
+                        if (s.mentioned_user_ids && Array.isArray(s.mentioned_user_ids)) {
+                            allMentionedIds.push(...s.mentioned_user_ids);
+                        }
+                    });
+                    allMentionedIds = [...new Set(allMentionedIds)];
+
+                    let mentionedProfilesMap: Record<string, any> = {};
+                    if (allMentionedIds.length > 0) {
+                        const { data: mProfiles } = await supabase.from('profiles').select('id, username, avatar_url').in('id', allMentionedIds);
+                        if (mProfiles) {
+                            mProfiles.forEach(p => { mentionedProfilesMap[p.id] = p; });
+                        }
+                    }
+
                     const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
                         let decryptedContent = s.content;
                         let decryptedMediaUrl = s.media_url;
@@ -87,12 +103,15 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                             try { decryptedAudioUrl = await decryptText(s.audio_url, statusKey); } catch (e) {}
                         }
 
+                        const mentionedProfiles = (s.mentioned_user_ids || []).map((id: string) => mentionedProfilesMap[id]).filter(Boolean);
+
                         return {
                             ...s,
                             content: decryptedContent,
                             media_url: decryptedMediaUrl,
                             audio_url: decryptedAudioUrl,
-                            profiles: profile || { username: 'User', avatar_url: null }
+                            profiles: profile || { username: 'User', avatar_url: null },
+                            mentionedProfiles
                         };
                     }));
 

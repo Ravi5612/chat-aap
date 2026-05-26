@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Modal, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Modal, FlatList, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -83,6 +83,16 @@ export default function StatusOverlay({
             )}
 
             <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Math.max(insets.bottom, 20) }}>
+                {currentStatusUI.mentionedProfiles && currentStatusUI.mentionedProfiles.length > 0 && !paused && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+                        {currentStatusUI.mentionedProfiles.map((profile: any, i: number) => (
+                            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }}>
+                                <Image source={{ uri: profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.username || 'User')}` }} style={{ width: 24, height: 24, borderRadius: 12, marginRight: 8 }} />
+                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>{profile.username}</Text>
+                            </View>
+                        ))}
+                    </ScrollView>
+                )}
                 {isOwner ? (
                     !paused && (
                         <View style={{ alignItems: 'center' }}>
