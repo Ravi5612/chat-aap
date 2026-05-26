@@ -96,14 +96,7 @@
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging",
-      [
-        "@react-native-voice/voice",
-        {
-          "microphonePermission": "Allow ChatWarriors to access your microphone",
-          "speechRecognitionPermission": "Allow ChatWarriors to securely recognize user speech"
-        }
-      ]
+      "@react-native-firebase/messaging"
     ],
     "experiments": {
       "typedRoutes": true,

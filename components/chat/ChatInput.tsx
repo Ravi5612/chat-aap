@@ -24,7 +24,6 @@ import EmojiPickerModal from './EmojiPickerModal';
 import { useMediaPicker } from '@/hooks/chatInput/useMediaPicker';
 import { useLocationPicker } from '@/hooks/chatInput/useLocationPicker';
 import { useDocumentPicker } from '@/hooks/chatInput/useDocumentPicker';
-import { useVoiceToText } from '@/hooks/chatInput/useVoiceToText';
 
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
@@ -62,13 +61,12 @@ export default function ChatInput({
     const insets = useSafeAreaInsets();
     const hasMeasured = insets.top > 0 || insets.bottom > 0;
     const safeBottom = hasMeasured ? insets.bottom : (initialWindowMetrics?.insets?.bottom || 0);
+    const { handlePickImage, handleLaunchCamera } = useMediaPicker(setSelectedImage);
+    const { handleLocation } = useLocationPicker(onSendMessage);
+    const { handleDocument } = useDocumentPicker(onSendMessage);
     const inputRef = useRef<TextInput>(null);
     const typingTimeoutRef = useRef<any>(null);
     const draftTimeoutRef = useRef<any>(null);
-
-    const { isListening, partialText, startListening, stopListening } = useVoiceToText((text) => {
-        setMessage((prev) => prev + (prev.length > 0 ? ' ' : '') + text);
-    });
 
     React.useEffect(() => {
         if (editingMessage) {
@@ -91,7 +89,11 @@ export default function ChatInput({
     const handleSubmit = () => {
         // Prevent accidental double taps on the mic button just after sending
         if (!message.trim() && !selectedImage) {
-            return; // Now handled by button logic directly
+            if (Date.now() - lastSentTimeRef.current < 500) {
+                return; // Ignore accidental mic taps immediately after sending
+            }
+            setIsRecording(true);
+            return;
         }
 
 
@@ -421,13 +423,13 @@ export default function ChatInput({
                         <TextInput
                             ref={inputRef}
                             style={styles.textInput}
-                            placeholder={isListening ? "Listening..." : (editingMessage ? "Edit message..." : "Message")}
-                            placeholderTextColor={isListening ? "#EF4444" : "#94A3B8"}
-                            value={isListening && partialText ? message + (message ? ' ' : '') + partialText : message}
+                            placeholder={editingMessage ? "Edit message..." : "Message"}
+                            placeholderTextColor="#94A3B8"
+                            value={message}
                             onChangeText={handleChangeText}
                             multiline
                             maxLength={1000}
-                            editable={!disabled && !isListening}
+                            editable={!disabled}
                         />
 
                         <AttachmentMenu
@@ -448,28 +450,9 @@ export default function ChatInput({
                         )}
                     </View>
 
-                    <TouchableOpacity 
-                        onPress={() => {
-                            if (isListening) {
-                                stopListening();
-                                return;
-                            }
-                            if (!message.trim() && !selectedImage) {
-                                startListening();
-                            } else {
-                                handleSubmit();
-                            }
-                        }}
-                        onLongPress={() => {
-                            if (!message.trim() && !selectedImage && !isListening) {
-                                setIsRecording(true);
-                            }
-                        }}
-                        disabled={disabled} 
-                        style={[styles.sendBtn, isListening && { backgroundColor: '#EF4444' }]}
-                    >
+                    <TouchableOpacity onPress={handleSubmit} disabled={disabled} style={styles.sendBtn}>
                         <Ionicons
-                            name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : (isListening ? "stop" : "mic"))}
+                            name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic")}
                             size={24}
                             color="white"
                             style={{ marginLeft: (message.trim() || selectedImage) ? 3 : 0 }}
