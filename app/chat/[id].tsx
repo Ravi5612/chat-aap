@@ -64,6 +64,7 @@ export default function ChatScreen() {
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
     const [ledgerVisible, setLedgerVisible] = useState(false);
+    const [infoVisible, setInfoVisible] = useState(false);
 
     const { wallpaper, setWallpaper, draft, handleDraftChange } = useChatSync(roomId, safeFriendId, currentUser, isGroup === 'true', messages);
     const { handleClearChat, handleBlockToggle, handleUnfriend, handleSetWallpaper } = useChatActions(currentUser, safeFriendId, roomId, friendName as string, isGroup === 'true', isBlocked, setWallpaper);
@@ -94,6 +95,7 @@ export default function ChatScreen() {
             case 'reply': setReplyingTo(selectedMessage); setEditingMessage(null); break;
             case 'copy': Clipboard.setString(selectedMessage.message || ''); break;
             case 'forward': setForwardText(selectedMessage.message || ''); setForwardModalVisible(true); break;
+            case 'info': setInfoVisible(true); break;
             case 'edit': setEditingMessage(selectedMessage); setReplyingTo(null); break;
             case 'delete': 
                 Alert.alert("Delete Message", "Choose how you want to delete this message.", [
@@ -215,6 +217,8 @@ export default function ChatScreen() {
                 setLedgerVisible={setLedgerVisible}
                 safeFriendId={safeFriendId}
                 friendName={friendName as string}
+                infoVisible={infoVisible}
+                setInfoVisible={setInfoVisible}
             />
         </KeyboardAvoidingView>
     );

@@ -4,6 +4,7 @@ import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
 import MediaViewer from '@/components/chat/MediaViewer';
 import CallScreen from '@/components/chat/CallScreen';
 import LedgerModal from '@/components/chat/LedgerModal';
+import MessageInfoModal from '@/components/chat/MessageInfoModal';
 
 interface ChatModalsProps {
     contextMenuVisible: boolean;
@@ -26,13 +27,17 @@ interface ChatModalsProps {
     setLedgerVisible: (v: boolean) => void;
     safeFriendId: string;
     friendName: string;
+
+    infoVisible: boolean;
+    setInfoVisible: (v: boolean) => void;
 }
 
 export default function ChatModals({
     contextMenuVisible, setContextMenuVisible, selectedMessage, anchorY, currentUser, handleReact, handleMessageAction,
     forwardModalVisible, setForwardModalVisible, handleForwardSubmit,
     viewerVisible, setViewerVisible, viewerImage,
-    ledgerVisible, setLedgerVisible, safeFriendId, friendName
+    ledgerVisible, setLedgerVisible, safeFriendId, friendName,
+    infoVisible, setInfoVisible
 }: ChatModalsProps) {
     return (
         <>
@@ -66,6 +71,12 @@ export default function ChatModals({
                 friendId={safeFriendId}
                 friendName={friendName}
                 currentUser={currentUser}
+            />
+
+            <MessageInfoModal
+                visible={infoVisible}
+                onClose={() => setInfoVisible(false)}
+                message={selectedMessage}
             />
         </>
     );

@@ -9,8 +9,7 @@ import Animated, {
     withTiming
 } from 'react-native-reanimated';
 import EmojiPickerModal from './EmojiPickerModal';
-
-const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥', '🙏'];
+import { useRecentEmojis } from '@/hooks/chatRoom/useRecentEmojis';
 
 interface MessageContextMenuProps {
     visible: boolean;
@@ -36,6 +35,7 @@ export default function MessageContextMenu({
     const scale = useSharedValue(0.9);
     const opacity = useSharedValue(0);
     const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
+    const { topEmojis, addEmoji } = useRecentEmojis();
 
     useEffect(() => {
         if (visible) {
@@ -98,11 +98,12 @@ export default function MessageContextMenu({
                         >
                             {/* Reactions Bar */}
                             <View style={styles.reactionsBar}>
-                                {REACTIONS.map((emoji) => (
+                                {topEmojis.map((emoji) => (
                                     <TouchableOpacity
                                         key={emoji}
                                         onPress={() => {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                            addEmoji(emoji);
                                             onSelectReaction(emoji);
                                             onClose();
                                         }}
@@ -129,6 +130,7 @@ export default function MessageContextMenu({
                                 <ActionItem icon="arrow-undo-outline" label="Reply" onPress={() => onAction('reply')} />
                                 <ActionItem icon="copy-outline" label="Copy Text" onPress={() => onAction('copy')} />
                                 <ActionItem icon="share-outline" label="Forward" onPress={() => onAction('forward')} />
+                                {canEdit && <ActionItem icon="information-circle-outline" label="Info" onPress={() => onAction('info')} />}
                                 {canEdit && <ActionItem icon="create-outline" label="Edit" onPress={() => onAction('edit')} />}
                                 {canEdit && <ActionItem
                                     icon="trash-outline"
@@ -149,6 +151,7 @@ export default function MessageContextMenu({
                 onClose={() => setEmojiPickerVisible(false)}
                 onSelect={(emoji) => {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    addEmoji(emoji);
                     onSelectReaction(emoji);
                     setEmojiPickerVisible(false);
                     onClose();
