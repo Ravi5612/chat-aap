@@ -1,5 +1,6 @@
 import React, { useRef, memo, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, Animated, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 import { useRouter } from 'expo-router';
@@ -16,7 +17,7 @@ interface FriendListItemProps {
 
 const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
     const router = useRouter();
-    const { user: currentUser } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
     const [isSending, setIsSending] = useState(false);
     const [requestSent, setRequestSent] = useState(false);
 

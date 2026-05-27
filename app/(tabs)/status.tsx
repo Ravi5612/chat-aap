@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, StyleSheet, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet, TextInput } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriends } from '@/hooks/useFriends';
@@ -108,7 +109,7 @@ export default function StatusScreen() {
     const insets = useSafeAreaInsets();
     const { combinedItems = [], myStatuses = { active: [] }, statusInfo = {}, loading, loadFriends } = useFriends();
     // ✅ Use auth store instead of separate supabase.auth.getUser() call
-    const { user: currentUser } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
 
     const {
         setShowAddStatus,

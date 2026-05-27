@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ interface HomeHeaderProps {
     unreadNotificationsCount: number;
 }
 
-export default function HomeHeader({
+const HomeHeader = memo(function HomeHeader({
     profile,
     pendingSentCount,
     pendingReceivedCount,
@@ -112,4 +112,6 @@ export default function HomeHeader({
             </View>
         </GlassHeader>
     );
-}
+});
+
+export default HomeHeader;

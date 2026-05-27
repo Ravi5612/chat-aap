@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, ActivityIndicator, StyleSheet, LayoutAnimation, Platform, UIManager, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, LayoutAnimation, Platform, UIManager, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
 import { useContactSuggestions } from '@/hooks/useContactSuggestions';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';

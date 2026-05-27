@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ContactSuggestions from '@/components/chat/ContactSuggestions';
@@ -13,7 +13,7 @@ interface HomeSuggestionsProps {
     onToggleExpanded: () => void;
 }
 
-export default function HomeSuggestions({
+const HomeSuggestions = memo(function HomeSuggestions({
     showContactSuggestions,
     showNearbySuggestions,
     suggestionTab,
@@ -77,4 +77,6 @@ export default function HomeSuggestions({
             )}
         </View>
     );
-}
+});
+
+export default HomeSuggestions;

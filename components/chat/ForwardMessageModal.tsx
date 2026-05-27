@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, FlatList, TextInput, Image, ActivityIndicator, StyleSheet, Platform, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, FlatList, TextInput, ActivityIndicator, StyleSheet, Platform, SafeAreaView } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriends } from '@/hooks/useFriends';
 import * as Haptics from 'expo-haptics';

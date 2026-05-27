@@ -25,7 +25,6 @@ export default function MessageList({
     messages, currentUser, onReply, onLongPress, onImagePress,
     friendName, flyingEmoji, onLoadMore, loadingMore = false,
 }: MessageListProps) {
-    const uploadProgress = useChatStore(state => state.uploadProgress);
 
     const {
         flatListRef, showScrollBtn, unreadCount,
@@ -49,10 +48,9 @@ export default function MessageList({
                 onImagePress={onImagePress}
                 friendName={friendName}
                 flyingEmoji={flyingEmoji}
-                uploadProgress={uploadProgress[item.id]}
             />
         );
-    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji, handleScrollToMessage, uploadProgress]);
+    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji, handleScrollToMessage]);
 
     const keyExtractor = useCallback((item: any) => item.id, []);
 

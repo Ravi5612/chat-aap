@@ -32,7 +32,7 @@ export default function ChatScreen() {
     const router = useRouter();
     const { id: friendId, name: friendName, isGroup, image: friendImage } = params;
     const safeFriendId = (friendId as string) || '';
-    const { user: currentUser } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
     
     const { isBlocked, iAmBlocked, isFriend, isUserOnline, friendData } = useChatStatus(currentUser, safeFriendId, isGroup === 'true');
     const chatRoom = useChatRoom(safeFriendId, currentUser, isGroup === 'true');

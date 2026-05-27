@@ -17,7 +17,10 @@ import ProfileSettings from '@/components/profile/ProfileSettings';
 
 export default function ProfileScreen() {
     const swipeHandlers = useSwipeNavigation();
-    const { user, profile, signOut, syncProfile } = useAuthStore();
+    const user = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
+    const signOut = useAuthStore(state => state.signOut);
+    const syncProfile = useAuthStore(state => state.syncProfile);
     const { friends } = useFriends();
     const { sentRequests } = useSentRequests();
     const { receivedRequests } = useReceivedRequests();

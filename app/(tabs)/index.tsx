@@ -28,7 +28,8 @@ import { useChatLock } from '@/hooks/home/useChatLock';
 function HomeScreen() {
     const router = useRouter();
     const swipeHandlers = useSwipeNavigation();
-    const { user: currentUser, profile } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
     const { combinedItems, loading, loadFriends } = useFriends();
     const { receivedRequests } = useReceivedRequests();
     const { sentRequests } = useSentRequests();
@@ -163,6 +164,10 @@ function HomeScreen() {
                         </View>
                     }
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />}
+                    initialNumToRender={15}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    removeClippedSubviews={true}
                 />
 
                 <FriendContextMenu

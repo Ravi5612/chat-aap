@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, ScrollView } from 'react-native';
 import MyStatusSection from './status/MyStatusSection';
 import HistorySection from './status/HistorySection';
@@ -13,7 +13,7 @@ interface StatusBarProps {
     onViewMyStatus: () => void;
 }
 
-export default function StatusBar({
+const StatusBar = memo(function StatusBar({
     myStatuses,
     statusInfo = {},
     friendsWithStatus,
@@ -70,4 +70,6 @@ export default function StatusBar({
             </View>
         </View>
     );
-}
+});
+
+export default StatusBar;

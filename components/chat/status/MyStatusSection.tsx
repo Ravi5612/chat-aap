@@ -17,7 +17,8 @@ export default function MyStatusSection({
     onAddClick,
     onViewMyStatus
 }: MyStatusSectionProps) {
-    const { user: currentUser, profile: currentProfile } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
+    const currentProfile = useAuthStore(state => state.profile);
 
     return (
         <View style={{ marginRight: 24 }}>

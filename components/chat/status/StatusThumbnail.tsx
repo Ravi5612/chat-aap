@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 interface StatusThumbnailProps {

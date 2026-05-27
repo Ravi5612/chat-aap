@@ -32,15 +32,15 @@ export default function CallsScreen() {
         setRefreshing(false);
     }, [refreshLogs]);
 
-    const handleChatPress = (userId: string, userName: string, userImg?: string) => {
+    const handleChatPress = useCallback((userId: string, userName: string, userImg?: string) => {
         if (isSelectionMode) return;
         router.push({
             pathname: `/chat/${userId}`,
             params: { name: userName, image: userImg }
         });
-    };
+    }, [isSelectionMode, router]);
 
-    const toggleSelection = (id: string) => {
+    const toggleSelection = useCallback((id: string) => {
         const newSelected = new Set(selectedIds);
         if (newSelected.has(id)) {
             newSelected.delete(id);
@@ -49,16 +49,16 @@ export default function CallsScreen() {
             newSelected.add(id);
         }
         setSelectedIds(newSelected);
-    };
+    }, [selectedIds]);
 
-    const handleLongPress = (id: string) => {
+    const handleLongPress = useCallback((id: string) => {
         if (!isSelectionMode) {
             setIsSelectionMode(true);
             const newSelected = new Set(selectedIds);
             newSelected.add(id);
             setSelectedIds(newSelected);
         }
-    };
+    }, [isSelectionMode, selectedIds]);
 
     const handleDeleteSelected = useCallback(async () => {
         if (isDeleting || selectedIds.size === 0 || !currentUser?.id) return;
@@ -106,6 +106,18 @@ export default function CallsScreen() {
         return null;
     };
 
+    const renderItem = useCallback(({ item }: { item: any }) => (
+        <CallLogItem 
+            item={item}
+            currentUser={currentUser}
+            isSelected={selectedIds.has(item.id)}
+            isSelectionMode={isSelectionMode}
+            onToggleSelection={toggleSelection}
+            onLongPress={handleLongPress}
+            onChatPress={handleChatPress}
+        />
+    ), [currentUser, selectedIds, isSelectionMode, toggleSelection, handleLongPress, handleChatPress]);
+
     return (
         <View style={{ flex: 1, backgroundColor: 'white' }} {...swipeHandlers} collapsable={false}>
             <SafeAreaView style={{ flex: 1 }}>
@@ -134,17 +146,11 @@ export default function CallsScreen() {
                         onEndReachedThreshold={0.5}
                         ListEmptyComponent={<CallListEmptyState />}
                         ListFooterComponent={renderFooter}
-                        renderItem={({ item }) => (
-                            <CallLogItem 
-                                item={item}
-                                currentUser={currentUser}
-                                isSelected={selectedIds.has(item.id)}
-                                isSelectionMode={isSelectionMode}
-                                onToggleSelection={toggleSelection}
-                                onLongPress={handleLongPress}
-                                onChatPress={handleChatPress}
-                            />
-                        )}
+                        initialNumToRender={15}
+                        maxToRenderPerBatch={10}
+                        windowSize={10}
+                        removeClippedSubviews={true}
+                        renderItem={renderItem}
                     />
                 )}
 

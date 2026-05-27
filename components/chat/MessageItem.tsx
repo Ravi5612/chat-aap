@@ -10,6 +10,7 @@ import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
 import { useMessageGestures } from '@/hooks/useMessageGestures';
 import { useStatusContext } from '@/hooks/useStatusContext';
+import { useChatStore } from '@/store/useChatStore';
 import MessageStatusContext from './MessageStatusContext';
 import MessageContent from './MessageContent';
 
@@ -22,7 +23,6 @@ interface MessageItemProps {
     onImagePress?: (uri: string) => void;
     friendName?: string;
     flyingEmoji?: any;
-    uploadProgress?: number;
 }
 
 const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
@@ -33,13 +33,13 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
         prevProps.isCurrentUser === nextProps.isCurrentUser &&
         prevProps.friendName === nextProps.friendName &&
         ((prevProps.flyingEmoji?.messageId === prevMsgId) === (nextProps.flyingEmoji?.messageId === nextMsgId)) &&
-        (!prevMsgId || prevProps.flyingEmoji?.messageId !== prevMsgId || prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id) &&
-        prevProps.uploadProgress === nextProps.uploadProgress
+        (!prevMsgId || prevProps.flyingEmoji?.messageId !== prevMsgId || prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id)
     );
 };
 
-const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji, uploadProgress }: MessageItemProps) => {
+const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
     const { panGesture, animatedStyle, iconAnimatedStyle } = useMessageGestures(isCurrentUser, message, onReply);
+    const uploadProgress = useChatStore(state => state.uploadProgress[message.id]);
 
     // Parse Message
     const isVoiceMessage = message.file_type?.startsWith('audio/') || message.message?.startsWith('[Voice Message]');

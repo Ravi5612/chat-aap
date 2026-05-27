@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,7 +36,7 @@ interface CallLogItemProps {
     onChatPress: (userId: string, userName: string, userImg?: string) => void;
 }
 
-export default function CallLogItem({
+const CallLogItem = memo(function CallLogItem({
     item,
     currentUser,
     isSelected,
@@ -124,7 +124,9 @@ export default function CallLogItem({
             )}
         </TouchableOpacity>
     );
-}
+});
+
+export default CallLogItem;
 
 const styles = StyleSheet.create({
     container: {

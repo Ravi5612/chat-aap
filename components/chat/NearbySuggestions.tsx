@@ -9,7 +9,8 @@ import * as Haptics from 'expo-haptics';
 
 export default function NearbySuggestions() {
     const { nearbyPeople, loading } = useNearbySuggestions();
-    const { user: currentUser, profile } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
 
     const [requestedIds, setRequestedIds] = React.useState<string[]>([]);
 
