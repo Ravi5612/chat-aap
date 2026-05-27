@@ -1,10 +1,13 @@
 import { useState, useRef } from 'react';
 import { Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { useFriendsStore } from '@/store/useFriendsStore';
+import { useAuthStore } from '../store/useAuthStore';
+import { encryptText, generateStatusMasterKey, encryptKeyWithSharedSecret } from '../utils/chatCrypto';
+import { useFriendsStore } from '../store/useFriendsStore';
 import { uploadChatMessageMedia } from '@/utils/uploadHelper';
-import { encryptText, getChatKey } from '@/utils/chatCrypto';
+import { getChatKey } from '@/utils/chatCrypto';
 import { useRouter } from 'expo-router';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 
 export function useStatusPost(
     content: string,
@@ -66,12 +69,20 @@ export function useStatusPost(
                 (async () => {
                     try {
                         let mediaUrl = null;
+                        let thumbnailUrl = null;
+                        let storagePaths: string[] = [];
+
+                        const statusKey = await generateStatusMasterKey();
 
                         if (selectedMedia) {
                             const uploadResult = await uploadChatMessageMedia(
                                 selectedMedia.uri, 
                                 mediaType as "video" | "image",
-                                user.id
+                                user.id,
+                                undefined,
+                                undefined,
+                                undefined,
+                                statusKey
                             );
                             
                             let finalUrl = uploadResult.url;
@@ -79,26 +90,75 @@ export function useStatusPost(
                                 finalUrl += `?trim_start=${trimStart}&trim_end=${trimEnd}`;
                             }
                             mediaUrl = finalUrl;
+                            storagePaths.push(`${user.id}/${uploadResult.name}`);
+
+                            if (mediaType === 'video') {
+                                try {
+                                    const { uri } = await VideoThumbnails.getThumbnailAsync(
+                                        selectedMedia.uri,
+                                        { time: 1000 }
+                                    );
+                                    
+                                    const thumbUploadResult = await uploadChatMessageMedia(
+                                        uri, 
+                                        'image',
+                                        user.id,
+                                        `thumb_${Date.now()}.jpg`,
+                                        undefined,
+                                        undefined,
+                                        statusKey
+                                    );
+                                    thumbnailUrl = thumbUploadResult.url;
+                                    storagePaths.push(`${user.id}/${thumbUploadResult.name}`);
+                                } catch (e) {
+                                    console.warn('Failed to generate thumbnail', e);
+                                }
+                            }
                         }
 
-                        const statusKey = await getChatKey(user.id, user.id); 
-
                         const encryptedContent = content.trim() ? await encryptText(content.trim(), statusKey) : null;
-                        const encryptedMediaUrl = mediaUrl ? await encryptText(mediaUrl, statusKey) : null;
+                        const encryptedMediaUrl = mediaUrl ? (mediaUrl.includes('.e2ee.txt') ? mediaUrl : await encryptText(mediaUrl, statusKey)) : null;
+                        const encryptedThumbnailUrl = thumbnailUrl ? (thumbnailUrl.includes('.e2ee.txt') ? thumbnailUrl : await encryptText(thumbnailUrl, statusKey)) : null;
                         const encryptedAudioUrl = selectedMusic ? await encryptText(JSON.stringify(selectedMusic), statusKey) : null;
+
+                        // Hybrid Encryption: Encrypt the Master Key for all allowed viewers + self
+                        const finalViewerIds = privacy === 'selected' ? selectedViewerIds : friendsStore.friends.map((f: any) => f.id);
+                        const { data: viewerProfiles } = await supabase.from('profiles').select('id, public_key').in('id', finalViewerIds);
+                        
+                        const encryptedKeys: Record<string, string> = {};
+                        
+                        // Self
+                        const { data: myProfile } = await supabase.from('profiles').select('public_key').eq('id', user.id).single();
+                        if (myProfile?.public_key) {
+                            const myEnc = await encryptKeyWithSharedSecret(statusKey, myProfile.public_key);
+                            if (myEnc) encryptedKeys[user.id] = myEnc;
+                        }
+                        
+                        // Friends
+                        if (viewerProfiles) {
+                            for (const p of viewerProfiles) {
+                                if (p.public_key) {
+                                    const enc = await encryptKeyWithSharedSecret(statusKey, p.public_key);
+                                    if (enc) encryptedKeys[p.id] = enc;
+                                }
+                            }
+                        }
 
                         const statusData = {
                             user_id: user.id,
                             content: encryptedContent,
                             media_type: mediaType,
                             media_url: encryptedMediaUrl,
+                            thumbnail_url: encryptedThumbnailUrl,
                             audio_url: encryptedAudioUrl,
+                            storage_paths: storagePaths,
                             background_color: selectedMedia ? null : bgColor,
                             expires_at: tempStatus.expires_at,
                             is_deleted: false,
                             privacy_type: privacy,
                             viewer_ids: privacy === 'selected' ? selectedViewerIds : null,
-                            mentioned_user_ids: mentionedFriends?.map(f => f.id) || []
+                            mentioned_user_ids: mentionedFriends?.map(f => f.id) || [],
+                            encrypted_keys: encryptedKeys
                         };
 
                         const { error, data: insertedStatus } = await supabase.from('statuses').insert([statusData]).select().single();

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { decryptText, getChatKey } from '@/utils/chatCrypto';
+import { decryptText, getChatKey, decryptKeyWithSharedSecret } from '@/utils/chatCrypto';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export function useStatusContext(statusContext: any) {
     const [decryptedStatusContent, setDecryptedStatusContent] = useState<string | null>(null);
@@ -9,7 +10,26 @@ export function useStatusContext(statusContext: any) {
         const decryptStatusContext = async () => {
             if (!statusContext) return;
             try {
-                const statusKey = await getChatKey(statusContext.user_id, statusContext.user_id);
+                const currentUser = useAuthStore.getState().user;
+                let statusKey = null;
+
+                // 1. Try Hybrid E2EE Key Extraction
+                if (statusContext.encrypted_keys && currentUser?.id) {
+                    const encryptedMasterKey = statusContext.encrypted_keys[currentUser.id];
+                    if (encryptedMasterKey) {
+                        // We need the uploader's public_key to derive the shared secret
+                        const { supabase } = await import('@/lib/supabase');
+                        const { data: profile } = await supabase.from('profiles').select('public_key').eq('id', statusContext.user_id).single();
+                        if (profile?.public_key) {
+                            statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key);
+                        }
+                    }
+                }
+
+                // 2. Fallback for legacy statuses
+                if (!statusKey) {
+                    statusKey = await getChatKey(statusContext.user_id, statusContext.user_id);
+                }
 
                 let content = statusContext.content || '';
                 let mediaUrl = statusContext.media_url || '';

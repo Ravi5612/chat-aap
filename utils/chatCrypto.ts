@@ -7,8 +7,11 @@
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
+import { x25519 } from '@noble/curves/ed25519';
 import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
 import { Buffer } from 'buffer';
+import { supabase } from '../lib/supabase';
 
 // Ensure Web Standard APIs are available in RN
 if (typeof global.Buffer === 'undefined') {
@@ -36,22 +39,92 @@ const SALT = "supabase-secure-chat-v1";
 const encoder = new TextEncoder();
 
 const keyCache = new Map<string, Uint8Array>();
+const PRIVATE_KEY_STORAGE = 'e2ee_private_key_v1';
+
+/**
+ * 🔑 Initialize X25519 Keypair for True E2EE
+ * Generates a private key if it doesn't exist, and returns the Public Key in Base64
+ */
+export async function initializeX25519Keys(): Promise<string> {
+    const existingKey = await SecureStore.getItemAsync(PRIVATE_KEY_STORAGE);
+    if (existingKey) {
+        const privateKey = Buffer.from(existingKey, 'base64');
+        const publicKey = x25519.getPublicKey(privateKey);
+        return Buffer.from(publicKey).toString('base64');
+    }
+
+    const privateKey = x25519.utils.randomPrivateKey();
+    const publicKey = x25519.getPublicKey(privateKey);
+    
+    await SecureStore.setItemAsync(PRIVATE_KEY_STORAGE, Buffer.from(privateKey).toString('base64'));
+    return Buffer.from(publicKey).toString('base64');
+}
+
+/**
+ * 🔑 Get True E2EE Shared Secret using X25519 Diffie-Hellman
+ */
+export async function getX25519SharedSecret(friendPublicKeyBase64: string): Promise<Uint8Array | null> {
+    const existingKey = await SecureStore.getItemAsync(PRIVATE_KEY_STORAGE);
+    if (!existingKey) return null;
+
+    if (keyCache.has(friendPublicKeyBase64)) {
+        return keyCache.get(friendPublicKeyBase64)!;
+    }
+
+    try {
+        const privateKey = Buffer.from(existingKey, 'base64');
+        const friendPublicKey = Buffer.from(friendPublicKeyBase64, 'base64');
+
+        const sharedSecret = x25519.getSharedSecret(privateKey, friendPublicKey);
+        
+        // Hash it with PBKDF2 to ensure uniform 256-bit AES key format
+        const key = await pbkdf2Async(sha256, sharedSecret, encoder.encode(SALT), {
+            c: 1000,
+            dkLen: 32 // 256 bits
+        });
+        
+        keyCache.set(friendPublicKeyBase64, key);
+        return key;
+    } catch (e) {
+        console.warn('X25519 shared secret generation failed', e);
+        return null;
+    }
+}
 
 /**
  * 🔑 Generate deterministic crypto key for a chat
- * Same key will be generated for both users on both platforms
+ * Now updated to use X25519 Diffie-Hellman for 1-on-1 chats!
  */
-export async function getChatKey(userId: string, friendId: string, isGroup: boolean = false): Promise<Uint8Array> {
+export async function getChatKey(userId: string, friendId: string, isGroup: boolean = false): Promise<Uint8Array | null> {
     if (!userId || !friendId) {
         throw new Error("Invalid IDs for chat key");
     }
 
-    // Same baseKey logic as web app
-    const baseKey = isGroup ? `group_v6:${friendId}` : [userId, friendId].sort().join(":");
+    if (!isGroup) {
+        // True E2EE (X25519)
+        const baseKeyCacheStr = `x25519:${friendId}`;
+        if (keyCache.has(baseKeyCacheStr)) return keyCache.get(baseKeyCacheStr)!;
 
-    if (keyCache.has(baseKey)) {
-        return keyCache.get(baseKey)!;
+        try {
+            const { data } = await supabase.from('profiles').select('public_key').eq('id', friendId).single();
+            if (data?.public_key) {
+                const key = await getX25519SharedSecret(data.public_key);
+                if (key) {
+                    keyCache.set(baseKeyCacheStr, key);
+                    console.log(`Crypto: X25519 Key generated for friend ${friendId}`);
+                    return key;
+                }
+            } else {
+                console.warn(`Friend ${friendId} does not have a public key yet. Falling back to null.`);
+            }
+        } catch (e) {
+            console.warn('Failed to fetch friend public key for E2EE', e);
+        }
+        return null;
     }
+
+    // Fallback for groups
+    const baseKey = `group_v6:${friendId}`;
 
     // ✅ Noble PBKDF2 Async - non-blocking for React Native UI
     const key = await pbkdf2Async(sha256, encoder.encode(baseKey), encoder.encode(SALT), {
@@ -61,8 +134,41 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
 
     const uintKey = new Uint8Array(key);
     keyCache.set(baseKey, uintKey);
-    console.log(`Crypto: Key generated for ${baseKey.substring(0, 8)}`);
+    console.log(`Crypto: Group Key generated for ${baseKey.substring(0, 8)}`);
     return uintKey;
+}
+
+/**
+ * 🔑 Generate a random 32-byte Status Master Key
+ */
+export async function generateStatusMasterKey(): Promise<Uint8Array> {
+    const randomBytes = await Crypto.getRandomBytesAsync(32);
+    return new Uint8Array(randomBytes);
+}
+
+/**
+ * 🔒 Encrypt the Status Master Key with a friend's Public Key (Hybrid Encryption)
+ */
+export async function encryptKeyWithSharedSecret(masterKey: Uint8Array, friendPublicKeyBase64: string): Promise<string | null> {
+    const sharedSecret = await getX25519SharedSecret(friendPublicKeyBase64);
+    if (!sharedSecret) return null;
+    
+    // Convert Master Key to string (base64) so we can use existing encryptText
+    const masterKeyBase64 = Buffer.from(masterKey).toString('base64');
+    return await encryptText(masterKeyBase64, sharedSecret);
+}
+
+/**
+ * 🔓 Decrypt the Status Master Key from a friend's Hybrid Encrypted string
+ */
+export async function decryptKeyWithSharedSecret(encryptedMasterKeyBase64: string, friendPublicKeyBase64: string): Promise<Uint8Array | null> {
+    const sharedSecret = await getX25519SharedSecret(friendPublicKeyBase64);
+    if (!sharedSecret) return null;
+    
+    const masterKeyBase64 = await decryptText(encryptedMasterKeyBase64, sharedSecret);
+    if (!masterKeyBase64) return null;
+    
+    return new Uint8Array(Buffer.from(masterKeyBase64, 'base64'));
 }
 
 /**

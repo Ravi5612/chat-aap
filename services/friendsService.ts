@@ -45,7 +45,7 @@ export async function fetchAndFormatFriendsData(
 
     const nowIso = new Date().toISOString();
     const statusQuery = supabase.from('statuses')
-        .select('id, user_id, content, media_type, media_url, background_color, expires_at, created_at, is_deleted, privacy_type, viewer_ids')
+        .select('id, user_id, content, media_type, media_url, thumbnail_url, background_color, expires_at, created_at, is_deleted, privacy_type, viewer_ids')
         .in('user_id', allRelevantIds)
         .gt('expires_at', nowIso)
         .eq('is_deleted', false);
@@ -85,17 +85,18 @@ export async function fetchAndFormatFriendsData(
     for (const s of sortedStatuses) {
         if (!statusInfoMap[s.user_id]) {
             statusInfoMap[s.user_id] = { count: 0, viewedCount: 0 };
-            if (s.media_url) {
-                if (s.media_url.trim().startsWith('{')) {
+            if (s.thumbnail_url || s.media_url) {
+                const targetUrl = s.thumbnail_url || s.media_url;
+                if (targetUrl.trim().startsWith('{')) {
                     try {
                         const statusKey = keyCache[s.user_id];
                         if (statusKey) {
-                            statusInfoMap[s.user_id].thumbnail = await decryptText(s.media_url, statusKey);
+                            statusInfoMap[s.user_id].thumbnail = await decryptText(targetUrl, statusKey);
                             statusInfoMap[s.user_id].mediaType = s.media_type;
                         }
                     } catch (e) { console.error('Thumbnail decryption error:', e); }
                 } else {
-                    statusInfoMap[s.user_id].thumbnail = s.media_url;
+                    statusInfoMap[s.user_id].thumbnail = targetUrl;
                     statusInfoMap[s.user_id].mediaType = s.media_type;
                 }
             } else if (s.media_type === 'text') {

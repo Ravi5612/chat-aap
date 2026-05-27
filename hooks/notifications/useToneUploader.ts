@@ -21,7 +21,7 @@ export const useToneUploader = (user: any, updateProfile: (updates: any) => Prom
         }
     };
 
-    const pickAndUploadTone = async (type: 'message' | 'call') => {
+    const pickAndUploadTone = async (type: 'message' | 'call', oldUrl?: string) => {
         try {
             if (!user?.id) {
                 Alert.alert('Error', 'User session not found.');
@@ -38,33 +38,28 @@ export const useToneUploader = (user: any, updateProfile: (updates: any) => Prom
             setSaving(true);
             const asset = result.assets[0];
             
-            // Read file as base64
-            const response = await fetch(asset.uri);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            
-            const fileData: any = await new Promise((resolve, reject) => {
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
+            // No need for base64 conversion with Cloudinary FormData
+            const fileName = `tone_${type}_${user.id}`;
+
+            const formData = new FormData();
+            formData.append('file', { uri: asset.uri, type: asset.mimeType || 'audio/mpeg', name: fileName + '.mp3' } as any);
+            formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+            formData.append('public_id', fileName);
+
+            // Use auto/upload to let Cloudinary figure out the resource_type (audio/video)
+            const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/auto/upload`, {
+                method: 'POST',
+                body: formData
             });
 
-            const base64 = fileData.split(',')[1];
-            const fileName = `${user.id}/${Date.now()}_${asset.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-            const filePath = `tones/${fileName}`;
+            const cloudData = await cloudRes.json();
+            
+            if (cloudData.error) {
+                throw new Error(cloudData.error.message || 'Cloudinary upload failed');
+            }
 
-            const { error: uploadError } = await supabase.storage
-                .from('chat-files')
-                .upload(filePath, Buffer.from(base64, 'base64'), {
-                    contentType: asset.mimeType || 'audio/mpeg',
-                    upsert: true
-                });
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('chat-files')
-                .getPublicUrl(filePath);
+            // Append timestamp to break local cache since public_id is reused
+            const publicUrl = `${cloudData.secure_url}?t=${Date.now()}`;
 
             await handleSave(type, publicUrl);
             Alert.alert('Success', 'Custom tone uploaded and set!');

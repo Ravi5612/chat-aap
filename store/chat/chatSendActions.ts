@@ -87,7 +87,8 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                             }));
                         },
                         originalName,
-                        docMime
+                        docMime,
+                        chatKey
                     );
                     messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : (isDoc ? 'a document' : 'an image'))}`;
                 }
@@ -136,13 +137,7 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                 syncLedgerExpense(db, finalMsg, currentUser.id);
             }
 
-            if (activeChannel) {
-                activeChannel.send({
-                    type: 'broadcast',
-                    event: 'new_message',
-                    payload: finalMsg
-                });
-            }
+            // broadcast removed to save data
 
         } catch (error: any) {
             console.error("SendMessage Error:", error);

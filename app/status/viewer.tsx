@@ -11,6 +11,7 @@ import { useRouter as useExpoRouter } from 'expo-router';
 import { useStatusFetcher } from '@/hooks/useStatusFetcher';
 import { useStatusViewers } from '@/hooks/useStatusViewers';
 import { useStatusControls } from '@/hooks/useStatusControls';
+import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
 
 // Components
 import StatusRenderer from '@/components/status/StatusRenderer';
@@ -49,8 +50,32 @@ export default function StatusViewer() {
     const currentStatusUI = statuses[currentIndex];
     const isOwner = !!(currentUser && userId === currentUser.id);
 
+    // 1.5 Get Status Key
+    const [statusKey, setStatusKey] = useState<Uint8Array | null>(null);
+    useEffect(() => {
+        if (userId) {
+            import('@/utils/chatCrypto').then(({ getChatKey }) => {
+                getChatKey(userId as string, userId as string).then(setStatusKey);
+            });
+        }
+    }, [userId]);
+
+    const { localImageUrl, localVoiceUrl, imageLoading } = useMessageMediaCache(
+        currentStatusUI || {},
+        currentStatusUI?.media_type !== 'text' ? currentStatusUI?.media_url : null,
+        currentStatusUI?.audio_url || null,
+        null,
+        statusKey
+    );
+
+    const renderedStatusUI = currentStatusUI ? {
+        ...currentStatusUI,
+        media_url: localImageUrl || currentStatusUI.media_url,
+        audio_url: localVoiceUrl ? JSON.stringify({ ...JSON.parse(currentStatusUI.audio_url || '{}'), url: localVoiceUrl }) : currentStatusUI.audio_url
+    } : null;
+
     // 2. Viewers Hook
-    const { statusViewers } = useStatusViewers(currentStatusUI, currentUser, isOwner);
+    const { statusViewers } = useStatusViewers(renderedStatusUI, currentUser, isOwner);
 
     // 3. Controls Hook
     const { paused, setPaused, progress, setProgress, isReplying, setIsReplying, touchStartRef, handleNext, handlePrev } = useStatusControls(
@@ -166,7 +191,10 @@ export default function StatusViewer() {
                 text: 'Delete', style: 'destructive',
                 onPress: async () => {
                     try {
-                        const { error } = await supabase.from('statuses').update({ is_deleted: true }).eq('id', currentStatusUI.id);
+                        if (currentStatusUI.storage_paths && Array.isArray(currentStatusUI.storage_paths)) {
+                            // Statuses are now on Cloudinary, no need to delete from Supabase storage
+                        }
+                        const { error } = await supabase.from('statuses').delete().eq('id', currentStatusUI.id);
                         if (error) throw error;
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         const updatedStatuses = statuses.filter(s => s.id !== currentStatusUI.id);
@@ -207,8 +235,8 @@ export default function StatusViewer() {
 
     let trimStart = 0;
     let trimEnd = 999999;
-    if (currentStatusUI?.media_url) {
-        const url = currentStatusUI.media_url;
+    if (renderedStatusUI?.media_url) {
+        const url = renderedStatusUI.media_url;
         const matchStart = url.match(/trim_start=(\d+)/);
         const matchEnd = url.match(/trim_end=(\d+)/);
         if (matchStart) trimStart = parseInt(matchStart[1]);
@@ -246,11 +274,22 @@ export default function StatusViewer() {
                 }}
                 style={{ flex: 1 }}
             >
-                <StatusRenderer currentStatusUI={currentStatusUI} viewerVideoRef={viewerVideoRef} onViewerPlaybackStatusUpdate={onViewerPlaybackStatusUpdate} />
+                {imageLoading ? (
+                    <View style={{ flex: 1, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center' }}>
+                        <ActivityIndicator size="large" color="#F68537" />
+                        <Text style={{ color: 'white', marginTop: 16 }}>Decrypting Media...</Text>
+                    </View>
+                ) : (
+                    <StatusRenderer
+                        currentStatusUI={renderedStatusUI}
+                        viewerVideoRef={viewerVideoRef}
+                        onViewerPlaybackStatusUpdate={onViewerPlaybackStatusUpdate}
+                    />
+                )}
             </TouchableOpacity>
 
             <StatusOverlay
-                statuses={statuses} currentIndex={currentIndex} progress={progress} currentStatusUI={currentStatusUI}
+                currentStatusUI={renderedStatusUI} currentIndex={currentIndex} progress={progress}
                 insets={insets} isOwner={isOwner} paused={paused} setPaused={setPaused}
                 isReplying={isReplying} setIsReplying={setIsReplying} replyText={replyText} setReplyText={setReplyText}
                 handleSendReply={handleSendReply} handleDeleteStatus={handleDeleteStatus}

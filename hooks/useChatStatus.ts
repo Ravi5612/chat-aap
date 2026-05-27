@@ -59,11 +59,18 @@ export function useChatStatus(currentUser: any, safeFriendId: string, isGroup: b
         
         const channel = supabase
             .channel(`block-status-${safeFriendId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users' }, async () => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `blocker_id=eq.${safeFriendId}` }, async () => {
                 if (currentUser) await useFriendsStore.getState().fetchBlockedUsers(currentUser.id);
                 checkBlockStatus();
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `blocker_id=eq.${currentUser?.id}` }, async () => {
+                if (currentUser) await useFriendsStore.getState().fetchBlockedUsers(currentUser.id);
+                checkBlockStatus();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `user_id=eq.${currentUser?.id}` }, () => {
+                checkFriendshipStatus();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `friend_id=eq.${currentUser?.id}` }, () => {
                 checkFriendshipStatus();
             })
             .subscribe();

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useFriendsStore } from '@/store/useFriendsStore';
-import { decryptText, getChatKey } from '@/utils/chatCrypto';
+import { decryptText, getChatKey, decryptKeyWithSharedSecret } from '@/utils/chatCrypto';
 
 export function useStatusFetcher(userId: string | undefined, isArchive: string | undefined, date: string | undefined) {
     const [statuses, setStatuses] = useState<any[]>([]);
@@ -69,12 +69,11 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
 
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('username, avatar_url')
+                    .select('username, avatar_url, public_key')
                     .eq('id', userId)
                     .single();
 
                 if (accessibleStatuses.length > 0) {
-                    const statusKey = await getChatKey(userId, userId);
 
                     let allMentionedIds: string[] = [];
                     accessibleStatuses.forEach((s: any) => {
@@ -93,18 +92,35 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                     }
 
                     const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
+                        let statusKey = null;
+
+                        // Hybrid E2EE Status Master Key Extraction
+                        if (s.encrypted_keys && currentUser?.id) {
+                            const encryptedMasterKey = s.encrypted_keys[currentUser.id];
+                            if (encryptedMasterKey && profile?.public_key) {
+                                statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key);
+                            }
+                        }
+
+                        // Fallback for old deterministic statuses
+                        if (!statusKey) {
+                            statusKey = await getChatKey(userId, userId);
+                        }
+
                         let decryptedContent = s.content;
                         let decryptedMediaUrl = s.media_url;
                         let decryptedAudioUrl = s.audio_url;
 
-                        if (s.content && s.content.trim().startsWith('{')) {
-                            try { decryptedContent = await decryptText(s.content, statusKey); } catch (e) {}
-                        }
-                        if (s.media_url && s.media_url.trim().startsWith('{')) {
-                            try { decryptedMediaUrl = await decryptText(s.media_url, statusKey); } catch (e) {}
-                        }
-                        if (s.audio_url && s.audio_url.trim().startsWith('{')) {
-                            try { decryptedAudioUrl = await decryptText(s.audio_url, statusKey); } catch (e) {}
+                        if (statusKey) {
+                            if (s.content && s.content.trim().startsWith('{')) {
+                                try { decryptedContent = await decryptText(s.content, statusKey); } catch (e) {}
+                            }
+                            if (s.media_url && s.media_url.trim().startsWith('{')) {
+                                try { decryptedMediaUrl = await decryptText(s.media_url, statusKey); } catch (e) {}
+                            }
+                            if (s.audio_url && s.audio_url.trim().startsWith('{')) {
+                                try { decryptedAudioUrl = await decryptText(s.audio_url, statusKey); } catch (e) {}
+                            }
                         }
 
                         const mentionedProfiles = (s.mentioned_user_ids || []).map((id: string) => mentionedProfilesMap[id]).filter(Boolean);

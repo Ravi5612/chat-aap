@@ -8,9 +8,6 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'expo-router';
 import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import StatusBar from '@/components/chat/StatusBar';
-import { Video, ResizeMode } from 'expo-av';
-
-const VIDEO_STATUS_PROPS = { shouldPlay: false, positionMillis: 1000 } as const;
 
 const formatRelativeTime = (isoString?: string) => {
     if (!isoString) return 'Recently updated';
@@ -27,18 +24,17 @@ const formatRelativeTime = (isoString?: string) => {
 const StatusItem = React.memo(({ item, onPress }: { item: any, onPress: (item: any) => void }) => {
     // Single Video thumbnail rendered once for both avatar and thumbnail areas
     const videoThumbnail = item.mediaType === 'video' ? (
-        <View style={{ width: '100%', height: '100%', position: 'relative' }}>
-            <Video
-                source={{ uri: item.thumbnail }}
-                style={{ width: '100%', height: '100%' }}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={false}
-                isMuted={true}
-                status={VIDEO_STATUS_PROPS}
-            />
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                <Ionicons name="play" size={14} color="white" />
-            </View>
+        <View style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#1E293B', alignItems: 'center', justifyContent: 'center' }}>
+            {item.thumbnail ? (
+                <>
+                    <Image source={{ uri: item.thumbnail }} style={{ width: '100%', height: '100%', position: 'absolute' }} />
+                    <View style={{ position: 'absolute', backgroundColor: 'rgba(0,0,0,0.3)', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="play" size={14} color="white" />
+                    </View>
+                </>
+            ) : (
+                <Ionicons name="videocam" size={24} color="white" />
+            )}
         </View>
     ) : null;
 

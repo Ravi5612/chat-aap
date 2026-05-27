@@ -178,7 +178,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             *,
             sender:profiles!sender_id(id, username, avatar_url),
             reply:reply_to_id(id, message, sender_id, created_at),
-            status_context:status_id(id, user_id, media_type, media_url, content)
+            status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
           `);
 
                 if (isGroup) {
@@ -361,7 +361,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             *,
             sender:profiles!sender_id(id, username, avatar_url),
             reply:reply_to_id(id, message, sender_id, created_at),
-            status_context:status_id(id, user_id, media_type, media_url, content)
+            status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
           `);
 
                 if (isGroup) {
@@ -512,7 +512,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                         *,
                         sender:profiles!sender_id(id, username, avatar_url),
                         reply:reply_to_id(id, message, sender_id, created_at),
-                        status_context:status_id(id, user_id, media_type, media_url, content)
+                        status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
                     `);
 
                 if (isGroup) {

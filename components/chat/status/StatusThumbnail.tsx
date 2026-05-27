@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, Image, ActivityIndicator } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 
 interface StatusThumbnailProps {
@@ -37,25 +36,20 @@ export default function StatusThumbnail({
 
     if (mediaType === 'video') {
         return (
-            <View style={{ width: '100%', height: '100%', position: 'relative' }}>
-                <Video
-                    source={{ uri: mediaUrl || '' }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay={false}
-                    isMuted={true}
-                    status={{
-                        shouldPlay: false,
-                        positionMillis: 1000
-                    } as any}
-                />
+            <View style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#1E293B', alignItems: 'center', justifyContent: 'center' }}>
+                {mediaUrl && mediaUrl !== '' && !mediaUrl.startsWith('{') ? (
+                    <>
+                        <Image source={{ uri: mediaUrl }} style={{ width: '100%', height: '100%', position: 'absolute' }} />
+                        <View style={{ position: 'absolute', backgroundColor: 'rgba(0,0,0,0.3)', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="play" size={14} color="white" />
+                        </View>
+                    </>
+                ) : (
+                    <Ionicons name="videocam" size={24} color="white" />
+                )}
                 {isUploading ? (
                     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }}>
                         <ActivityIndicator size="small" color="white" />
-                    </View>
-                ) : showPlayIcon ? (
-                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                        <Ionicons name="play" size={18} color="white" />
                     </View>
                 ) : null}
             </View>

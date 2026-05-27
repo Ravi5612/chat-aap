@@ -1,5 +1,30 @@
-import { supabase } from '@/lib/supabase';
 import * as FileSystem from 'expo-file-system';
+import { gcm } from '@noble/ciphers/aes.js';
+import * as Crypto from 'expo-crypto';
+import { Buffer } from 'buffer';
+
+export const encryptFileBase64 = async (base64: string, cryptoKey: Uint8Array): Promise<string> => {
+    const iv = Crypto.getRandomBytes(12);
+    const encoder = new TextEncoder();
+    const aes = gcm(new Uint8Array(cryptoKey), new Uint8Array(iv));
+    const encrypted = aes.encrypt(encoder.encode(base64));
+    
+    return JSON.stringify({
+        iv: Buffer.from(iv).toString('base64'),
+        content: Buffer.from(encrypted).toString('base64'),
+    });
+};
+
+export const decryptFileBase64 = async (encryptedData: string, cryptoKey: Uint8Array): Promise<string> => {
+    const dataToDecrypt = JSON.parse(encryptedData);
+    const iv = new Uint8Array(Buffer.from(dataToDecrypt.iv, 'base64'));
+    const content = new Uint8Array(Buffer.from(dataToDecrypt.content, 'base64'));
+    
+    const aes = gcm(new Uint8Array(cryptoKey), iv);
+    const decrypted = aes.decrypt(content);
+    
+    return new TextDecoder().decode(decrypted);
+};
 
 export const uploadChatMessageMedia = async (
     uri: string,
@@ -7,7 +32,8 @@ export const uploadChatMessageMedia = async (
     userId: string,
     originalFileName?: string,
     mimeType?: string,
-    onProgress?: (percent: number) => void  // ✅ NEW: real upload progress callback
+    onProgress?: (percent: number) => void,
+    chatKey?: Uint8Array
 ) => {
     try {
         let fileName = `${Date.now()}`;
@@ -28,28 +54,34 @@ export const uploadChatMessageMedia = async (
             contentType = mimeType || 'application/octet-stream';
         }
 
-        const filePath = `${userId}/${fileName}`;
-
         // Get file info for size
         const fileInfo = await FileSystem.getInfoAsync(uri);
         const fileSize = fileInfo.exists ? (fileInfo as any).size : 0;
 
-        // ✅ Get Supabase upload URL + auth token for direct upload with progress
-        const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
-        const accessToken = session?.access_token || '';
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-        const uploadUrl = `${supabaseUrl}/storage/v1/object/chat-files/${filePath}`;
+        let fileToUpload = uri;
 
-        // ✅ FileSystem.uploadAsync supports real onUploadProgress callbacks
-        const uploadResult = await FileSystem.uploadAsync(uploadUrl, uri, {
+        if (chatKey) {
+            // Encrypt the file before uploading
+            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+            const encryptedText = await encryptFileBase64(base64, chatKey);
+            
+            const tempUri = `${FileSystem.cacheDirectory}enc_${Date.now()}.txt`;
+            await FileSystem.writeAsStringAsync(tempUri, encryptedText, { encoding: FileSystem.EncodingType.UTF8 });
+            
+            fileToUpload = tempUri;
+            fileName += '.e2ee.txt';
+            contentType = 'text/plain';
+        }
+
+        const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/auto/upload`;
+
+        const uploadResult = await FileSystem.uploadAsync(uploadUrl, fileToUpload, {
             httpMethod: 'POST',
             uploadType: FileSystem.FileSystemUploadType.MULTIPART,
             fieldName: 'file',
             mimeType: contentType,
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'x-upsert': 'false',
-                'cache-control': '3600',
+            parameters: {
+                upload_preset: process.env.VITE_CLOUDINARY_UPLOAD_PRESET || ''
             },
             sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
         });
@@ -58,16 +90,11 @@ export const uploadChatMessageMedia = async (
             throw new Error(`Upload failed with status: ${uploadResult.status}`);
         }
 
-        // ✅ Simulate progress steps since MULTIPART gives no granular events
-        //    For real progress, we use a chunked approach below via XHR
         onProgress?.(100);
-
-        const { data: { publicUrl } } = (await import('@/lib/supabase')).supabase.storage
-            .from('chat-files')
-            .getPublicUrl(filePath);
+        const cloudData = JSON.parse(uploadResult.body);
 
         return {
-            url: publicUrl,
+            url: cloudData.secure_url,
             name: originalFileName || fileName,
             type: contentType,
             size: fileSize
@@ -78,25 +105,23 @@ export const uploadChatMessageMedia = async (
     }
 };
 
-// ✅ XHR-based upload that gives real byte-level progress events
-export const uploadWithProgress = (
+// XHR-based upload that gives real byte-level progress events for Cloudinary
+export const uploadWithProgressToCloudinary = (
     uri: string,
     uploadUrl: string,
-    accessToken: string,
-    contentType: string,
-    onProgress: (percent: number) => void
-): Promise<void> => {
-    return new Promise(async (resolve, reject) => {
+    uploadPreset: string,
+    onProgress: (percent: number) => void,
+    fileName: string,
+    mimeType: string
+): Promise<any> => {
+    return new Promise((resolve, reject) => {
         try {
-            const response = await fetch(uri);
-            const blob = await response.blob();
+            const formData = new FormData();
+            formData.append('file', { uri, type: mimeType || 'application/octet-stream', name: fileName } as any);
+            formData.append('upload_preset', uploadPreset);
 
             const xhr = new XMLHttpRequest();
             xhr.open('POST', uploadUrl);
-            xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
-            xhr.setRequestHeader('x-upsert', 'false');
-            xhr.setRequestHeader('cache-control', '3600');
-            xhr.setRequestHeader('Content-Type', contentType);
 
             xhr.upload.onprogress = (event) => {
                 if (event.lengthComputable) {
@@ -108,14 +133,14 @@ export const uploadWithProgress = (
             xhr.onload = () => {
                 if (xhr.status === 200 || xhr.status === 201) {
                     onProgress(100);
-                    resolve();
+                    resolve(JSON.parse(xhr.responseText));
                 } else {
-                    reject(new Error(`XHR upload failed: ${xhr.status}`));
+                    reject(new Error(`XHR upload failed: ${xhr.responseText}`));
                 }
             };
 
             xhr.onerror = () => reject(new Error('XHR upload network error'));
-            xhr.send(blob);
+            xhr.send(formData);
         } catch (e) {
             reject(e);
         }
@@ -129,6 +154,7 @@ export const uploadChatMessageMediaWithProgress = async (
     onProgress: (percent: number) => void,
     originalFileName?: string,
     mimeType?: string,
+    chatKey?: Uint8Array
 ) => {
     let fileName = `${Date.now()}`;
     let contentType = '';
@@ -142,25 +168,38 @@ export const uploadChatMessageMediaWithProgress = async (
         contentType = mimeType || 'application/octet-stream';
     }
 
-    const filePath = `${userId}/${fileName}`;
-    const { supabase } = await import('@/lib/supabase');
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token || '';
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-    const uploadUrl = `${supabaseUrl}/storage/v1/object/chat-files/${filePath}`;
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/auto/upload`;
+    const uploadPreset = process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '';
 
     const fileInfo = await FileSystem.getInfoAsync(uri);
     const fileSize = fileInfo.exists ? (fileInfo as any).size : 0;
 
-    // ✅ XHR gives real byte-level progress
-    await uploadWithProgress(uri, uploadUrl, accessToken, contentType, onProgress);
+    let fileToUpload = uri;
 
-    const { data: { publicUrl } } = supabase.storage
-        .from('chat-files')
-        .getPublicUrl(filePath);
+    if (chatKey) {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const encryptedText = await encryptFileBase64(base64, chatKey);
+        
+        const tempUri = `${FileSystem.cacheDirectory}enc_${Date.now()}.txt`;
+        await FileSystem.writeAsStringAsync(tempUri, encryptedText, { encoding: FileSystem.EncodingType.UTF8 });
+        
+        fileToUpload = tempUri;
+        fileName += '.e2ee.txt';
+        contentType = 'text/plain';
+    }
+
+    // XHR gives real byte-level progress
+    const cloudData = await uploadWithProgressToCloudinary(
+        fileToUpload, 
+        uploadUrl, 
+        uploadPreset, 
+        onProgress, 
+        originalFileName || fileName, 
+        contentType
+    );
 
     return {
-        url: publicUrl,
+        url: cloudData.secure_url,
         name: originalFileName || fileName,
         type: contentType,
         size: fileSize
@@ -169,30 +208,26 @@ export const uploadChatMessageMediaWithProgress = async (
 
 export const uploadGroupAvatar = async (uri: string) => {
     try {
-        const fileName = `group-avatars/${Date.now()}.jpg`;
+        const fileName = `group_avatar_${Date.now()}.jpg`;
 
-        // Use fetch + arrayBuffer instead of base64 + Buffer to avoid OOM on large files
-        const response = await fetch(uri);
-        const arrayBuffer = await response.arrayBuffer();
+        const formData = new FormData();
+        formData.append('file', { uri, type: 'image/jpeg', name: fileName } as any);
+        formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
 
-        const { data, error } = await supabase.storage
-            .from('chat-files')
-            .upload(fileName, arrayBuffer, {
-                contentType: 'image/jpeg',
-                cacheControl: '3600',
-                upsert: false
-            });
+        const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`;
+        
+        const response = await fetch(uploadUrl, {
+            method: 'POST',
+            body: formData
+        });
 
-        if (error) {
-            if (__DEV__) console.error('Group Avatar Upload error details:', error);
-            throw error;
+        const cloudData = await response.json();
+
+        if (cloudData.error) {
+            throw new Error(cloudData.error.message);
         }
 
-        const { data: { publicUrl } } = supabase.storage
-            .from('chat-files')
-            .getPublicUrl(fileName);
-
-        return { url: publicUrl };
+        return { url: cloudData.secure_url };
     } catch (error) {
         if (__DEV__) console.error('Error in uploadGroupAvatar:', error);
         throw error;

@@ -21,7 +21,8 @@ export const useSentRequests = () => {
                     {
                         event: '*',
                         schema: 'public',
-                        table: 'friend_requests'
+                        table: 'friend_requests',
+                        filter: `sender_id=eq.${user.id}`
                     },
                     () => {
                         loadSentRequests();

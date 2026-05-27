@@ -68,22 +68,26 @@ export default function EditProfileScreen() {
             if (!userId) throw new Error("User not found");
 
             const fileExt = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-            const fileName = `${userId}-${Date.now()}.${fileExt}`;
-            const filePath = `${fileName}`;
+            const fileName = `avatar_${userId}.${fileExt}`;
 
-            // Convert base64 to ArrayBuffer for Supabase upload
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, Buffer.from(asset.base64!, 'base64'), {
-                    contentType: asset.mimeType || 'image/jpeg',
-                    upsert: true
-                });
+            const formData = new FormData();
+            formData.append('file', { uri: asset.uri, type: asset.mimeType || 'image/jpeg', name: fileName } as any);
+            formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+            formData.append('public_id', `avatar_${userId}`);
 
-            if (uploadError) throw uploadError;
+            const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            const cloudData = await cloudRes.json();
+            
+            if (cloudData.error) {
+                throw new Error(cloudData.error.message || 'Cloudinary upload failed');
+            }
 
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
+            // Add timestamp to break cache since we are overwriting the same public_id
+            const publicUrl = `${cloudData.secure_url}?t=${Date.now()}`;
 
             setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
 

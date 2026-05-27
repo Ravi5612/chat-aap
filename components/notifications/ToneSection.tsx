@@ -13,7 +13,7 @@ interface ToneSectionProps {
     onPlaySound: (id: string, url: string) => void;
     onStopSound: () => void;
     onSaveTone: (type: 'message' | 'call', url: string) => void;
-    onUploadTone: (type: 'message' | 'call') => void;
+    onUploadTone: (type: 'message' | 'call', oldUrl?: string) => void;
     marginTop?: number;
 }
 
@@ -63,10 +63,9 @@ export default function ToneSection({
                     onSave={onSaveTone}
                 />
             )}
-            
             <TouchableOpacity 
                 style={styles.customUploadButton}
-                onPress={() => onUploadTone(type)}
+                onPress={() => onUploadTone(type, currentToneUrl)}
             >
                 <Ionicons name="cloud-upload-outline" size={20} color="#F68537" />
                 <Text style={styles.customUploadText}>Choose from Device</Text>

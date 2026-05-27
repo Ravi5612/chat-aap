@@ -45,10 +45,10 @@ export const useFriends = () => {
 
         const channel = supabase
             .channel(uniqueChannelId)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => debouncedLoad(currentUser.id))
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => debouncedLoad(currentUser.id))
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'statuses' }, () => debouncedLoad(currentUser.id))
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'status_views' }, () => debouncedLoad(currentUser.id))
+            // Listen when currentUser sends a request or blocks
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `user_id=eq.${currentUser.id}` }, () => debouncedLoad(currentUser.id))
+            // Listen when someone sends a request to currentUser or accepts their request
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `friend_id=eq.${currentUser.id}` }, () => debouncedLoad(currentUser.id))
             .subscribe();
 
         return () => {

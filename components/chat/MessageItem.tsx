@@ -85,7 +85,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         textContent = '';
     }
 
-    const { localImageUrl, localVoiceUrl, imageLoading } = useMessageMediaCache(message, imageUrl, voiceUri);
+    const { localImageUrl, localVoiceUrl, localDocumentUrl, imageLoading } = useMessageMediaCache(message, imageUrl, voiceUri, documentUrl);
     const { decryptedStatusContent, decryptedStatusMedia } = useStatusContext(message.status_context);
 
     const formatTime = (ts: string) => {
@@ -140,7 +140,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                             isVoiceMessage={isVoiceMessage} voiceUri={voiceUri} localVoiceUrl={localVoiceUrl} textContent={textContent}
                             isContactMessage={isContactMessage} contactName={contactName} contactPhone={contactPhone}
                             isLocationMessage={isLocationMessage} locationCoords={locationCoords} locationAddress={locationAddress}
-                            isDocumentMessage={isDocumentMessage} documentName={documentName} documentSize={documentSize} documentUrl={documentUrl}
+                            isDocumentMessage={isDocumentMessage} documentName={documentName} documentSize={documentSize} documentUrl={localDocumentUrl || documentUrl}
                             hasImage={hasImage}
                         />
                     </TouchableOpacity>

@@ -22,19 +22,7 @@ const flushMarkAsRead = async (get: StoreGet) => {
     try {
         const now = new Date().toISOString();
         await supabase.from('messages').update({ is_read: true, status: 'read', read_at: now }).in('id', ids);
-        const { activeChannel } = get();
-        if (activeChannel) {
-            activeChannel.send({
-                type: 'broadcast',
-                event: 'status_update',
-                payload: {
-                    status: 'read',
-                    read_at: now,
-                    sender_id: meta.currentUser?.id,
-                    group_id: meta.isGroup ? meta.friendId : null,
-                }
-            });
-        }
+        // broadcast removed to save data
     } catch (err) {
         console.error('flushMarkAsRead error:', err);
     }
@@ -86,13 +74,7 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
                 cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
             }));
 
-            if (activeChannel) {
-                activeChannel.send({
-                    type: 'broadcast',
-                    event: 'message_edit',
-                    payload: { message_id: messageId, message: encryptedText }
-                });
-            }
+            // broadcast removed to save data
         } catch (err) {
             Alert.alert('Error', 'Failed to update message');
         }
@@ -121,13 +103,7 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
                 set({ messages: newMessages });
 
                 // 3. Broadcast Edit
-                if (activeChannel) {
-                    activeChannel.send({
-                        type: 'broadcast',
-                        event: 'message_edit',
-                        payload: { message_id: messageId, message: encryptedDeletedText }
-                    });
-                }
+                // broadcast removed to save data
             } else {
                 // Delete for Me
                 if (db) {

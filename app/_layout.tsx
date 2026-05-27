@@ -25,6 +25,8 @@ import { useNearbyNotifications } from '@/hooks/useNearbyNotifications';
 import * as SecureStore from 'expo-secure-store';
 import { ErrorBoundaryProps } from 'expo-router';
 import { TouchableOpacity, Text } from 'react-native';
+import { initializeX25519Keys } from '@/utils/chatCrypto';
+import { TouchableOpacity, Text } from 'react-native';
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
@@ -112,6 +114,10 @@ export default function RootLayout() {
              await useAuthStore.getState().syncProfile();
              await useFriendsStore.getState().fetchBlockedUsers(liveSession.user.id);
           }
+          try {
+             const publicKeyBase64 = await initializeX25519Keys();
+             await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', liveSession.user.id);
+          } catch(e) { console.warn('E2EE Init Error:', e); }
         }
       } catch (error) {
         console.error('Error getting session:', error);

@@ -21,7 +21,8 @@ export const useReceivedRequests = () => {
                     {
                         event: '*',
                         schema: 'public',
-                        table: 'friend_requests'
+                        table: 'friend_requests',
+                        filter: `receiver_id=eq.${user.id}`
                     },
                     () => {
                         loadReceivedRequests();
