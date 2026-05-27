@@ -39,7 +39,9 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.USE_FULL_SCREEN_INTENT"
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -107,14 +109,8 @@
         "origin": false
       },
       "eas": {
-        "projectId": "59997737-3f33-4aaa-9c28-577a452f06d6"
+        "projectId": "50cc90b0-096a-4138-a7ff-b29b9869b400"
       }
-    },
-    "updates": {
-      "url": "https://u.expo.dev/59997737-3f33-4aaa-9c28-577a452f06d6",
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
     }
   }
 }

@@ -76,8 +76,6 @@ export default function ChatScreen() {
         setViewerImage(uri);
         setViewerVisible(true);
     }, []);
-    const [ledgerVisible, setLedgerVisible] = useState(false);
-    const [infoVisible, setInfoVisible] = useState(false);
 
     const { wallpaper, setWallpaper, draft, handleDraftChange } = useChatSync(roomId, safeFriendId, currentUser, isGroup === 'true', messages);
     const { handleClearChat, handleBlockToggle, handleUnfriend, handleSetWallpaper } = useChatActions(currentUser, safeFriendId, roomId, friendName as string, isGroup === 'true', isBlocked, setWallpaper);

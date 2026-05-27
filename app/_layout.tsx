@@ -26,7 +26,6 @@ import * as SecureStore from 'expo-secure-store';
 import { ErrorBoundaryProps } from 'expo-router';
 import { TouchableOpacity, Text } from 'react-native';
 import { initializeX25519Keys } from '@/utils/chatCrypto';
-import { TouchableOpacity, Text } from 'react-native';
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
