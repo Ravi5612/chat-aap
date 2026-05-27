@@ -105,6 +105,10 @@ function HomeScreen() {
     const pendingSentCount = useMemo(() => sentRequests.filter(r => r.status === 'pending').length, [sentRequests]);
     const pendingReceivedCount = useMemo(() => receivedRequests.filter(r => r.status === 'pending').length, [receivedRequests]);
 
+    const handleImageClick = useCallback((friend: any) => {
+        setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`);
+    }, []);
+
     const renderItem = useCallback(({ item }: { item: any }) => (
         <FriendListItem
             friend={item}
@@ -112,9 +116,9 @@ function HomeScreen() {
             onLongPress={handleLongPress}
             isOnline={item.isOnline}
             onViewUserStatus={handleViewUserStatus}
-            onImageClick={(friend) => setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`)}
+            onImageClick={handleImageClick}
         />
-    ), [handleSelectFriend, handleLongPress, handleViewUserStatus]);
+    ), [handleSelectFriend, handleLongPress, handleViewUserStatus, handleImageClick]);
 
     if (loading && combinedItems.length === 0) {
         return <HomeSkeleton />;

@@ -66,6 +66,19 @@ export default function ChatScreen() {
     const [ledgerVisible, setLedgerVisible] = useState(false);
     const [infoVisible, setInfoVisible] = useState(false);
 
+    const handleMessageLongPress = useCallback((msg: any, y: number) => {
+        setSelectedMessage(msg);
+        setAnchorY(y);
+        setContextMenuVisible(true);
+    }, []);
+
+    const handleImagePress = useCallback((uri: string) => {
+        setViewerImage(uri);
+        setViewerVisible(true);
+    }, []);
+    const [ledgerVisible, setLedgerVisible] = useState(false);
+    const [infoVisible, setInfoVisible] = useState(false);
+
     const { wallpaper, setWallpaper, draft, handleDraftChange } = useChatSync(roomId, safeFriendId, currentUser, isGroup === 'true', messages);
     const { handleClearChat, handleBlockToggle, handleUnfriend, handleSetWallpaper } = useChatActions(currentUser, safeFriendId, roomId, friendName as string, isGroup === 'true', isBlocked, setWallpaper);
 
@@ -159,8 +172,8 @@ export default function ChatScreen() {
                     currentUser={currentUser}
                     onReply={setReplyingTo}
                     friendName={friendName as string}
-                    onLongPress={(msg, y) => { setSelectedMessage(msg); setAnchorY(y); setContextMenuVisible(true); }}
-                    onImagePress={(uri) => { setViewerImage(uri); setViewerVisible(true); }}
+                    onLongPress={handleMessageLongPress}
+                    onImagePress={handleImagePress}
                     flyingEmoji={flyingEmoji}
                     onLoadMore={handleLoadMore}
                     loadingMore={loadingMore}
