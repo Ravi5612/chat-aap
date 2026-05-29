@@ -22,6 +22,7 @@ interface ChatModalsProps {
     viewerVisible: boolean;
     setViewerVisible: (v: boolean) => void;
     viewerImage: string | null;
+    viewerIsVideo?: boolean;
     
     ledgerVisible: boolean;
     setLedgerVisible: (v: boolean) => void;
@@ -30,14 +31,15 @@ interface ChatModalsProps {
 
     infoVisible: boolean;
     setInfoVisible: (v: boolean) => void;
+    allowDownload?: boolean;
 }
 
 export default function ChatModals({
     contextMenuVisible, setContextMenuVisible, selectedMessage, anchorY, currentUser, handleReact, handleMessageAction,
     forwardModalVisible, setForwardModalVisible, handleForwardSubmit,
-    viewerVisible, setViewerVisible, viewerImage,
+    viewerVisible, setViewerVisible, viewerImage, viewerIsVideo,
     ledgerVisible, setLedgerVisible, safeFriendId, friendName,
-    infoVisible, setInfoVisible
+    infoVisible, setInfoVisible, allowDownload
 }: ChatModalsProps) {
     return (
         <>
@@ -61,6 +63,8 @@ export default function ChatModals({
                 visible={viewerVisible}
                 onClose={() => setViewerVisible(false)}
                 imageUri={viewerImage || ''}
+                isVideo={viewerIsVideo}
+                allowDownload={allowDownload}
             />
 
             <CallScreen />

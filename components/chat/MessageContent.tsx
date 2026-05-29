@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import MessageStatus from './MessageStatus';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
@@ -12,7 +13,7 @@ interface MessageContentProps {
     isCurrentUser: boolean;
     formatTime: (ts: string) => string;
     handleLongPress: (e: any) => void;
-    onImagePress?: (uri: string) => void;
+    onImagePress?: (uri: string, isVideo?: boolean) => void;
     imageUrl: string | null;
     localImageUrl: string | null;
     imageLoading: boolean;
@@ -32,6 +33,8 @@ interface MessageContentProps {
     documentSize: string;
     documentUrl: string | null;
     hasImage: boolean;
+    isVideoMessage?: boolean;
+    videoUrl?: string | null;
 }
 
 export default function MessageContent({
@@ -41,9 +44,11 @@ export default function MessageContent({
     isContactMessage, contactName, contactPhone,
     isLocationMessage, locationCoords, locationAddress,
     isDocumentMessage, documentName, documentSize, documentUrl,
-    hasImage
+    hasImage, isVideoMessage, videoUrl
 }: MessageContentProps) {
     const router = useRouter();
+    const [videoPlaying, setVideoPlaying] = useState(false);
+    const videoRef = useRef<Video>(null);
     const isCallLog = message.message_type === 'call' || !!message.call_details;
     const callDetails = message.call_details || {};
     
@@ -109,10 +114,10 @@ export default function MessageContent({
                                 <ActivityIndicator size="small" color="#F68537" />
                             </View>
                         )}
-                        {uploadProgress !== undefined && uploadProgress <= 100 && (
+                        {uploadProgress !== undefined && uploadProgress < 100 && (
                             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
-                                <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 5, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' }}>
-                                    <View style={{ position: 'absolute', width: 72, height: 72, borderRadius: 36, borderWidth: 5, borderColor: 'transparent', borderTopColor: '#F68537', borderRightColor: uploadProgress > 25 ? '#F68537' : 'transparent', borderBottomColor: uploadProgress > 50 ? '#F68537' : 'transparent', borderLeftColor: uploadProgress > 75 ? '#F68537' : 'transparent', transform: [{ rotate: `${(uploadProgress / 100) * 360}deg` }] }} />
+                                <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                    <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${uploadProgress}%`, backgroundColor: '#F68537' }} />
                                     <Text style={{ color: 'white', fontSize: 14, fontWeight: '900', letterSpacing: -0.5 }}>{uploadProgress}%</Text>
                                 </View>
                             </View>
@@ -124,6 +129,38 @@ export default function MessageContent({
             {/* Voice Message Content */}
             {isVoiceMessage && (localVoiceUrl || voiceUri) && (
                 <VoiceMessagePlayer uri={(localVoiceUrl || voiceUri) as string} isCurrentUser={isCurrentUser} />
+            )}
+
+            {/* Video Message Content */}
+            {isVideoMessage && videoUrl && (
+                <TouchableOpacity onPress={() => onImagePress?.(videoUrl as string, true)} onLongPress={handleLongPress} delayLongPress={200}>
+                    <View style={{ width: 256, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', position: 'relative' }}>
+                        <Video
+                            ref={videoRef}
+                            source={{ uri: videoUrl }}
+                            style={{ width: 256, height: 200 }}
+                            useNativeControls={false}
+                            resizeMode={ResizeMode.COVER}
+                            shouldPlay={false}
+                        />
+                        {/* Play Icon Overlay */}
+                        {uploadProgress === undefined && (
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                                <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Ionicons name="play" size={28} color="white" style={{ marginLeft: 4 }} />
+                                </View>
+                            </View>
+                        )}
+                        {uploadProgress !== undefined && uploadProgress < 100 && (
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
+                                <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                    <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${uploadProgress}%`, backgroundColor: '#F68537' }} />
+                                    <Text style={{ color: 'white', fontSize: 14, fontWeight: '900' }}>{uploadProgress}%</Text>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                </TouchableOpacity>
             )}
 
             {/* Call Log Content */}

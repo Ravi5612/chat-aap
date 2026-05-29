@@ -5,9 +5,8 @@ import { Buffer } from 'buffer';
 
 export const encryptFileBase64 = async (base64: string, cryptoKey: Uint8Array): Promise<string> => {
     const iv = Crypto.getRandomBytes(12);
-    const encoder = new TextEncoder();
     const aes = gcm(new Uint8Array(cryptoKey), new Uint8Array(iv));
-    const encrypted = aes.encrypt(encoder.encode(base64));
+    const encrypted = aes.encrypt(new Uint8Array(Buffer.from(base64, 'utf8')));
     
     return JSON.stringify({
         iv: Buffer.from(iv).toString('base64'),
@@ -23,7 +22,7 @@ export const decryptFileBase64 = async (encryptedData: string, cryptoKey: Uint8A
     const aes = gcm(new Uint8Array(cryptoKey), iv);
     const decrypted = aes.decrypt(content);
     
-    return new TextDecoder().decode(decrypted);
+    return Buffer.from(decrypted).toString('utf8');
 };
 
 export const uploadChatMessageMedia = async (
@@ -73,7 +72,7 @@ export const uploadChatMessageMedia = async (
             contentType = 'text/plain';
         }
 
-        const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/auto/upload`;
+        const uploadUrl = `https://api.cloudinary.com/v1_1/do6lyfmn4/auto/upload`;
 
         const uploadResult = await FileSystem.uploadAsync(uploadUrl, fileToUpload, {
             httpMethod: 'POST',
@@ -81,7 +80,7 @@ export const uploadChatMessageMedia = async (
             fieldName: 'file',
             mimeType: contentType,
             parameters: {
-                upload_preset: process.env.VITE_CLOUDINARY_UPLOAD_PRESET || ''
+                upload_preset: 'lrkgj8fj'
             },
             sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
         });
@@ -99,8 +98,11 @@ export const uploadChatMessageMedia = async (
             type: contentType,
             size: fileSize
         };
-    } catch (error) {
+    } catch (error: any) {
         if (__DEV__) console.error('Error in uploadChatMessageMedia:', error);
+        import('react-native').then(({ Alert }) => {
+            Alert.alert('Upload Media Error', error?.message || JSON.stringify(error));
+        });
         throw error;
     }
 };
@@ -154,7 +156,7 @@ export const uploadChatMessageMediaWithProgress = async (
     onProgress: (percent: number) => void,
     originalFileName?: string,
     mimeType?: string,
-    chatKey?: Uint8Array
+    encryptWithNewKey: boolean = false
 ) => {
     let fileName = `${Date.now()}`;
     let contentType = '';
@@ -168,24 +170,32 @@ export const uploadChatMessageMediaWithProgress = async (
         contentType = mimeType || 'application/octet-stream';
     }
 
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/auto/upload`;
-    const uploadPreset = process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '';
+    let uploadUrl = `https://api.cloudinary.com/v1_1/do6lyfmn4/auto/upload`;
+    const uploadPreset = 'lrkgj8fj';
 
     const fileInfo = await FileSystem.getInfoAsync(uri);
     const fileSize = fileInfo.exists ? (fileInfo as any).size : 0;
 
     let fileToUpload = uri;
+    let mediaKey: Uint8Array | null = null;
+    const originalContentType = contentType;
 
-    if (chatKey) {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        const encryptedText = await encryptFileBase64(base64, chatKey);
+    if (encryptWithNewKey) {
+        mediaKey = Crypto.getRandomBytes(32);
         
-        const tempUri = `${FileSystem.cacheDirectory}enc_${Date.now()}.txt`;
+        // 🚨 YIELD THREAD 🚨: Allow React Native to render the UI (pending message) before heavy synchronous crypto
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const encryptedText = await encryptFileBase64(base64, mediaKey);
+        
+        const tempUri = `${FileSystem.cacheDirectory}enc_${Crypto.randomUUID()}.bin`;
         await FileSystem.writeAsStringAsync(tempUri, encryptedText, { encoding: FileSystem.EncodingType.UTF8 });
         
         fileToUpload = tempUri;
-        fileName += '.e2ee.txt';
+        fileName = `${Crypto.randomUUID()}.txt`; // .txt so Cloudinary accepts it as raw text
         contentType = 'text/plain';
+        uploadUrl = `https://api.cloudinary.com/v1_1/do6lyfmn4/raw/upload`; // use raw upload for encrypted text
     }
 
     // XHR gives real byte-level progress
@@ -201,8 +211,9 @@ export const uploadChatMessageMediaWithProgress = async (
     return {
         url: cloudData.secure_url,
         name: originalFileName || fileName,
-        type: contentType,
-        size: fileSize
+        type: originalContentType,
+        size: fileSize,
+        mediaKey: mediaKey ? Buffer.from(mediaKey).toString('base64') : null
     };
 };
 
@@ -212,9 +223,9 @@ export const uploadGroupAvatar = async (uri: string) => {
 
         const formData = new FormData();
         formData.append('file', { uri, type: 'image/jpeg', name: fileName } as any);
-        formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+        formData.append('upload_preset', 'lrkgj8fj');
 
-        const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`;
+        const uploadUrl = `https://api.cloudinary.com/v1_1/do6lyfmn4/image/upload`;
         
         const response = await fetch(uploadUrl, {
             method: 'POST',

@@ -20,7 +20,7 @@ interface MessageItemProps {
     onLongPress?: (message: any, y: number) => void;
     onReply?: (message: any) => void;
     onReplyClick?: (replyMessage: any) => void;
-    onImagePress?: (uri: string) => void;
+    onImagePress?: (uri: string, isVideo?: boolean) => void;
     friendName?: string;
     flyingEmoji?: any;
 }
@@ -44,8 +44,11 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
     // Parse Message
     const isVoiceMessage = message.file_type?.startsWith('audio/') || message.message?.startsWith('[Voice Message]');
     const voiceUri = message.file_url || (message.message?.startsWith('[Voice Message]') ? message.message.split(' ')[2] : null);
-    const hasImage = message.file_type?.startsWith('image/') || message.message?.includes('[Image]') || message.file_url;
-    let imageUrl = (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
+    const isVideoMessage = message.file_type === 'video/mp4' || message.file_type?.startsWith('video/') || message.message?.startsWith('[Video]');
+    let videoUrl = message.file_type?.startsWith('video/') ? message.file_url : null;
+    if (!videoUrl && message.message?.startsWith('[Video]')) videoUrl = message.message.split(' ')[1];
+    const hasImage = !isVideoMessage && (message.file_type?.startsWith('image/') || message.message?.includes('[Image]') || message.file_url);
+    let imageUrl = !isVideoMessage && (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
     let textContent = message.message;
 
     if (!imageUrl && textContent?.startsWith('[Image]')) {
@@ -53,6 +56,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         imageUrl = parts[1];
         textContent = parts.slice(2).join(' ');
     }
+    if (isVideoMessage && textContent?.startsWith('[Video]')) textContent = '';
 
     if (isVoiceMessage && textContent?.startsWith('[Voice Message]')) textContent = '';
 
@@ -74,7 +78,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         textContent = '';
     }
 
-    const isDocumentMessage = textContent?.startsWith('[Document]') || (message.file_url && message.file_type && !message.file_type.startsWith('image/') && !message.file_type.startsWith('audio/'));
+    const isDocumentMessage = textContent?.startsWith('[Document]') || (message.file_url && message.file_type && !message.file_type.startsWith('image/') && !message.file_type.startsWith('audio/') && !message.file_type.startsWith('video/'));
     let documentName = message.file_name || 'Document';
     let documentSize = message.file_size ? `${(message.file_size / 1024 / 1024).toFixed(2)} MB` : '';
     let documentUrl = message.file_url;
@@ -86,6 +90,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
     }
 
     const { localImageUrl, localVoiceUrl, localDocumentUrl, imageLoading } = useMessageMediaCache(message, imageUrl, voiceUri, documentUrl);
+    const finalVideoUrl = videoUrl || message.file_url || null;
     const { decryptedStatusContent, decryptedStatusMedia } = useStatusContext(message.status_context);
 
     const formatTime = (ts: string) => {
@@ -105,6 +110,63 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                     <Text style={{ fontSize: 12, fontWeight: '700', color: isScreenshot ? '#DC2626' : (isCurrentUser ? '#C2410C' : '#374151'), fontStyle: 'italic' }}>
                         {isScreenshot ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend') : (isCurrentUser ? 'You deleted this message' : 'This message was deleted')}
                     </Text>
+                </View>
+            </View>
+        );
+    }
+
+    if (message.message_type === 'call_log' || message.file_type === 'call_log') {
+        let callData: any = null;
+        try {
+            callData = JSON.parse(message.message);
+        } catch (e) {
+            callData = { type: 'call_log', status: 'unknown' };
+        }
+
+        const isMissed = callData.status === 'missed';
+        const isCancelled = callData.status === 'cancelled';
+        const isCompleted = callData.status === 'completed';
+        const isVideo = callData.call_type === 'video';
+        
+        let iconName: any = isVideo ? 'videocam' : 'call';
+        let iconColor = '#6B7280'; // Default Grey
+        let textColor = '#374151'; // Default Grey
+        let bgStyle = { backgroundColor: '#F9FAFB', borderColor: '#F3F4F6' };
+        let callText = isVideo ? 'Video call' : 'Voice call';
+
+        if (isMissed) {
+            iconColor = '#EF4444'; // Red
+            textColor = '#DC2626'; // Dark Red
+            bgStyle = { backgroundColor: '#FEF2F2', borderColor: '#FECACA' };
+            callText = isCurrentUser ? `Unanswered ${isVideo ? 'video ' : 'voice '}call` : `Missed ${isVideo ? 'video ' : 'voice '}call`;
+        } else if (isCancelled) {
+            callText = isCurrentUser ? `You cancelled the call` : `${friendName || 'Friend'} cancelled the call`;
+        } else if (callData.status === 'rejected') {
+            callText = isCurrentUser ? `${friendName || 'Friend'} declined the call` : `You declined the call`;
+        } else if (isCompleted) {
+            iconColor = '#10B981'; // Green
+            textColor = '#059669'; // Dark Green
+            bgStyle = { backgroundColor: '#ECFDF5', borderColor: '#D1FAE5' };
+            
+            let durStr = '';
+            if (callData.duration) {
+                const m = Math.floor(callData.duration / 60);
+                const s = callData.duration % 60;
+                durStr = `${m}:${s.toString().padStart(2, '0')}`;
+            }
+            callText = `${isVideo ? 'Video' : 'Voice'} call at ${formatTime(message.created_at)}${durStr ? ` (${durStr})` : ''}`;
+        }
+
+        return (
+            <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 8, paddingHorizontal: 16, width: '100%' }}>
+                <View style={{ ...bgStyle, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 1, elevation: 1 }}>
+                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+                        <Ionicons name={iconName} size={18} color={iconColor} />
+                    </View>
+                    <View>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: textColor }}>{callText}</Text>
+                        {(isMissed || isCancelled || callData.status === 'rejected') && <Text style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{formatTime(message.created_at)}</Text>}
+                    </View>
                 </View>
             </View>
         );
@@ -142,6 +204,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                             isLocationMessage={isLocationMessage} locationCoords={locationCoords} locationAddress={locationAddress}
                             isDocumentMessage={isDocumentMessage} documentName={documentName} documentSize={documentSize} documentUrl={localDocumentUrl || documentUrl}
                             hasImage={hasImage}
+                            isVideoMessage={isVideoMessage} videoUrl={finalVideoUrl}
                         />
                     </TouchableOpacity>
 

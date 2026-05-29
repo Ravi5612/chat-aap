@@ -36,25 +36,32 @@ export function EditingBanner({ editingMessage, onCancelEdit }: EditingBannerPro
 interface SelectedImagePreviewProps {
     imageUri: string;
     onRemove: () => void;
+    isVideo?: boolean;
 }
 
-export function SelectedImagePreview({ imageUri, onRemove }: SelectedImagePreviewProps) {
-    const { Image } = require('react-native');
+export function SelectedImagePreview({ imageUri, onRemove, isVideo }: SelectedImagePreviewProps) {
+    const { Image, View: RNView, Text: RNText } = require('react-native');
     return (
-        <View style={{
+        <RNView style={{
             paddingHorizontal: 16, paddingVertical: 8,
             backgroundColor: '#F9FAFB', borderBottomWidth: 1,
             borderBottomColor: '#F3F4F6', flexDirection: 'row', alignItems: 'center'
         }}>
-            <Image source={{ uri: imageUri }} style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16 }} />
+            {isVideo ? (
+                <RNView style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16, backgroundColor: '#1F2937', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="play-circle" size={32} color="white" />
+                </RNView>
+            ) : (
+                <Image source={{ uri: imageUri }} style={{ width: 64, height: 64, borderRadius: 8, marginRight: 16 }} />
+            )}
             <TouchableOpacity
                 onPress={onRemove}
                 style={{ position: 'absolute', top: 4, left: 64, backgroundColor: '#EF4444', borderRadius: 9999 }}
             >
                 <Ionicons name="close" size={16} color="white" />
             </TouchableOpacity>
-            <Text style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>Image selected</Text>
-        </View>
+            <RNText style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>{isVideo ? 'Video selected' : 'Image selected'}</RNText>
+        </RNView>
     );
 }
 

@@ -21,7 +21,7 @@ export function useStatusContext(statusContext: any) {
                         const { supabase } = await import('@/lib/supabase');
                         const { data: profile } = await supabase.from('profiles').select('public_key').eq('id', statusContext.user_id).single();
                         if (profile?.public_key) {
-                            statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key);
+                            statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key, currentUser.id);
                         }
                     }
                 }

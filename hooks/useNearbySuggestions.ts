@@ -46,32 +46,39 @@ export const useNearbySuggestions = () => {
             const boxRange = 0.012;
 
             // 1. Parallelly fetch relationships to exclude them
-            const [friendsRes, sentRequestsRes, receivedRequestsRes] = await Promise.all([
+            const [friendsRes, requestsRes] = await Promise.all([
                 supabase
                     .from('friendships')
                     .select('user_id, friend_id')
                     .or(`user_id.eq.${currentUserId},friend_id.eq.${currentUserId}`),
                 supabase
                     .from('friend_requests')
-                    .select('receiver_id')
-                    .eq('sender_id', currentUserId)
-                    .in('status', ['pending', 'accepted']),
-                supabase
-                    .from('friend_requests')
-                    .select('sender_id')
-                    .eq('receiver_id', currentUserId)
-                    .in('status', ['pending', 'accepted'])
+                    .select('sender_id, receiver_id, status')
+                    .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
             ]);
 
-            const excludeIds = new Set<string>([currentUserId]);
+            const excludeIds = new Set<string>();
+            excludeIds.add(currentUserId);
             
+            // Add friends to exclude list
             friendsRes.data?.forEach(f => {
                 if (f.user_id === currentUserId) excludeIds.add(f.friend_id);
-                else excludeIds.add(f.user_id);
+                if (f.friend_id === currentUserId) excludeIds.add(f.user_id);
             });
-            receivedRequestsRes.data?.forEach(r => excludeIds.add(r.sender_id));
 
-            const sentRequestIds = new Set(sentRequestsRes.data?.map(r => r.receiver_id) || []);
+            // Add pending/accepted requests to exclude list
+            const sentRequestIds = new Set<string>();
+            requestsRes.data?.forEach(r => {
+                if (r.status !== 'rejected') {
+                    if (r.sender_id === currentUserId) {
+                        excludeIds.add(r.receiver_id);
+                        sentRequestIds.add(r.receiver_id);
+                    }
+                    if (r.receiver_id === currentUserId) {
+                        excludeIds.add(r.sender_id);
+                    }
+                }
+            });
 
             // 2. Fetch profiles within rough bounding box that are currently online
             const { data, error } = await supabase

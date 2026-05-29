@@ -47,7 +47,6 @@ export const useFriends = () => {
             .channel(uniqueChannelId)
             // Listen when currentUser sends a request or blocks
             .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `user_id=eq.${currentUser.id}` }, () => debouncedLoad(currentUser.id))
-            // Listen when someone sends a request to currentUser or accepts their request
             .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `friend_id=eq.${currentUser.id}` }, () => debouncedLoad(currentUser.id))
             .subscribe();
 

@@ -60,12 +60,17 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
             const currentUserId = useAuthStore.getState().user?.id;
             const data = await fetchAndFormatFriendsData(userId, existingItems, db, onlineUsers, currentUserId);
             
+            // SMART MERGE: Prevent UI flicker if Supabase temporarily returns empty but we have local data
+            const finalCombinedItems = (data.combinedItems.length === 0 && currentItems.length > 0)
+                ? currentItems
+                : data.combinedItems;
+
             set({
                 friends: data.friends,
                 groups: data.groups,
                 myStatuses: data.myStatuses,
                 statusInfo: data.statusInfo,
-                combinedItems: data.combinedItems,
+                combinedItems: finalCombinedItems,
                 lockedChatIds: data.lockedChatIds,
                 blockedUserIds: data.blockedIds,
                 loading: false

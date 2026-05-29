@@ -7,13 +7,17 @@ import "../global.css";
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEffect, useState, useRef } from 'react';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { View, ActivityIndicator, AppState, AppStateStatus, Image } from 'react-native';
+import { View, ActivityIndicator, AppState, AppStateStatus, Image, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { useAuthStore } from '@/store/useAuthStore';
+import * as NativeSplashScreen from 'expo-splash-screen';
+
+// Prevent native splash screen from auto-hiding
+NativeSplashScreen.preventAutoHideAsync().catch(() => {});
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useDbStore } from '@/store/useDbStore';
 import { SplashScreen } from '@/components/SplashScreen';
@@ -53,7 +57,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 }
 
 export default function RootLayout() {
-  const { session, initializing, setSession, setInitializing, syncOnlineStatus } = useAuthStore();
+  const { session, initializing, setSession, setInitializing, syncOnlineStatus, profile } = useAuthStore();
   
   // Activate Nearby Tracking & Notifications
   useNearbyNotifications();
@@ -79,6 +83,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
+  const rootNavigationState = useRootNavigationState();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -114,9 +119,13 @@ export default function RootLayout() {
              await useFriendsStore.getState().fetchBlockedUsers(liveSession.user.id);
           }
           try {
-             const publicKeyBase64 = await initializeX25519Keys();
+             const publicKeyBase64 = await initializeX25519Keys(liveSession.user.id);
              await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', liveSession.user.id);
-          } catch(e) { console.warn('E2EE Init Error:', e); }
+          } catch(e) { 
+             console.warn('E2EE Init Error:', e); 
+             useAuthStore.getState().signOut();
+             Alert.alert("Security Check", "Please log in again with your password to restore your End-to-End Encryption keys.");
+          }
         }
       } catch (error) {
         console.error('Error getting session:', error);
@@ -157,44 +166,52 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (initializing || !isMounted) return;
+    if (initializing || !isMounted || !rootNavigationState?.key) return;
 
     const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup') || (segments as string[]).includes('forgot-password') || (segments as string[]).includes('reset-password');
     const isRoot = (segments as string[]).length === 0;
 
+    const isSetupProfile = (segments as string[]).includes('setup-profile');
+
     if (session) {
+      const profile = useAuthStore.getState().profile;
+
+      // Profile abhi load nahi hua — wait karo, redirect mat karo
+      if (!profile) return;
+
+      const hasUsername = profile?.username;
+
       if (inAuthGroup || isRoot) {
-        router.replace('/(tabs)');
+        if (hasUsername) {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/setup-profile');
+        }
       }
     } else if (!inAuthGroup) {
       router.replace('/login');
     }
-  }, [session, initializing, segments, isMounted]);
+  }, [session, initializing, segments, isMounted, rootNavigationState?.key, profile]);
 
 
+
+
+  useEffect(() => {
+    if (!initializing) {
+      setTimeout(() => {
+        NativeSplashScreen.hideAsync().catch(() => {});
+      }, 100);
+    }
+  }, [initializing]);
 
   if (initializing) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#FFF5E6', padding: 16, paddingTop: 60 }}>
-        {/* Header Skeleton */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#E0D1BE', opacity: 0.6 }} />
-            <View style={{ width: 100, height: 20, borderRadius: 4, backgroundColor: '#E0D1BE', opacity: 0.6 }} />
-          </View>
-          <View style={{ width: 80, height: 32, borderRadius: 16, backgroundColor: '#E0D1BE', opacity: 0.6 }} />
-        </View>
-        
-        {/* List Skeleton */}
-        {[1, 2, 3, 4, 5, 6, 7].map(i => (
-          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#E0D1BE', opacity: 0.6 }} />
-            <View style={{ flex: 1, gap: 8 }}>
-              <View style={{ width: '65%', height: 18, borderRadius: 4, backgroundColor: '#E0D1BE', opacity: 0.6 }} />
-              <View style={{ width: '45%', height: 14, borderRadius: 4, backgroundColor: '#E0D1BE', opacity: 0.6 }} />
-            </View>
-          </View>
-        ))}
+      <View style={{ flex: 1, backgroundColor: '#FFF5E6', alignItems: 'center', justifyContent: 'center' }}>
+        <Image 
+          source={require('@/assets/images/logo.png')} 
+          style={{ width: 120, height: 120 }} 
+          resizeMode="contain" 
+        />
       </View>
     );
   }

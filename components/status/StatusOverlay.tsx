@@ -3,6 +3,10 @@ import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
+import { Alert, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
 
 interface StatusOverlayProps {
     statuses: any[];
@@ -23,14 +27,47 @@ interface StatusOverlayProps {
     showViewers: boolean;
     setShowViewers: (s: boolean) => void;
     height: number;
+    allowStatusDownload?: boolean;
 }
 
 export default function StatusOverlay({
     statuses, currentIndex, progress, currentStatusUI, insets, isOwner, paused, setPaused,
     isReplying, setIsReplying, replyText, setReplyText, handleSendReply, handleDeleteStatus,
-    statusViewers, showViewers, setShowViewers, height
+    statusViewers, showViewers, setShowViewers, height, allowStatusDownload
 }: StatusOverlayProps) {
     const router = useRouter();
+    const [downloading, setDownloading] = useState(false);
+
+    const handleDownloadStatus = async () => {
+        if (!currentStatusUI?.media_url) return;
+        try {
+            setDownloading(true);
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Required', 'Please allow gallery access to save media.');
+                return;
+            }
+            const url = currentStatusUI.media_url;
+            const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg';
+            const filename = `chatwarriors_status_${Date.now()}.${ext}`;
+            const cacheUri = `${FileSystem.cacheDirectory}${filename}`;
+            const result = await FileSystem.downloadAsync(url, cacheUri);
+            if (result.status !== 200) throw new Error('Download failed');
+            const asset = await MediaLibrary.createAssetAsync(result.uri);
+            try {
+                const album = await MediaLibrary.getAlbumAsync('ChatWarriors');
+                if (!album) await MediaLibrary.createAlbumAsync('ChatWarriors', asset, false);
+                else await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+            } catch (_) {}
+            try { await FileSystem.deleteAsync(cacheUri, { idempotent: true }); } catch (_) {}
+            Alert.alert('✅ Saved!', 'Status saved to your gallery!');
+        } catch (err: any) {
+            console.error('[STATUS DOWNLOAD] Error:', err);
+            Alert.alert('Error', 'Could not save status. Please try again.');
+        } finally {
+            setDownloading(false);
+        }
+    };
 
     return (
         <>
@@ -72,6 +109,19 @@ export default function StatusOverlay({
                             {isOwner && (
                                 <TouchableOpacity onPress={handleDeleteStatus} style={{ padding: 8, marginRight: 8 }}>
                                     <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                                </TouchableOpacity>
+                            )}
+                            {/* Download button - only show for non-owners when allowed */}
+                            {!isOwner && allowStatusDownload && currentStatusUI?.media_type !== 'text' && (
+                                <TouchableOpacity
+                                    onPress={handleDownloadStatus}
+                                    style={{ padding: 8, marginRight: 8 }}
+                                    disabled={downloading}
+                                >
+                                    {downloading
+                                        ? <ActivityIndicator size="small" color="white" />
+                                        : <Ionicons name="download-outline" size={24} color="white" />
+                                    }
                                 </TouchableOpacity>
                             )}
                             <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>

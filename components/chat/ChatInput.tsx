@@ -13,6 +13,7 @@ import { EditingBanner, SelectedImagePreview, NonMemberOverlay } from './ChatInp
 import { useMediaPicker } from '@/hooks/chatInput/useMediaPicker';
 import { useLocationPicker } from '@/hooks/chatInput/useLocationPicker';
 import { useDocumentPicker } from '@/hooks/chatInput/useDocumentPicker';
+import CustomCameraModal from './CustomCameraModal';
 
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
@@ -35,10 +36,11 @@ export default function ChatInput({
     isMember = true, isKeyboardOpen = false, initialMessage = '', onDraftChange
 }: ChatInputProps) {
     const [message, setMessage] = useState(initialMessage);
-    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [selectedMedia, setSelectedMedia] = useState<{ uri: string, type: 'image' | 'video' } | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [emojiModalVisible, setEmojiModalVisible] = useState(false);
     const [contactModalVisible, setContactModalVisible] = useState(false);
+    const [cameraModalVisible, setCameraModalVisible] = useState(false);
 
     const insets = useSafeAreaInsets();
     const hasMeasured = insets.top > 0 || insets.bottom > 0;
@@ -50,7 +52,8 @@ export default function ChatInput({
     const lastSentTimeRef = useRef(0);
     const lastTypingSentRef = useRef(0);
 
-    const { handlePickImage, handleLaunchCamera } = useMediaPicker(setSelectedImage);
+    const { handlePickImage, handleLaunchCamera: originalHandleLaunchCamera } = useMediaPicker((uri) => uri ? setSelectedMedia({ uri, type: 'image' }) : setSelectedMedia(null));
+    const handleLaunchCamera = () => setCameraModalVisible(true);
     const { handleLocation } = useLocationPicker(onSendMessage);
     const { handleDocument } = useDocumentPicker(onSendMessage);
 
@@ -68,7 +71,7 @@ export default function ChatInput({
     }, [initialMessage]);
 
     const handleSubmit = () => {
-        if (!message.trim() && !selectedImage) {
+        if (!message.trim() && !selectedMedia) {
             if (Date.now() - lastSentTimeRef.current < 500) return;
             setIsRecording(true);
             return;
@@ -77,12 +80,15 @@ export default function ChatInput({
             onSaveEdit(message.trim());
         } else {
             let finalMessage = message.trim();
-            if (selectedImage) finalMessage = `[Image] ${selectedImage} ${message.trim()}`;
+            if (selectedMedia) {
+                const prefix = selectedMedia.type === 'video' ? '[Video]' : '[Image]';
+                finalMessage = `${prefix} ${selectedMedia.uri} ${message.trim()}`;
+            }
             onSendMessage(finalMessage);
         }
         lastSentTimeRef.current = Date.now();
         setMessage('');
-        setSelectedImage(null);
+        setSelectedMedia(null);
         if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
         if (onDraftChange) onDraftChange('');
         if (onTyping) {
@@ -131,8 +137,8 @@ export default function ChatInput({
                     <EditingBanner editingMessage={editingMessage} onCancelEdit={onCancelEdit} />
                 )}
 
-                {selectedImage && !isRecording && (
-                    <SelectedImagePreview imageUri={selectedImage} onRemove={() => setSelectedImage(null)} />
+                {selectedMedia && !isRecording && (
+                    <SelectedImagePreview imageUri={selectedMedia.uri} onRemove={() => setSelectedMedia(null)} isVideo={selectedMedia.type === 'video'} />
                 )}
 
                 <View style={[styles.inputRow, { opacity: isRecording ? 0 : 1 }]}>
@@ -167,7 +173,7 @@ export default function ChatInput({
                             onDocument={handleDocument}
                         />
 
-                        {!message.trim() && !selectedImage && (
+                        {!message.trim() && !selectedMedia && (
                             <TouchableOpacity onPress={handleLaunchCamera} style={{ padding: 8 }}>
                                 <Ionicons name="camera" size={26} color="#6B7280" />
                             </TouchableOpacity>
@@ -176,10 +182,10 @@ export default function ChatInput({
 
                     <TouchableOpacity onPress={handleSubmit} disabled={disabled} style={styles.sendBtn}>
                         <Ionicons
-                            name={editingMessage ? "checkmark" : (message.trim() || selectedImage ? "send" : "mic")}
+                            name={editingMessage ? "checkmark" : (message.trim() || selectedMedia ? "send" : "mic")}
                             size={24}
                             color="white"
-                            style={{ marginLeft: (message.trim() || selectedImage) ? 3 : 0 }}
+                            style={{ marginLeft: (message.trim() || selectedMedia) ? 3 : 0 }}
                         />
                     </TouchableOpacity>
                 </View>
@@ -197,6 +203,12 @@ export default function ChatInput({
                     visible={contactModalVisible}
                     onClose={() => setContactModalVisible(false)}
                     onSelectContact={(name, phone) => onSendMessage(`[Contact] ${name} | ${phone}`)}
+                />
+
+                <CustomCameraModal
+                    visible={cameraModalVisible}
+                    onClose={() => setCameraModalVisible(false)}
+                    onCapture={(media) => setSelectedMedia(media)}
                 />
             </View>
         </View>

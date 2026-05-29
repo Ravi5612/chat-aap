@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, KeyboardAvoidingView, Platform, Text, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import * as ScreenCapture from 'expo-screen-capture';
 
 import MessageList from '@/components/chat/MessageList';
 import ChatInput from '@/components/chat/ChatInput';
@@ -63,6 +64,7 @@ export default function ChatScreen() {
     const [forwardText, setForwardText] = useState('');
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
+    const [viewerIsVideo, setViewerIsVideo] = useState(false);
     const [ledgerVisible, setLedgerVisible] = useState(false);
     const [infoVisible, setInfoVisible] = useState(false);
 
@@ -72,8 +74,9 @@ export default function ChatScreen() {
         setContextMenuVisible(true);
     }, []);
 
-    const handleImagePress = useCallback((uri: string) => {
+    const handleImagePress = useCallback((uri: string, isVideo: boolean = false) => {
         setViewerImage(uri);
+        setViewerIsVideo(isVideo);
         setViewerVisible(true);
     }, []);
 
@@ -125,6 +128,43 @@ export default function ChatScreen() {
         const sub2 = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
         return () => { sub1.remove(); sub2.remove(); };
     }, []);
+
+    // Screenshot Prevention Logic
+    useEffect(() => {
+        let isActive = false;
+        
+        const manageScreenshot = async () => {
+            try {
+                // By default, allow screenshots unless explicitly disabled by friend
+                // Note: group chats might not have this, so we default to true if friendData is missing
+                const allowScreenshot = friendData?.friend?.allow_screenshot ?? true;
+                
+                if (!allowScreenshot && isGroup !== 'true') {
+                    console.log('[DEBUG] Preventing screen capture for this chat because friend disabled it.');
+                    await ScreenCapture.preventScreenCaptureAsync();
+                    isActive = true;
+                } else {
+                    console.log('[DEBUG] Screen capture is allowed for this chat.');
+                    await ScreenCapture.allowScreenCaptureAsync();
+                    isActive = false;
+                }
+            } catch (error) {
+                console.error('[CHAT] Screen capture logic failed:', error);
+            }
+        };
+
+        manageScreenshot();
+
+        return () => {
+            // Restore screen capture when leaving this chat
+            if (isActive) {
+                console.log('[DEBUG] Restoring screen capture on unmount.');
+                ScreenCapture.allowScreenCaptureAsync().catch(err => {
+                    console.error('[CHAT] Failed to restore screen capture:', err);
+                });
+            }
+        };
+    }, [friendData?.friend?.allow_screenshot, isGroup]);
 
     if (!currentUser || (loading && messages.length === 0)) {
         return <ChatSkeleton safeTop={safeTop} safeBottom={safeBottom} />;
@@ -224,12 +264,14 @@ export default function ChatScreen() {
                 viewerVisible={viewerVisible}
                 setViewerVisible={setViewerVisible}
                 viewerImage={viewerImage}
+                viewerIsVideo={viewerIsVideo}
                 ledgerVisible={ledgerVisible}
                 setLedgerVisible={setLedgerVisible}
                 safeFriendId={safeFriendId}
                 friendName={friendName as string}
                 infoVisible={infoVisible}
                 setInfoVisible={setInfoVisible}
+                allowDownload={friendData?.friend?.allow_status_download ?? true}
             />
         </KeyboardAvoidingView>
     );

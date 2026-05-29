@@ -7,7 +7,7 @@ export const useMediaPicker = (setSelectedImage: (uri: string | null) => void) =
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: shouldCrop,
-                quality: 1,
+                quality: 0.7,
             });
 
             if (!result.canceled) {
@@ -45,8 +45,9 @@ export const useMediaPicker = (setSelectedImage: (uri: string | null) => void) =
     const launchCamera = async (shouldCrop: boolean) => {
         try {
             const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
                 allowsEditing: shouldCrop,
-                quality: 1,
+                quality: 0.7,
             });
 
             if (!result.canceled) {

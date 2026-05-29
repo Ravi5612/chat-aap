@@ -137,6 +137,7 @@ export const useCallLogs = () => {
 
         } catch (err) {
             if (__DEV__) console.error("Error loading call logs:", err);
+            setHasMore(false);
         } finally {
             setLoading(false);
             setLoadingMore(false);

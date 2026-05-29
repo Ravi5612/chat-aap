@@ -76,9 +76,9 @@ export default function ProfileScreen() {
                     />
 
                     <ProfileStats 
-                        friendsCount={friends?.length || 0} 
-                        sentCount={sentRequests?.length || 0} 
-                        receivedCount={receivedRequests?.length || 0} 
+                        friendsCount={friends?.filter((f: any) => f.isFriend)?.length || 0} 
+                        sentCount={sentRequests?.filter(r => r.status === 'pending').length || 0} 
+                        receivedCount={receivedRequests?.filter(r => r.status === 'pending').length || 0} 
                     />
 
                     <ProfileActions onShare={onShare} />
@@ -88,7 +88,7 @@ export default function ProfileScreen() {
                     {/* Logout Button */}
                     <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
                         <View style={styles.logoutIconBg}>
-                            <Ionicons name="power" size={20} color="#EF4444" />
+                            <Ionicons name="power" size={20} color="#F68537" />
                         </View>
                         <Text style={styles.logoutText}>Logout</Text>
                     </TouchableOpacity>
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 12,
-        backgroundColor: '#FEF2F2',
+        backgroundColor: '#FFF7ED',
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 16,
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     logoutText: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#EF4444',
+        color: '#F68537',
     }
 });
 

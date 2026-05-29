@@ -11,6 +11,7 @@ interface CallSession {
 
 interface CallState {
     callSession: CallSession | null;
+    activeStartTime: number | null;
     setCallSession: (session: CallSession | null) => void;
     setCallRinging: () => void;
     setCallActive: () => void;
@@ -22,18 +23,20 @@ interface CallState {
 
 export const useCallStore = create<CallState>((set) => ({
     callSession: null,
-    setCallSession: (session) => set({ callSession: session }),
+    activeStartTime: null,
+    setCallSession: (session) => set({ callSession: session, activeStartTime: null }),
     setCallRinging: () => set((state) => ({
         callSession: state.callSession ? { ...state.callSession, status: 'ringing' } : null
     })),
     setCallActive: () => set((state) => ({
-        callSession: state.callSession ? { ...state.callSession, status: 'active' } : null
+        callSession: state.callSession ? { ...state.callSession, status: 'active' } : null,
+        activeStartTime: Date.now()
     })),
     setCallEnded: (reason: string) => set((state) => ({
         callSession: state.callSession ? { ...state.callSession, status: 'ended', endReason: reason } : null,
         isMinimized: false
     })),
-    endCall: () => set({ callSession: null, isMinimized: false }),
+    endCall: () => set({ callSession: null, isMinimized: false, activeStartTime: null }),
     isMinimized: false,
     setMinimized: (minimized) => set({ isMinimized: minimized }),
 }));

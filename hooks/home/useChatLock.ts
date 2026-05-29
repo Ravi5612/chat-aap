@@ -45,6 +45,7 @@ export const useChatLock = () => {
                 Alert.alert("Chat Unlocked", "This chat is now visible in the main list.");
             } else {
                 const f = pendingLockedFriend;
+                useFriendsStore.getState().clearUnreadCount(f.id);
                 const nameParam = encodeURIComponent(f.name || 'Chat');
                 const groupParam = f.isGroup ? 'true' : 'false';
                 const imageParam = encodeURIComponent(f.img || '');

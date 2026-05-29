@@ -2,6 +2,7 @@ import { View, FlatList, Text, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useFriendsStore } from '@/store/useFriendsStore';
 import FriendListItem from '@/components/chat/FriendListItem';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useStatusActions } from '@/hooks/useStatusActions';
@@ -84,6 +85,7 @@ function HomeScreen() {
             return;
         }
         try {
+            useFriendsStore.getState().clearUnreadCount(friend.id);
             const nameParam = encodeURIComponent(friend.name || 'Chat');
             const groupParam = friend.isGroup ? 'true' : 'false';
             const imageParam = encodeURIComponent(friend.img || '');

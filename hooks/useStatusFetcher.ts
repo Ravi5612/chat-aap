@@ -98,7 +98,7 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                         if (s.encrypted_keys && currentUser?.id) {
                             const encryptedMasterKey = s.encrypted_keys[currentUser.id];
                             if (encryptedMasterKey && profile?.public_key) {
-                                statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key);
+                                statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key, currentUser.id);
                             }
                         }
 

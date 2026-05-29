@@ -13,13 +13,16 @@ export function useChatStatus(currentUser: any, safeFriendId: string, isGroup: b
     const [iAmBlocked, setIAmBlocked] = useState(false);
     
     // Initialize from local state to avoid 4-5 second network delay for known friends
+    // Returns: true = is friend, false = not friend, null = still loading (show nothing)
     const [isFriend, setIsFriend] = useState<boolean | null>(() => {
         if (isGroup) return true;
         const localFriend = (useFriendsStore.getState().combinedItems || []).find(f => f?.id === safeFriendId);
-        if (localFriend && localFriend.isUnfriended !== undefined) {
-            return !localFriend.isUnfriended;
-        }
-        return null;
+        // Only set false if EXPLICITLY unfriended, otherwise default to null (loading)
+        if (localFriend && localFriend.isUnfriended === true) return false;
+        if (localFriend && localFriend.isFriend === true) return true;
+        // If we found them in combinedItems but isFriend/isUnfriended not set, assume friend
+        if (localFriend) return true;
+        return null; // Unknown - let network call decide
     });
 
     const checkBlockStatus = useCallback(async () => {
@@ -47,9 +50,15 @@ export function useChatStatus(currentUser: any, safeFriendId: string, isGroup: b
     }, [currentUser, safeFriendId, isGroup]);
 
     // Keep isFriend in sync with local friendData if it updates
+    // Only update if we have a definitive answer (not during loading)
     useEffect(() => {
-        if (friendData && friendData.isUnfriended !== undefined) {
-            setIsFriend(!friendData.isUnfriended);
+        if (friendData) {
+            if (friendData.isUnfriended === true) {
+                setIsFriend(false);
+            } else if (friendData.isUnfriended === false || friendData.isFriend === true) {
+                setIsFriend(true);
+            }
+            // If neither, don't override - let network call handle it
         }
     }, [friendData]);
 

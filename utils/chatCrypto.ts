@@ -5,6 +5,7 @@
  */
 
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
+import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import { x25519 } from '@noble/curves/ed25519';
@@ -41,30 +42,98 @@ const encoder = new TextEncoder();
 const keyCache = new Map<string, Uint8Array>();
 const PRIVATE_KEY_STORAGE = 'e2ee_private_key_v1';
 
+export async function deriveKEKFromPassword(password: string, saltStr: string): Promise<Uint8Array> {
+    const pwdBytes = encoder.encode(password);
+    const saltBytes = encoder.encode(saltStr);
+    
+    // Memory-hard Scrypt (N=16384, r=8, p=1). High enough for good security, fast enough for RN JS.
+    const key = await scryptAsync(pwdBytes, saltBytes, {
+        N: 16384,
+        r: 8,
+        p: 1,
+        dkLen: 32, // 256-bit key for AES-256
+    });
+    
+    return new Uint8Array(key);
+}
+
 /**
  * 🔑 Initialize X25519 Keypair for True E2EE
- * Generates a private key if it doesn't exist, and returns the Public Key in Base64
+ * Checks local storage first.
+ * If password is provided, checks DB for encrypted backup.
+ * If no backup exists, generates new key, encrypts it with password KEK, and saves to DB.
  */
-export async function initializeX25519Keys(): Promise<string> {
-    const existingKey = await SecureStore.getItemAsync(PRIVATE_KEY_STORAGE);
+export async function initializeX25519Keys(userId: string, password?: string): Promise<string> {
+    const keyStoragePath = `e2ee_private_key_v1_${userId}`;
+    
+    // 1. Check local SecureStore first (Auto-Login scenario)
+    const existingKey = await SecureStore.getItemAsync(keyStoragePath);
     if (existingKey) {
         const privateKey = Buffer.from(existingKey, 'base64');
         const publicKey = x25519.getPublicKey(privateKey);
         return Buffer.from(publicKey).toString('base64');
     }
 
-    const privateKey = x25519.utils.randomPrivateKey();
-    const publicKey = x25519.getPublicKey(privateKey);
-    
-    await SecureStore.setItemAsync(PRIVATE_KEY_STORAGE, Buffer.from(privateKey).toString('base64'));
-    return Buffer.from(publicKey).toString('base64');
+    // 2. If password is provided (Login/Signup scenario), check DB for backup
+    if (password) {
+        const { data: profile } = await supabase.from('profiles').select('encrypted_private_key, kdf_salt').eq('id', userId).single();
+        
+        if (profile?.encrypted_private_key && profile?.kdf_salt) {
+            // Restore from backup
+            try {
+                const kek = await deriveKEKFromPassword(password, profile.kdf_salt);
+                const decryptedBase64 = await decryptText(profile.encrypted_private_key, kek);
+                
+                if (decryptedBase64) {
+                    const privateKey = Buffer.from(decryptedBase64, 'base64');
+                    const publicKey = x25519.getPublicKey(privateKey);
+                    
+                    await SecureStore.setItemAsync(keyStoragePath, decryptedBase64);
+                    console.log("Crypto: Successfully restored E2EE keys from Cloud Backup!");
+                    return Buffer.from(publicKey).toString('base64');
+                } else {
+                     throw new Error("Decryption returned empty");
+                }
+            } catch (e) {
+                console.error("Crypto: Failed to decrypt E2EE backup. Incorrect password or corrupted data.", e);
+                throw new Error("Unable to restore encryption keys.");
+            }
+        }
+
+        // 3. Generate New Key (No backup exists, e.g. Signup or first-time E2EE setup)
+        const randomBytes = await Crypto.getRandomBytesAsync(32);
+        const privateKey = new Uint8Array(randomBytes);
+        const publicKey = x25519.getPublicKey(privateKey);
+        const privateKeyBase64 = Buffer.from(privateKey).toString('base64');
+        
+        // Create Backup
+        const newSalt = Buffer.from(await Crypto.getRandomBytesAsync(16)).toString('hex');
+        const kek = await deriveKEKFromPassword(password, newSalt);
+        const encryptedPrivateKey = await encryptText(privateKeyBase64, kek);
+        
+        if (encryptedPrivateKey) {
+            // Save Backup metadata to DB
+            await supabase.from('profiles').update({
+                encrypted_private_key: encryptedPrivateKey,
+                kdf_salt: newSalt,
+                kdf_algorithm: 'scrypt_N16384_r8_p1'
+            }).eq('id', userId);
+        }
+
+        await SecureStore.setItemAsync(keyStoragePath, privateKeyBase64);
+        return Buffer.from(publicKey).toString('base64');
+    }
+
+    // Fallback: No password, and no SecureStore key.
+    throw new Error("Unable to restore encryption keys. Please log out and log back in with your password.");
 }
 
 /**
  * 🔑 Get True E2EE Shared Secret using X25519 Diffie-Hellman
  */
-export async function getX25519SharedSecret(friendPublicKeyBase64: string): Promise<Uint8Array | null> {
-    const existingKey = await SecureStore.getItemAsync(PRIVATE_KEY_STORAGE);
+export async function getX25519SharedSecret(friendPublicKeyBase64: string, userId: string): Promise<Uint8Array | null> {
+    const keyStoragePath = `e2ee_private_key_v1_${userId}`;
+    const existingKey = await SecureStore.getItemAsync(keyStoragePath);
     if (!existingKey) return null;
 
     if (keyCache.has(friendPublicKeyBase64)) {
@@ -102,13 +171,13 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
 
     if (!isGroup) {
         // True E2EE (X25519)
-        const baseKeyCacheStr = `x25519:${friendId}`;
+        const baseKeyCacheStr = `x25519:${userId}:${friendId}`;
         if (keyCache.has(baseKeyCacheStr)) return keyCache.get(baseKeyCacheStr)!;
 
         try {
             const { data } = await supabase.from('profiles').select('public_key').eq('id', friendId).single();
             if (data?.public_key) {
-                const key = await getX25519SharedSecret(data.public_key);
+                const key = await getX25519SharedSecret(data.public_key, userId);
                 if (key) {
                     keyCache.set(baseKeyCacheStr, key);
                     console.log(`Crypto: X25519 Key generated for friend ${friendId}`);
@@ -149,8 +218,8 @@ export async function generateStatusMasterKey(): Promise<Uint8Array> {
 /**
  * 🔒 Encrypt the Status Master Key with a friend's Public Key (Hybrid Encryption)
  */
-export async function encryptKeyWithSharedSecret(masterKey: Uint8Array, friendPublicKeyBase64: string): Promise<string | null> {
-    const sharedSecret = await getX25519SharedSecret(friendPublicKeyBase64);
+export async function encryptKeyWithSharedSecret(masterKey: Uint8Array, friendPublicKeyBase64: string, userId: string): Promise<string | null> {
+    const sharedSecret = await getX25519SharedSecret(friendPublicKeyBase64, userId);
     if (!sharedSecret) return null;
     
     // Convert Master Key to string (base64) so we can use existing encryptText
@@ -161,8 +230,8 @@ export async function encryptKeyWithSharedSecret(masterKey: Uint8Array, friendPu
 /**
  * 🔓 Decrypt the Status Master Key from a friend's Hybrid Encrypted string
  */
-export async function decryptKeyWithSharedSecret(encryptedMasterKeyBase64: string, friendPublicKeyBase64: string): Promise<Uint8Array | null> {
-    const sharedSecret = await getX25519SharedSecret(friendPublicKeyBase64);
+export async function decryptKeyWithSharedSecret(encryptedMasterKeyBase64: string, friendPublicKeyBase64: string, userId: string): Promise<Uint8Array | null> {
+    const sharedSecret = await getX25519SharedSecret(friendPublicKeyBase64, userId);
     if (!sharedSecret) return null;
     
     const masterKeyBase64 = await decryptText(encryptedMasterKeyBase64, sharedSecret);

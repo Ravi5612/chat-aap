@@ -123,34 +123,32 @@ export const useContactSuggestions = () => {
                 const profileIds = registeredProfiles.map(p => p.id);
 
                 // 2. Fetch existing friends (bi-directional) and requests in parallel
-                const [friendsRes, sentRequestsRes, receivedRequestsRes] = await Promise.all([
+                const [friendshipsRes, requestsRes] = await Promise.all([
                     supabase
                         .from('friendships')
                         .select('user_id, friend_id')
                         .or(`user_id.eq.${currentUserId},friend_id.eq.${currentUserId}`),
                     supabase
                         .from('friend_requests')
-                        .select('receiver_id')
-                        .eq('sender_id', currentUserId)
-                        .in('receiver_id', profileIds)
-                        .in('status', ['pending', 'accepted']),
-                    supabase
-                        .from('friend_requests')
-                        .select('sender_id')
-                        .eq('receiver_id', currentUserId)
-                        .in('sender_id', profileIds)
-                        .in('status', ['pending', 'accepted'])
+                        .select('sender_id, receiver_id, status')
+                        .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
                 ]);
 
-                // Collect ALL friend IDs where I am either user_id or friend_id
+                if (friendshipsRes.error) throw friendshipsRes.error;
+                if (requestsRes.error) throw requestsRes.error;
+
                 const friendIds = new Set<string>();
-                friendsRes.data?.forEach(f => {
-                    if (f.user_id === currentUserId) friendIds.add(f.friend_id);
-                    else friendIds.add(f.user_id);
-                });
+
+                // Collect ALL friend IDs where I am either user_id or friend_id
+                if (friendshipsRes.data) {
+                    friendshipsRes.data.forEach((f: any) => {
+                        if (f.user_id === currentUserId) friendIds.add(f.friend_id);
+                        if (f.friend_id === currentUserId) friendIds.add(f.user_id);
+                    });
+                }
                 
-                const sentRequestIds = new Set(sentRequestsRes.data?.map(r => r.receiver_id) || []);
-                const receivedRequestIds = new Set(receivedRequestsRes.data?.map(r => r.sender_id) || []);
+                const sentRequestIds = new Set(requestsRes.data?.filter(r => r.sender_id === currentUserId && r.status !== 'rejected').map(r => r.receiver_id) || []);
+                const receivedRequestIds = new Set(requestsRes.data?.filter(r => r.receiver_id === currentUserId && r.status !== 'rejected').map(r => r.sender_id) || []);
 
                 const finalSuggestions = registeredProfiles
                     .filter(p => 
@@ -187,7 +185,7 @@ export const useContactSuggestions = () => {
         try {
             // Profile verification is no longer needed via extra Supabase round-trip,
             // we already have the local session Profile in useAuthStore.
-            const senderProfile = currentUser;
+            const senderProfile = useAuthStore.getState().profile;
             
             if (!senderProfile || !senderProfile.username) {
                 Alert.alert('Profile Error', 'Your profile details are missing. Please update your profile in settings first.');

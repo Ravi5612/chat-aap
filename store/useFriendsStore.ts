@@ -25,6 +25,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     ...createFriendsLockActions(set, get),
     ...createFriendsGroupActions(set, get),
 
-    // Simple State Reset Action
+    // Simple State Actions
+    clearUnreadCount: (chatId: string) => set((state) => ({
+        combinedItems: state.combinedItems.map((item) => 
+            item.id === chatId ? { ...item, unreadCount: 0 } : item
+        )
+    })),
     reset: () => set({ friends: [], groups: [], combinedItems: [], myStatuses: { active: [] }, onlineUsers: {}, blockedUserIds: [], error: null })
 }));

@@ -38,21 +38,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setInitializing: (initializing) => set({ initializing }),
     signOut: async () => {
         const { user } = get();
+
+        // Step 1: Turant state clear karo aur login pe bhejo — koi wait nahi!
+        set({ session: null, user: null, profile: null });
+        SecureStore.deleteItemAsync('supabase_session').catch(() => {});
+        router.replace('/login');
+
+        // Step 2: Network calls background mein — logout ko block nahi karenge
         try {
             if (user?.id) {
-                // Try to mark offline, but don't block logout if it fails
-                await supabase.from('profiles').update({ is_online: false }).eq('id', user.id);
+                supabase.from('profiles')
+                    .update({ is_online: false })
+                    .eq('id', user.id)
+                    .then(() => {})
+                    .catch(() => {});
             }
-            await supabase.auth.signOut();
+            supabase.auth.signOut().catch(() => {});
         } catch (error) {
             console.error("Error signing out:", error);
-        } finally {
-            // ALWAYS clear local state to force UI update
-            set({ session: null, user: null, profile: null });
-            // Delete cached session
-            await SecureStore.deleteItemAsync('supabase_session').catch(() => {});
-            // Force immediate navigation to login
-            router.replace('/login');
         }
     },
     syncOnlineStatus: async (isOnline: boolean) => {

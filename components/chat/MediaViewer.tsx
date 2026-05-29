@@ -10,11 +10,15 @@ interface MediaViewerProps {
     visible: boolean;
     onClose: () => void;
     imageUri: string | null;
+    isVideo?: boolean;
+    allowDownload?: boolean; // Default true for chat images
 }
+
+import { Video, ResizeMode } from 'expo-av';
 
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
-export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerProps) {
+export default function MediaViewer({ visible, onClose, imageUri, isVideo = false, allowDownload = true }: MediaViewerProps) {
     const [downloading, setDownloading] = useState(false);
 
     const handleDownload = async () => {
@@ -111,18 +115,20 @@ export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerP
 
                 <SafeAreaView style={styles.safeArea}>
                     <View style={styles.header}>
-                        <TouchableOpacity
-                            onPress={handleDownload}
-                            style={[styles.actionButton, { marginRight: 15 }]}
-                            activeOpacity={0.7}
-                            disabled={downloading}
-                        >
-                            {downloading ? (
-                                <ActivityIndicator size="small" color="white" />
-                            ) : (
-                                <Ionicons name="download-outline" size={26} color="white" />
-                            )}
-                        </TouchableOpacity>
+                        {allowDownload && (
+                            <TouchableOpacity
+                                onPress={handleDownload}
+                                style={[styles.actionButton, { marginRight: 15 }]}
+                                activeOpacity={0.7}
+                                disabled={downloading}
+                            >
+                                {downloading ? (
+                                    <ActivityIndicator size="small" color="white" />
+                                ) : (
+                                    <Ionicons name="download-outline" size={26} color="white" />
+                                )}
+                            </TouchableOpacity>
+                        )}
 
                         <TouchableOpacity
                             onPress={onClose}
@@ -134,14 +140,22 @@ export default function MediaViewer({ visible, onClose, imageUri }: MediaViewerP
                     </View>
 
                     <View style={styles.imageContainer}>
-                        {imageUri && (
+                        {imageUri && isVideo ? (
+                            <Video
+                                source={{ uri: imageUri.trim() }}
+                                style={styles.fullImage}
+                                useNativeControls
+                                resizeMode={ResizeMode.CONTAIN}
+                                shouldPlay
+                            />
+                        ) : imageUri ? (
                             <Image
                                 source={{ uri: imageUri.trim() }}
                                 style={styles.fullImage}
                                 contentFit="contain"
                                 transition={300}
                             />
-                        )}
+                        ) : null}
                     </View>
                 </SafeAreaView>
             </View>

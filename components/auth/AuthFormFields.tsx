@@ -11,6 +11,7 @@ interface AuthFormFieldsProps {
     email: string; setEmail: (v: string) => void;
     phone: string; setPhone: (v: string) => void;
     password: string; setPassword: (v: string) => void;
+    confirmPassword?: string; setConfirmPassword?: (v: string) => void;
     showPassword: boolean; setShowPassword: (v: boolean) => void;
     resetEmail: string; setResetEmail: (v: string) => void;
     onForgotPassword: () => void;
@@ -24,6 +25,7 @@ export default function AuthFormFields({
     email, setEmail,
     phone, setPhone,
     password, setPassword,
+    confirmPassword, setConfirmPassword,
     showPassword, setShowPassword,
     resetEmail, setResetEmail,
     onForgotPassword,
@@ -107,6 +109,22 @@ export default function AuthFormFields({
                     />
                 </TouchableOpacity>
             </View>
+
+            {isSignUp && setConfirmPassword && confirmPassword !== undefined && (
+                <>
+                    <Text style={styles.label}>Confirm Password</Text>
+                    <View style={{ position: 'relative', width: '100%' }}>
+                        <TextInput
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            placeholder="Confirm your secret password"
+                            secureTextEntry={!showPassword}
+                            style={[inputStyle, { paddingRight: 50 }]}
+                            editable={!loading}
+                        />
+                    </View>
+                </>
+            )}
 
             {!isSignUp && (
                 <TouchableOpacity

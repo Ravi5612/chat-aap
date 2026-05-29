@@ -6,6 +6,8 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import { Audio } from 'expo-av';
 import { useRouter as useExpoRouter } from 'expo-router';
+import * as ScreenCapture from 'expo-screen-capture';
+import { useFriendsStore } from '@/store/useFriendsStore';
 
 // Hooks
 import { useStatusFetcher } from '@/hooks/useStatusFetcher';
@@ -49,6 +51,18 @@ export default function StatusViewer() {
 
     const currentStatusUI = statuses[currentIndex];
     const isOwner = !!(currentUser && userId === currentUser.id);
+
+    // Get friend's allow_status_download setting from store
+    const allowStatusDownload = (() => {
+        try {
+            const friends = useFriendsStore.getState().combinedItems;
+            const friendData = friends.find((f: any) => f.id === userId);
+            return friendData?.friend?.allow_status_download ?? false;
+        } catch (e) {
+            console.error('[STATUS VIEWER] Failed to get allow_status_download:', e);
+            return false;
+        }
+    })();
 
     // 1.5 Get Status Key
     const [statusKey, setStatusKey] = useState<Uint8Array | null>(null);
@@ -99,6 +113,45 @@ export default function StatusViewer() {
             else viewerVideoRef.current.playAsync();
         }
     }, [paused, currentIndex, statuses]);
+
+    // Screenshot Prevention Logic
+    useEffect(() => {
+        let isActive = false;
+        
+        const manageScreenshot = async () => {
+            if (isOwner) return; // Don't prevent screenshot on own status
+            
+            try {
+                const friends = useFriendsStore.getState().combinedItems;
+                const friendData = friends.find((f: any) => f.id === userId);
+                
+                const allowScreenshot = friendData?.friend?.allow_screenshot ?? friendData?.allow_screenshot ?? true;
+                
+                if (!allowScreenshot) {
+                    console.log('[DEBUG] Preventing screen capture for status because friend disabled it.');
+                    await ScreenCapture.preventScreenCaptureAsync();
+                    isActive = true;
+                } else {
+                    console.log('[DEBUG] Screen capture is allowed for this status.');
+                    await ScreenCapture.allowScreenCaptureAsync();
+                    isActive = false;
+                }
+            } catch (error) {
+                console.error('[STATUS] Screen capture logic failed:', error);
+            }
+        };
+
+        manageScreenshot();
+
+        return () => {
+            if (isActive) {
+                console.log('[DEBUG] Restoring screen capture on status unmount.');
+                ScreenCapture.allowScreenCaptureAsync().catch(err => {
+                    console.error('[STATUS] Failed to restore screen capture:', err);
+                });
+            }
+        };
+    }, [userId, isOwner]);
 
     // Handle Music playback
     useEffect(() => {
@@ -289,11 +342,13 @@ export default function StatusViewer() {
             </TouchableOpacity>
 
             <StatusOverlay
+                statuses={statuses}
                 currentStatusUI={renderedStatusUI} currentIndex={currentIndex} progress={progress}
                 insets={insets} isOwner={isOwner} paused={paused} setPaused={setPaused}
                 isReplying={isReplying} setIsReplying={setIsReplying} replyText={replyText} setReplyText={setReplyText}
                 handleSendReply={handleSendReply} handleDeleteStatus={handleDeleteStatus}
                 statusViewers={statusViewers} showViewers={showViewers} setShowViewers={setShowViewers} height={height}
+                allowStatusDownload={allowStatusDownload}
             />
 
             {!!toastMessage && (

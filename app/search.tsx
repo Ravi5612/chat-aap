@@ -1,7 +1,7 @@
 import { View, Text, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useDbStore } from '@/store/useDbStore';
@@ -29,59 +29,78 @@ export default function SearchPeopleScreen() {
         }
     };
 
-    const handleSearch = async (text: string) => {
+    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleSearch = (text: string) => {
         setQuery(text);
+        
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
         if (text.length < 2) {
             setResults([]);
+            setLoading(false);
             return;
         }
 
-        // Save to history (debounced)
-        const { db } = useDbStore.getState();
-        if (db && text.length > 3) {
-            saveLocalSearch(db, text, 'friend').then(() => loadRecentSearches());
-        }
-
         setLoading(true);
-        try {
-            const { data: profiles, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .or(`username.ilike.%${text}%,email.ilike.%${text}%`)
-                .neq('id', currentUser?.id)
-                .limit(20);
 
-            if (error) throw error;
+        searchTimeoutRef.current = setTimeout(async () => {
+            // Save to history (debounced)
+            const { db } = useDbStore.getState();
+            if (db && text.length > 3) {
+                saveLocalSearch(db, text, 'friend').then(() => loadRecentSearches());
+            }
 
-            const profileIds = profiles.map(p => p.id);
+            try {
+                const { data: profiles, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .or(`username.ilike.%${text}%,email.ilike.%${text}%`)
+                    .neq('id', currentUser?.id)
+                    .limit(20);
 
-            const { data: friendships } = await supabase
-                .from('friendships')
-                .select('friend_id')
-                .eq('user_id', currentUser?.id)
-                .in('friend_id', profileIds);
+                if (error) throw error;
 
-            const { data: requests } = await supabase
-                .from('friend_requests')
-                .select('receiver_id, status')
-                .eq('sender_id', currentUser?.id)
-                .in('receiver_id', profileIds);
+                const profileIds = profiles.map(p => p.id);
 
-            const friendIds = new Set(friendships?.map(f => f.friend_id));
-            const requestMap = requests?.reduce((acc: any, r: any) => ({ ...acc, [r.receiver_id]: r.status }), {}) || {};
+                const { data: friendships } = await supabase
+                    .from('friendships')
+                    .select('user_id, friend_id')
+                    .or(`user_id.eq.${currentUser?.id},friend_id.eq.${currentUser?.id}`);
 
-            const formatted = profiles.map(p => ({
-                ...p,
-                isFriend: friendIds.has(p.id),
-                requestStatus: requestMap[p.id]
-            }));
+                const friendIds = friendships?.map(f => f.user_id === currentUser?.id ? f.friend_id : f.user_id) || [];
 
-            setResults(formatted);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
+                const { data: sentRequests } = await supabase
+                    .from('friend_requests')
+                    .select('receiver_id, status')
+                    .eq('sender_id', currentUser?.id);
+
+                const { data: receivedRequests } = await supabase
+                    .from('friend_requests')
+                    .select('sender_id, status')
+                    .eq('receiver_id', currentUser?.id);
+
+                const finalResults = profiles.map(p => {
+                    const isFriend = friendIds.includes(p.id);
+                    const sentReq = sentRequests?.find(r => r.receiver_id === p.id);
+                    const recReq = receivedRequests?.find(r => r.sender_id === p.id);
+
+                    return {
+                        ...p,
+                        isFriend,
+                        requestStatus: sentReq?.status || recReq?.status || null
+                    };
+                });
+
+                setResults(finalResults);
+            } catch (error: any) {
+                console.error(error);
+            } finally {
+                setLoading(false);
+            }
+        }, 500); // 500ms debounce
     };
 
     const sendFriendRequest = async (receiverId: string) => {

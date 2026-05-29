@@ -24,6 +24,7 @@ export interface FriendsState {
     addGroupMember: (groupId: string, userId: string, addedBy: string) => Promise<boolean>;
     removeGroupMember: (groupId: string, userId: string, removedBy: string) => Promise<boolean>;
     makeGroupAdmin: (groupId: string, userId: string, requestedBy: string) => Promise<boolean>;
+    clearUnreadCount: (chatId: string) => void;
     reset: () => void;
 }
 

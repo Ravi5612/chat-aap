@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 import { logErrorToDB } from '@/utils/errorLogger';
+import { useAuthStore } from '@/store/useAuthStore';
+import { initializeX25519Keys } from '@/utils/chatCrypto';
 
 export const useAuthForm = () => {
     const router = useRouter();
@@ -14,6 +16,7 @@ export const useAuthForm = () => {
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
     // Mode flags
@@ -54,10 +57,22 @@ export const useAuthForm = () => {
             Alert.alert('Error', 'Password must be at least 6 characters');
             return;
         }
+        if (password !== confirmPassword) {
+            Alert.alert('Error', 'Passwords do not match');
+            return;
+        }
 
         setLoading(true);
         try {
             const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+
+            // Check if phone already exists
+            const { data: existingUser } = await supabase.from('profiles').select('id').eq('phone', formattedPhone).maybeSingle();
+            if (existingUser) {
+                Alert.alert('Error', 'An account with this phone number already exists.');
+                setLoading(false);
+                return;
+            }
             const { data, error } = await supabase.auth.signUp({
                 email: email.trim(),
                 password: password,
@@ -71,15 +86,21 @@ export const useAuthForm = () => {
                     phone: formattedPhone,
                     current_session_id: data.session.user.id
                 }).eq('id', data.session.user.id);
+                
+                try {
+                    const publicKeyBase64 = await initializeX25519Keys(data.session.user.id, password);
+                    await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', data.session.user.id);
+                } catch(e) {
+                    console.warn("E2EE Init Error:", e);
+                }
 
                 const { data: profile } = await supabase.from('profiles').select('username').eq('id', data.session.user.id).single();
+                
+                if (profile) {
+                    useAuthStore.setState({ profile });
+                }
 
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                if (!profile?.username) {
-                    router.replace('/setup-profile');
-                } else {
-                    router.replace('/(tabs)');
-                }
             } else {
                 Alert.alert('Verify Email', 'Please check your email to verify your account.');
             }
@@ -132,15 +153,21 @@ export const useAuthForm = () => {
                 await supabase.from('profiles').update({
                     current_session_id: data.session.user.id
                 }).eq('id', data.session.user.id);
+                
+                try {
+                    const publicKeyBase64 = await initializeX25519Keys(data.session.user.id, password);
+                    await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', data.session.user.id);
+                } catch(e) {
+                    console.warn("E2EE Init Error:", e);
+                }
 
                 const { data: profile } = await supabase.from('profiles').select('username').eq('id', data.session.user.id).single();
 
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                if (!profile?.username) {
-                    router.replace('/setup-profile');
-                } else {
-                    router.replace('/(tabs)');
+                if (profile) {
+                    useAuthStore.setState({ profile });
                 }
+
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
         } catch (error: any) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -171,6 +198,7 @@ export const useAuthForm = () => {
             setIsSignUp(prev => !prev);
         }
         setPassword('');
+        setConfirmPassword('');
     };
 
     return {
@@ -180,6 +208,7 @@ export const useAuthForm = () => {
         email, setEmail,
         phone, setPhone,
         password, setPassword,
+        confirmPassword, setConfirmPassword,
         showPassword, setShowPassword,
         isSignUp,
         isForgotPassword, setIsForgotPassword,

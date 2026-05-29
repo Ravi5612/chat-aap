@@ -49,8 +49,29 @@ export default function NearbySuggestions() {
         if (error) {
             setRequestedIds(prev => prev.filter(id => id !== targetId));
             console.error('Request error:', error);
+            return;
+        }
+
+        // Notification bhejna — receiver ko pata chale
+        try {
+            const { data: myProfile } = await supabase
+                .from('profiles')
+                .select('username')
+                .eq('id', currentUser.id)
+                .single();
+
+            await supabase.from('notifications').insert({
+                user_id: targetId,
+                sender_id: currentUser.id,
+                type: 'friend_request',
+                message: `${myProfile?.username || 'Someone'} sent you a friend request.`,
+                is_read: false
+            });
+        } catch (notifErr) {
+            console.warn('Notification failed:', notifErr);
         }
     };
+
 
     const getGenderBadge = (gender: string) => {
         if (gender === 'male') return { icon: 'male', label: 'Male', color: '#3B82F6', bg: '#EFF6FF' };

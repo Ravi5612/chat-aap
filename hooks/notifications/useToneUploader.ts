@@ -43,11 +43,11 @@ export const useToneUploader = (user: any, updateProfile: (updates: any) => Prom
 
             const formData = new FormData();
             formData.append('file', { uri: asset.uri, type: asset.mimeType || 'audio/mpeg', name: fileName + '.mp3' } as any);
-            formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+            formData.append('upload_preset', 'lrkgj8fj');
             formData.append('public_id', fileName);
 
             // Use auto/upload to let Cloudinary figure out the resource_type (audio/video)
-            const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/auto/upload`, {
+            const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/do6lyfmn4/auto/upload`, {
                 method: 'POST',
                 body: formData
             });

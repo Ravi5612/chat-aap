@@ -1,67 +1,111 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useReceivedRequests } from '@/hooks/useReceivedRequests';
+import { useDbNotifications } from '@/hooks/useDbNotifications';
 import { Image } from 'expo-image';
 import { format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 
 export default function NotificationsScreen() {
     const router = useRouter();
-    const { receivedRequests, loading, loadRequests } = useReceivedRequests();
+    const { receivedRequests, acceptRequest, rejectRequest } = useReceivedRequests();
+    const { notifications, loading, unreadCount, markAllRead, refresh } = useDbNotifications();
     const [refreshing, setRefreshing] = useState(false);
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await loadRequests();
+        await refresh();
         setRefreshing(false);
     };
 
-    const renderNotification = ({ item }: { item: any }) => {
-        const isRequest = item.status === 'pending';
-        
-        return (
-            <TouchableOpacity 
-                style={styles.notificationItem}
-                onPress={() => {
-                    Haptics.selectionAsync();
-                    if (isRequest) {
-                        router.push('/friend-requests');
-                    }
-                }}
-            >
-                <View style={styles.avatarContainer}>
-                    <Image
-                        source={{ uri: item.sender?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.sender?.username || 'User')}&backgroundColor=F68537` }}
-                        style={styles.avatar}
+    // Pending friend requests (not yet accepted/rejected)
+    const pendingRequests = receivedRequests.filter(r => r.status === 'pending');
+
+    const renderFriendRequest = ({ item }: { item: any }) => (
+        <View style={styles.notificationItem}>
+            <View style={styles.avatarContainer}>
+                <Image
+                    source={{ uri: item.sender?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.sender?.username || 'User')}&backgroundColor=F68537` }}
+                    style={styles.avatar}
+                />
+                <View style={[styles.iconBadge, { backgroundColor: '#3B82F6' }]}>
+                    <Ionicons name="person-add" size={10} color="white" />
+                </View>
+            </View>
+
+            <View style={styles.content}>
+                <Text style={styles.message}>
+                    <Text style={styles.username}>{item.sender?.username || 'Someone'}</Text>
+                    {' ne aapko friend request bheji!'}
+                </Text>
+                <Text style={styles.time}>
+                    {item.created_at ? format(new Date(item.created_at), 'MMM d, h:mm a') : 'Recently'}
+                </Text>
+                <View style={styles.actionRow}>
+                    <TouchableOpacity
+                        style={styles.acceptBtn}
+                        onPress={() => {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            acceptRequest(item.id, item.sender_id);
+                        }}
+                    >
+                        <Text style={styles.acceptBtnText}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.rejectBtn}
+                        onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            rejectRequest(item.id);
+                        }}
+                    >
+                        <Text style={styles.rejectBtnText}>Decline</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
+    );
+
+    const renderNotification = ({ item }: { item: any }) => (
+        <TouchableOpacity
+            style={[styles.notificationItem, !item.is_read && styles.unreadItem]}
+            onPress={() => {
+                Haptics.selectionAsync();
+                if (item.type === 'friend_request') router.push('/friend-requests');
+            }}
+        >
+            <View style={styles.avatarContainer}>
+                <Image
+                    source={{ uri: item.sender?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.sender?.username || 'User')}&backgroundColor=F68537` }}
+                    style={styles.avatar}
+                />
+                <View style={styles.iconBadge}>
+                    <Ionicons
+                        name={item.type === 'friend_request' ? 'person-add' : item.type === 'friend_accepted' ? 'people' : 'notifications'}
+                        size={10}
+                        color="white"
                     />
-                    <View style={styles.iconBadge}>
-                        <Ionicons 
-                            name={isRequest ? "person-add" : "notifications"} 
-                            size={10} 
-                            color="white" 
-                        />
-                    </View>
                 </View>
+            </View>
 
-                <View style={styles.content}>
-                    <Text style={styles.message}>
-                        <Text style={styles.username}>{item.sender?.username || 'Someone'}</Text>
-                        {isRequest ? ' sent you a friend request.' : ' sent you a notification.'}
-                    </Text>
-                    <Text style={styles.time}>
-                        {item.created_at ? format(new Date(item.created_at), 'MMM d, h:mm a') : 'Recently'}
-                    </Text>
-                </View>
+            <View style={styles.content}>
+                <Text style={styles.message}>{item.message || 'New notification'}</Text>
+                <Text style={styles.time}>
+                    {item.created_at ? format(new Date(item.created_at), 'MMM d, h:mm a') : 'Recently'}
+                </Text>
+            </View>
 
-                {isRequest && (
-                    <View style={styles.unreadDot} />
-                )}
-            </TouchableOpacity>
-        );
-    };
+            {!item.is_read && <View style={styles.unreadDot} />}
+        </TouchableOpacity>
+    );
+
+    // Combine: pehle pending requests, phir notifications
+    const combinedData: any[] = [
+        ...pendingRequests.map(r => ({ ...r, _type: 'friend_request_pending' })),
+        ...notifications.map(n => ({ ...n, _type: 'notification' }))
+    ];
 
     return (
         <View style={styles.container}>
@@ -70,19 +114,24 @@ export default function NotificationsScreen() {
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                         <Ionicons name="arrow-back" size={24} color="#1F2937" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Notifications</Text>
-                    <TouchableOpacity 
-                        onPress={() => router.push('/notification-settings')}
-                        style={styles.settingsButton}
-                    >
-                        <Ionicons name="settings-outline" size={24} color="#F68537" />
-                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>
+                        Notifications {unreadCount > 0 ? `(${unreadCount})` : ''}
+                    </Text>
+                    {unreadCount > 0 && (
+                        <TouchableOpacity onPress={markAllRead} style={styles.settingsButton}>
+                            <Text style={{ color: '#F68537', fontWeight: '600', fontSize: 13 }}>Mark all read</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 <FlatList
-                    data={receivedRequests}
+                    data={combinedData}
                     keyExtractor={(item) => item.id}
-                    renderItem={renderNotification}
+                    renderItem={({ item }) =>
+                        item._type === 'friend_request_pending'
+                            ? renderFriendRequest({ item })
+                            : renderNotification({ item })
+                    }
                     contentContainerStyle={{ paddingBottom: 20 }}
                     refreshControl={
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />
@@ -103,10 +152,7 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#FFFDFB',
-    },
+    container: { flex: 1, backgroundColor: '#FFFDFB' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -116,34 +162,20 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
-    backButton: {
-        padding: 8,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1F2937',
-    },
-    settingsButton: {
-        padding: 8,
-    },
+    backButton: { padding: 8 },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
+    settingsButton: { padding: 8 },
     notificationItem: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         padding: 16,
         backgroundColor: 'white',
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
-    avatarContainer: {
-        position: 'relative',
-        marginRight: 12,
-    },
-    avatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-    },
+    unreadItem: { backgroundColor: '#FFF7ED' },
+    avatarContainer: { position: 'relative', marginRight: 12 },
+    avatar: { width: 48, height: 48, borderRadius: 24 },
     iconBadge: {
         position: 'absolute',
         bottom: 0,
@@ -157,30 +189,33 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    content: {
-        flex: 1,
-    },
-    message: {
-        fontSize: 14,
-        color: '#374151',
-        lineHeight: 20,
-    },
-    username: {
-        fontWeight: 'bold',
-        color: '#1F2937',
-    },
-    time: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        marginTop: 4,
-    },
+    content: { flex: 1 },
+    message: { fontSize: 14, color: '#374151', lineHeight: 20 },
+    username: { fontWeight: 'bold', color: '#1F2937' },
+    time: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
     unreadDot: {
         width: 8,
         height: 8,
         borderRadius: 4,
         backgroundColor: '#F68537',
         marginLeft: 12,
+        marginTop: 6,
     },
+    actionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+    acceptBtn: {
+        backgroundColor: '#F68537',
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    acceptBtnText: { color: 'white', fontWeight: '700', fontSize: 13 },
+    rejectBtn: {
+        backgroundColor: '#F3F4F6',
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    rejectBtnText: { color: '#6B7280', fontWeight: '600', fontSize: 13 },
     emptyContainer: {
         flex: 1,
         alignItems: 'center',
@@ -197,18 +232,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: 20,
     },
-    emptyTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#374151',
-        marginBottom: 8,
-    },
-    emptySubtitle: {
-        fontSize: 14,
-        color: '#9CA3AF',
-        textAlign: 'center',
-        lineHeight: 20,
-    }
+    emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#374151', marginBottom: 8 },
+    emptySubtitle: { fontSize: 14, color: '#9CA3AF', textAlign: 'center', lineHeight: 20 },
 });
 
 export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

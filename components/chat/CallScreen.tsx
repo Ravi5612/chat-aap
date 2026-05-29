@@ -7,6 +7,14 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useWindowDimensions } from 'react-native';
+import { useCallActions } from '@/hooks/useCallActions';
+import { CallEndedOverlay } from './CallScreenComponents';
+
+const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
 
 const CallControls = ({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: any) => {
     if (callState === 'incoming') {
@@ -95,6 +103,43 @@ export default function CallScreen({
             offsetX.value = translateX.value;
             offsetY.value = translateY.value;
         });
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateX: withSpring(translateX.value, { damping: 15 }) },
+            { translateY: withSpring(translateY.value, { damping: 15 }) },
+        ],
+    }));
+
+    const renderRemoteVideos = () => {
+        if (remoteUids.length === 0) {
+            return (
+                <View style={styles.placeholderContainer}>
+                    <View style={styles.avatarContainer}>
+                        <Image source={{ uri: friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537` }} style={styles.fullImage} />
+                    </View>
+                    <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
+                    <Text style={styles.callStatus}>
+                        {callState === 'outgoing' ? 'Calling...' : callState === 'ringing' ? 'Ringing...' : callState === 'incoming' ? 'Incoming Call...' : `On Call (${remoteUids.length} joined)`}
+                    </Text>
+                </View>
+            );
+        }
+        if (isGroup) {
+            return (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '100%', height: '100%', padding: 2 }}>
+                    {remoteUids.map((uid) => (
+                        <View key={uid} style={{ width: '50%', height: '50%', padding: 2 }}>
+                            {isEngineReady && <AgoraVideoView uid={uid} style={{ width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#1F2937' }} channelId={channelId} />}
+                        </View>
+                    ))}
+                </View>
+            );
+        }
+        return isEngineReady
+            ? <AgoraVideoView uid={remoteUids[0]} style={{ width: '100%', height: '100%' }} channelId={channelId} />
+            : <View style={{ width: '100%', height: '100%', backgroundColor: '#111827' }} />;
+    };
 
     // Agora RTC
     const { joined, remoteUids, connectionStatus, isMuted, isVideoOff, isSpeakerphone,
@@ -248,10 +293,19 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     },
     remoteStatusText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
+    placeholderContainer: { alignItems: 'center' },
+    avatarContainer: {
+        width: 128, height: 128, borderRadius: 64, borderWidth: 4,
+        borderColor: '#F68537', overflow: 'hidden', marginBottom: 16,
+        backgroundColor: '#1F2937', alignItems: 'center', justifyContent: 'center',
+    },
+    fullImage: { width: '100%', height: '100%' },
+    friendName: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 8 },
+    callStatus: { color: '#F68537', fontSize: 16, fontWeight: '600' },
     pipContainer: {
         position: 'absolute', top: 60, right: 20, width: 100, height: 150,
         borderRadius: 16, overflow: 'hidden', borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.2)', zIndex: 50, elevation: 10, backgroundColor: '#1F2937',
+        borderColor: 'rgba(255,255,255,0.2)', zIndex: 80, elevation: 15, backgroundColor: '#1F2937',
     },
     pipVideo: { width: '100%', height: '100%' },
     timerContainer: {
@@ -264,4 +318,38 @@ const styles = StyleSheet.create({
     timerText: { color: 'white', fontSize: 14, fontWeight: '600' },
     statusIndicator: { position: 'absolute', top: 60, right: 24 },
     statusText: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
+    controlsWrapper: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingBottom: 48,
+        paddingTop: 24,
+        backgroundColor: '#F68537',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        zIndex: 60,
+    },
+    controlsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 20,
+        paddingHorizontal: 24,
+    },
+    controlButton: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    largeButton: {
+        width: 68,
+        height: 68,
+        borderRadius: 34,
+    },
+    dangerButton: { backgroundColor: '#EF4444' },
+    successButton: { backgroundColor: '#22C55E' },
 });

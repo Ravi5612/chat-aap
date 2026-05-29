@@ -138,9 +138,9 @@ export function useChatActions(
 
                 const formData = new FormData();
                 formData.append('file', { uri: tempUri, type: 'image/jpeg', name: 'wallpaper.jpg' } as any);
-                formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+                formData.append('upload_preset', 'lrkgj8fj');
                 
-                const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+                const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/do6lyfmn4/image/upload`, { method: 'POST', body: formData });
                 const cloudData = await cloudRes.json();
                 const remoteUrl = cloudData.secure_url;
 

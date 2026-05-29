@@ -11,6 +11,7 @@ export default function LoginPage() {
         email, setEmail,
         phone, setPhone,
         password, setPassword,
+        confirmPassword, setConfirmPassword,
         showPassword, setShowPassword,
         isSignUp,
         isForgotPassword, setIsForgotPassword,
@@ -39,6 +40,7 @@ export default function LoginPage() {
                         email={email} setEmail={setEmail}
                         phone={phone} setPhone={setPhone}
                         password={password} setPassword={setPassword}
+                        confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
                         showPassword={showPassword} setShowPassword={setShowPassword}
                         resetEmail={resetEmail} setResetEmail={setResetEmail}
                         onForgotPassword={() => setIsForgotPassword(true)}
@@ -57,7 +59,7 @@ export default function LoginPage() {
                         )}
                     </TouchableOpacity>
 
-                    <Text style={{ textAlign: 'center', marginTop: 10, color: '#F68537', fontSize: 12, fontWeight: 'bold' }}>
+                    <Text style={{ textAlign: 'center', marginTop: 10, color: '#FF1493', fontSize: 12, fontWeight: 'bold' }}>
                         OTA Update: Magic Successful! ✨ (v1.1.0)
                     </Text>
 
@@ -67,7 +69,7 @@ export default function LoginPage() {
                     >
                         <Text style={{ color: '#6B7280', fontSize: 15 }}>
                             {toggleLabel}
-                            <Text style={{ color: '#F68537', fontWeight: 'bold' }}>
+                            <Text style={{ color: '#FF1493', fontWeight: 'bold' }}>
                                 {toggleAction}
                             </Text>
                         </Text>

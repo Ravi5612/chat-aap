@@ -22,19 +22,52 @@ export async function fetchAndFormatFriendsData(
         if (lb && lb.length > 0) localBlocked = lb;
     }
 
-    // 2. Fetch Blocked Users & Friendships
-    const [blockedRes, friendshipsSent] = await Promise.all([
+    // 2. Fetch Blocked Users & Friendships (Without fragile foreign key joins)
+    const [blockedRes, friendshipsRes] = await Promise.all([
         supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId),
-        supabase.from('friendships').select(`is_favorite, is_archived, is_locked, friend_id, friend:profiles!friendships_friend_id_fkey(id, username, email, phone, avatar_url, is_online, show_email, show_phone)`).eq('user_id', userId)
+        supabase.from('friendships').select('is_favorite, is_archived, is_locked, user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`)
     ]);
+    if (friendshipsRes.error) console.error('[DEBUG] friendships error:', friendshipsRes.error);
 
     const blockedIds = blockedRes.data?.map(b => b.blocked_id) || localBlocked;
     if (db && blockedRes.data) {
         await syncLocalBlocks(db, userId, blockedIds);
     }
 
-    const friendships = (friendshipsSent.data || []).map(f => ({ ...f, type: 'sent' }));
-    const friendIds = friendships.map(f => f.friend_id);
+    const friendshipsData = friendshipsRes.data || [];
+    console.log('[DEBUG] friendshipsData:', friendshipsData);
+    
+    const friendIdsMap = new Map();
+    
+    // Deduplicate and prioritize current user's preferences
+    friendshipsData.forEach((f: any) => {
+        if (f.user_id === userId) {
+            friendIdsMap.set(f.friend_id, f);
+        } else if (f.friend_id === userId && !friendIdsMap.has(f.user_id)) {
+            friendIdsMap.set(f.user_id, f);
+        }
+    });
+
+    const friendIds = Array.from(friendIdsMap.keys());
+    console.log('[DEBUG] friendIds:', friendIds);
+    let friendships: any[] = [];
+    
+    if (friendIds.length > 0) {
+        const { data: friendProfiles, error: fpError } = await supabase
+            .from('profiles')
+            .select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download')
+            .in('id', friendIds);
+            
+        console.log('[DEBUG] friendProfiles:', friendProfiles, fpError);
+            
+        if (friendProfiles) {
+            friendships = friendProfiles.map(p => {
+                const f = friendIdsMap.get(p.id);
+                return { ...f, friend: p };
+            });
+        }
+    }
+
     const allRelevantIds = [userId, ...friendIds];
 
     // 3. Statuses and other items
@@ -150,7 +183,7 @@ export async function fetchAndFormatFriendsData(
     const missingUserIds = Array.from(recentChatUserIds).filter(id => !friendIds.includes(id) && id !== userId);
     let missingProfiles: any[] = [];
     if (missingUserIds.length > 0) {
-        const { data } = await supabase.from('profiles').select('id, username, email, phone, avatar_url, is_online, show_email, show_phone').in('id', missingUserIds);
+        const { data } = await supabase.from('profiles').select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download').in('id', missingUserIds);
         if (data) missingProfiles = data;
     }
 
@@ -185,7 +218,11 @@ export async function fetchAndFormatFriendsData(
             isFavorite: !!isFavorite,
             isArchived: !!isArchived,
             isBlocked: blockedIds.includes(otherProfile.id),
-            isLocked: !!isLocked
+            isLocked: !!isLocked,
+            friend: {
+                allow_screenshot: otherProfile.allow_screenshot,
+                allow_status_download: otherProfile.allow_status_download
+            }
         };
     }).filter(Boolean);
 
@@ -271,12 +308,12 @@ export async function fetchAndFormatFriendsData(
         });
 
     if (db) {
-        // Save the valid ones (excluding self)
-        sortedItems.forEach(item => {
+        // Save the valid ones (excluding self) sequentially to avoid SQLite locks
+        for (const item of sortedItems) {
             if (item.id !== userId) {
-                saveLocalConversation(db, item);
+                await saveLocalConversation(db, item);
             }
-        });
+        }
         
         // Ensure current user is never in the local conversations table
         try {

@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -9,40 +9,8 @@ import React from 'react';
 
 export default function PrivacySafetyScreen() {
     const router = useRouter();
+    const { profile, updateProfile } = useAuthStore();
     const { blockedUserIds } = useFriendsStore();
-
-    const tips = [
-        {
-            title: "Protect Your Account",
-            desc: "Never share your password or verification codes with anyone. ChatWarriors will never ask for your password via chat or email.",
-            icon: "shield-lock-outline",
-            color: "#F68537"
-        },
-        {
-            title: "Control Visibility",
-            desc: "Use the 'Edit Profile' section to hide your email, phone number, or online status from people who aren't in your friend list.",
-            icon: "eye-off-outline",
-            color: "#10B981"
-        },
-        {
-            title: "Safe Interactions",
-            desc: "Only accept friend requests from people you know and trust. Block and report any user who makes you feel uncomfortable.",
-            icon: "account-check-outline",
-            color: "#3B82F6"
-        },
-        {
-            title: "Beware of Scams",
-            desc: "Don't click on suspicious links or download files from unknown senders. Scammers often use 'urgent' messages to trick you.",
-            icon: "alert-octagon-outline",
-            color: "#EF4444"
-        },
-        {
-            title: "Report Issues",
-            desc: "If you notice any suspicious activity on your account, reach out to our support team immediately.",
-            icon: "help-buoy-outline",
-            color: "#8B5CF6"
-        }
-    ];
 
     return (
         <View style={{ flex: 1, backgroundColor: '#FFFDFB' }}>
@@ -80,24 +48,118 @@ export default function PrivacySafetyScreen() {
                             <Text style={styles.tipTitle}>Nearby Discovery</Text>
                             <Text style={styles.tipDesc}>Get notified when other warriors are within 1KM of you.</Text>
                         </View>
-                        <TouchableOpacity 
-                            onPress={async () => {
-                                const newValue = !useAuthStore.getState().profile?.nearby_notifications_enabled;
-                                await useAuthStore.getState().updateProfile({
-                                    nearby_notifications_enabled: newValue
-                                });
+                        <Switch 
+                            value={profile?.nearby_notifications_enabled ?? false}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ nearby_notifications_enabled: newValue });
                             }}
+                            trackColor={{ false: '#E5E7EB', true: '#D1FAE5' }}
+                            thumbColor={profile?.nearby_notifications_enabled ? '#10B981' : '#FFFFFF'}
                             style={{ alignSelf: 'center' }}
-                        >
-                            <Ionicons 
-                                name={useAuthStore.getState().profile?.nearby_notifications_enabled ? "toggle" : "toggle-outline"} 
-                                size={44} 
-                                color={useAuthStore.getState().profile?.nearby_notifications_enabled ? "#10B981" : "#D1D5DB"} 
-                            />
-                        </TouchableOpacity>
+                        />
                     </View>
 
                     <Text style={styles.sectionLabel}>PRIVACY SETTINGS</Text>
+
+                    {/* Show Email */}
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
+                            <Ionicons name="mail-outline" size={26} color="#F68537" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Show Email</Text>
+                            <Text style={styles.tipDesc}>Display your email address to your friends.</Text>
+                        </View>
+                        <Switch 
+                            value={profile?.show_email ?? false}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ show_email: newValue });
+                            }}
+                            trackColor={{ false: '#E5E7EB', true: '#FFEDD5' }}
+                            thumbColor={profile?.show_email ? '#F68537' : '#FFFFFF'}
+                            style={{ alignSelf: 'center' }}
+                        />
+                    </View>
+                    
+                    {/* Show Phone */}
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#3B82F610' }]}>
+                            <Ionicons name="call-outline" size={26} color="#3B82F6" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Show Phone Number</Text>
+                            <Text style={styles.tipDesc}>Display your phone number to your friends.</Text>
+                        </View>
+                        <Switch 
+                            value={profile?.show_phone ?? false}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ show_phone: newValue });
+                            }}
+                            trackColor={{ false: '#E5E7EB', true: '#DBEAFE' }}
+                            thumbColor={profile?.show_phone ? '#3B82F6' : '#FFFFFF'}
+                            style={{ alignSelf: 'center' }}
+                        />
+                    </View>
+
+                    {/* Show Bio */}
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#EC489910' }]}>
+                            <Ionicons name="document-text-outline" size={26} color="#EC4899" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Show Bio</Text>
+                            <Text style={styles.tipDesc}>Let others read your bio/about me section.</Text>
+                        </View>
+                        <Switch 
+                            value={profile?.show_bio ?? true}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ show_bio: newValue });
+                            }}
+                            trackColor={{ false: '#E5E7EB', true: '#FCE7F3' }}
+                            thumbColor={profile?.show_bio ? '#EC4899' : '#FFFFFF'}
+                            style={{ alignSelf: 'center' }}
+                        />
+                    </View>
+
+                    {/* Show Online Status */}
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#10B98110' }]}>
+                            <Ionicons name="radio-outline" size={26} color="#10B981" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Show Online Status</Text>
+                            <Text style={styles.tipDesc}>Let others see when you are active on ChatWarriors.</Text>
+                        </View>
+                        <Switch 
+                            value={profile?.is_online ?? true}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ is_online: newValue });
+                            }}
+                            trackColor={{ false: '#E5E7EB', true: '#D1FAE5' }}
+                            thumbColor={profile?.is_online ? '#10B981' : '#FFFFFF'}
+                            style={{ alignSelf: 'center' }}
+                        />
+                    </View>
+
+                    {/* Allow Status Download */}
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#F59E0B10' }]}>
+                            <Ionicons name="download-outline" size={26} color="#F59E0B" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Allow Status Download</Text>
+                            <Text style={styles.tipDesc}>Allow your friends to download your status updates.</Text>
+                        </View>
+                        <Switch 
+                            value={profile?.allow_status_download ?? false}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ allow_status_download: newValue });
+                            }}
+                            trackColor={{ false: '#E5E7EB', true: '#FEF3C7' }}
+                            thumbColor={profile?.allow_status_download ? '#F59E0B' : '#FFFFFF'}
+                            style={{ alignSelf: 'center' }}
+                        />
+                    </View>
 
                     <View style={styles.tipCard}>
                         <View style={[styles.iconContainer, { backgroundColor: '#8B5CF610' }]}>
@@ -107,23 +169,15 @@ export default function PrivacySafetyScreen() {
                             <Text style={styles.tipTitle}>Allow Screenshots</Text>
                             <Text style={styles.tipDesc}>Let others take screenshots of your chat. We'll still notify you.</Text>
                         </View>
-                        <TouchableOpacity 
-                            onPress={async () => {
-                                // Default to true if undefined
-                                const current = useAuthStore.getState().profile?.allow_screenshot;
-                                const newValue = current === false ? true : false;
-                                await useAuthStore.getState().updateProfile({
-                                    allow_screenshot: newValue
-                                });
+                        <Switch 
+                            value={profile?.allow_screenshot ?? true}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ allow_screenshot: newValue });
                             }}
+                            trackColor={{ false: '#E5E7EB', true: '#EDE9FE' }}
+                            thumbColor={profile?.allow_screenshot ? '#8B5CF6' : '#FFFFFF'}
                             style={{ alignSelf: 'center' }}
-                        >
-                            <Ionicons 
-                                name={useAuthStore.getState().profile?.allow_screenshot !== false ? "toggle" : "toggle-outline"} 
-                                size={44} 
-                                color={useAuthStore.getState().profile?.allow_screenshot !== false ? "#8B5CF6" : "#D1D5DB"} 
-                            />
-                        </TouchableOpacity>
+                        />
                     </View>
 
                     <Text style={styles.sectionLabel}>ACCOUNT SECURITY</Text>
@@ -157,27 +211,6 @@ export default function PrivacySafetyScreen() {
                             <Text style={styles.badgeText}>{blockedUserIds.length}</Text>
                         </View>
                         <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center', marginLeft: 8 }} />
-                    </TouchableOpacity>
-
-                    <Text style={styles.sectionLabel}>SECURITY TIPS</Text>
-
-                    {tips.map((tip, index) => (
-                        <View key={index} style={styles.tipCard}>
-                            <View style={[styles.iconContainer, { backgroundColor: tip.color + '10' }]}>
-                                <MaterialCommunityIcons name={tip.icon as any} size={26} color={tip.color} />
-                            </View>
-                            <View style={styles.tipContent}>
-                                <Text style={styles.tipTitle}>{tip.title}</Text>
-                                <Text style={styles.tipDesc}>{tip.desc}</Text>
-                            </View>
-                        </View>
-                    ))}
-
-                    <TouchableOpacity
-                        style={styles.blockButton}
-                        onPress={() => Alert.alert("Support", "Support feature coming soon!")}
-                    >
-                        <Text style={styles.blockButtonText}>Contact Support</Text>
                     </TouchableOpacity>
 
                     <View style={{ height: 40 }} />

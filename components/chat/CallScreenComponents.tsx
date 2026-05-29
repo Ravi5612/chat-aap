@@ -27,7 +27,6 @@ export function CallPlaceholder({ friend, callState, remoteUids }: { friend: any
     );
 }
 
-// Overlay shown when call has ended
 export function CallEndedOverlay({ friend, endReason, onRetry, onGoToChat }: {
     friend: any; endReason?: string; onRetry: () => void; onGoToChat: () => void;
 }) {
@@ -41,20 +40,21 @@ export function CallEndedOverlay({ friend, endReason, onRetry, onGoToChat }: {
                 <Text style={[styles.callStatus, { color: '#EF4444', marginTop: 12 }]}>
                     {endReason || 'Call Ended'}
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 20, marginTop: 40 }}>
-                    <TouchableOpacity style={{ alignItems: 'center' }} onPress={onRetry}>
-                        <View style={styles.actionBtn}>
-                            <Ionicons name="repeat" size={28} color="white" />
-                        </View>
-                        <Text style={styles.actionLabel}>Retry</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ alignItems: 'center' }} onPress={onGoToChat}>
-                        <View style={[styles.actionBtn, { backgroundColor: '#3B82F6' }]}>
-                            <Ionicons name="chatbubble" size={24} color="white" />
-                        </View>
-                        <Text style={styles.actionLabel}>Message</Text>
-                    </TouchableOpacity>
-                </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 40, position: 'absolute', bottom: 80, width: '100%', justifyContent: 'center' }}>
+                <TouchableOpacity style={{ alignItems: 'center' }} onPress={onRetry}>
+                    <View style={[styles.actionBtn, { backgroundColor: '#F68537', width: 64, height: 64, borderRadius: 32 }]}>
+                        <Ionicons name="call" size={32} color="white" />
+                    </View>
+                    <Text style={[styles.actionLabel, { marginTop: 8 }]}>Call Again</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ alignItems: 'center' }} onPress={onGoToChat}>
+                    <View style={[styles.actionBtn, { backgroundColor: '#F68537', width: 64, height: 64, borderRadius: 32 }]}>
+                        <Ionicons name="chatbubble" size={32} color="white" />
+                    </View>
+                    <Text style={[styles.actionLabel, { marginTop: 8 }]}>Message</Text>
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     fullImage: { width: '100%', height: '100%' },
     friendName: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 8 },
     callStatus: { color: '#F68537', fontSize: 16, fontWeight: '600' },
-    endedOverlay: { backgroundColor: '#111827', zIndex: 1000 },
+    endedOverlay: { backgroundColor: '#111827', zIndex: 1000, justifyContent: 'center', alignItems: 'center' },
     actionBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#4B5563', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
     actionLabel: { color: 'white', fontSize: 13 },
     fullVideo: { width: '100%', height: '100%' },

@@ -130,16 +130,15 @@ export function useStatusPost(
                         // Self
                         const { data: myProfile } = await supabase.from('profiles').select('public_key').eq('id', user.id).single();
                         if (myProfile?.public_key) {
-                            const myEnc = await encryptKeyWithSharedSecret(statusKey, myProfile.public_key);
+                            const myEnc = await encryptKeyWithSharedSecret(statusKey, myProfile.public_key, user.id);
                             if (myEnc) encryptedKeys[user.id] = myEnc;
-                        }
-                        
-                        // Friends
-                        if (viewerProfiles) {
-                            for (const p of viewerProfiles) {
-                                if (p.public_key) {
-                                    const enc = await encryptKeyWithSharedSecret(statusKey, p.public_key);
-                                    if (enc) encryptedKeys[p.id] = enc;
+
+                            if (viewerProfiles && viewerProfiles.length > 0) {
+                                for (const p of viewerProfiles) {
+                                    if (p.public_key) {
+                                        const enc = await encryptKeyWithSharedSecret(statusKey, p.public_key, user.id);
+                                        if (enc) encryptedKeys[p.id] = enc;
+                                    }
                                 }
                             }
                         }

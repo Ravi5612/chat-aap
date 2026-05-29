@@ -24,11 +24,7 @@ export default function EditProfileScreen() {
         bio: profile?.bio || '',
         avatar_url: profile?.avatar_url || '',
         gender: profile?.gender || '',
-        show_email: profile?.show_email ?? false,
-        show_phone: profile?.show_phone ?? false,
-        show_bio: profile?.show_bio ?? true,
-        is_online: profile?.is_online ?? true,
-        allow_status_download: profile?.allow_status_download ?? false
+        show_bio: profile?.show_bio ?? true
     });
 
     useEffect(() => {
@@ -72,10 +68,10 @@ export default function EditProfileScreen() {
 
             const formData = new FormData();
             formData.append('file', { uri: asset.uri, type: asset.mimeType || 'image/jpeg', name: fileName } as any);
-            formData.append('upload_preset', process.env.VITE_CLOUDINARY_UPLOAD_PRESET || '');
+            formData.append('upload_preset', 'lrkgj8fj');
             formData.append('public_id', `avatar_${userId}`);
 
-            const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+            const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/do6lyfmn4/image/upload`, {
                 method: 'POST',
                 body: formData
             });
@@ -119,11 +115,8 @@ export default function EditProfileScreen() {
             phone: formData.phone,
             bio: formData.bio,
             gender: formData.gender || null,
-            show_email: formData.show_email,
             show_phone: formData.show_phone,
-            show_bio: formData.show_bio,
-            is_online: formData.is_online,
-            allow_status_download: formData.allow_status_download
+            show_bio: formData.show_bio
         });
 
         if (success) {
@@ -199,16 +192,6 @@ export default function EditProfileScreen() {
                         <View>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 4 }}>
                                 <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase' }}>Phone Number</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <Text style={{ fontSize: 12, color: '#6B7280' }}>Visible to friends</Text>
-                                    <Switch
-                                        value={formData.show_phone}
-                                        onValueChange={() => toggleSwitch('show_phone')}
-                                        trackColor={{ false: '#E5E7EB', true: '#FCD34D' }}
-                                        thumbColor={formData.show_phone ? '#F68537' : '#FFFFFF'}
-                                        style={{ transform: [{ scale: 0.8 }] }}
-                                    />
-                                </View>
                             </View>
                             <TextInput
                                 style={{ backgroundColor: 'white', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', fontSize: 16, color: '#1F2937' }}
@@ -223,16 +206,6 @@ export default function EditProfileScreen() {
                         <View>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 4 }}>
                                 <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase' }}>Bio / About Me</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <Text style={{ fontSize: 12, color: '#6B7280' }}>Visible to friends</Text>
-                                    <Switch
-                                        value={formData.show_bio}
-                                        onValueChange={() => toggleSwitch('show_bio')}
-                                        trackColor={{ false: '#E5E7EB', true: '#FCD34D' }}
-                                        thumbColor={formData.show_bio ? '#F68537' : '#FFFFFF'}
-                                        style={{ transform: [{ scale: 0.8 }] }}
-                                    />
-                                </View>
                             </View>
                             <TextInput
                                 style={{ backgroundColor: 'white', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', fontSize: 16, color: '#1F2937', height: 100 }}
@@ -281,54 +254,6 @@ export default function EditProfileScreen() {
                             </View>
                         </View>
 
-                        {/* Other Privacy Settings */}
-                        <View style={{ marginTop: 8 }}>
-                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 16, paddingLeft: 4 }}>Privacy & Visibility</Text>
-
-                            <View style={{ backgroundColor: 'white', borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 }}>
-                                {/* Show Email */}
-                                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' }}>
-                                    <View style={{ backgroundColor: '#FFF7ED', padding: 10, borderRadius: 12, marginRight: 16 }}>
-                                        <Ionicons name="mail-outline" size={22} color="#F68537" />
-                                    </View>
-                                    <Text style={{ flex: 1, fontSize: 16, color: '#374151', fontWeight: '600' }}>Show Email to Friends</Text>
-                                    <Switch
-                                        value={formData.show_email}
-                                        onValueChange={() => toggleSwitch('show_email')}
-                                        trackColor={{ false: '#E5E7EB', true: '#FCD34D' }}
-                                        thumbColor={formData.show_email ? '#F68537' : '#FFFFFF'}
-                                    />
-                                </View>
-
-                                {/* Online Status */}
-                                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' }}>
-                                    <View style={{ backgroundColor: '#ECFDF5', padding: 10, borderRadius: 12, marginRight: 16 }}>
-                                        <Ionicons name="radio-outline" size={22} color="#10B981" />
-                                    </View>
-                                    <Text style={{ flex: 1, fontSize: 16, color: '#374151', fontWeight: '600' }}>Show Online Status</Text>
-                                    <Switch
-                                        value={formData.is_online}
-                                        onValueChange={() => toggleSwitch('is_online')}
-                                        trackColor={{ false: '#E5E7EB', true: '#FCD34D' }}
-                                        thumbColor={formData.is_online ? '#F68537' : '#FFFFFF'}
-                                    />
-                                </View>
-
-                                {/* Status Download */}
-                                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}>
-                                    <View style={{ backgroundColor: '#FFFBEB', padding: 10, borderRadius: 12, marginRight: 16 }}>
-                                        <Ionicons name="download-outline" size={22} color="#F59E0B" />
-                                    </View>
-                                    <Text style={{ flex: 1, fontSize: 16, color: '#374151', fontWeight: '600' }}>Allow Status Download</Text>
-                                    <Switch
-                                        value={formData.allow_status_download}
-                                        onValueChange={() => toggleSwitch('allow_status_download')}
-                                        trackColor={{ false: '#E5E7EB', true: '#FCD34D' }}
-                                        thumbColor={formData.allow_status_download ? '#F68537' : '#FFFFFF'}
-                                    />
-                                </View>
-                            </View>
-                        </View>
                     </View>
                 </ScrollView>
             </SafeAreaView>

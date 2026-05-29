@@ -4,6 +4,7 @@ import { getMediaCache, saveMediaCache } from '@/lib/localDb';
 import { useDbStore } from '@/store/useDbStore';
 import { useChatStore } from '@/store/useChatStore';
 import { decryptFileBase64 } from '@/utils/uploadHelper';
+import { Buffer } from 'buffer';
 
 export function useMessageMediaCache(message: any, imageUrl: string | null, voiceUri: string | null, documentUrl: string | null = null, customKey?: Uint8Array | null) {
     const isLocalImageInitial = imageUrl?.startsWith('file://') || imageUrl?.startsWith('content://') || imageUrl?.startsWith('file:/') || imageUrl?.startsWith('data:image/');
@@ -19,9 +20,25 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
             const { db } = useDbStore.getState();
             if (!db) return;
 
-            const isLocalImage = imageUrl?.startsWith('file://') || imageUrl?.startsWith('content://') || imageUrl?.startsWith('file:/') || imageUrl?.startsWith('data:image/');
-            if (imageUrl && !isLocalImage) {
-                const cached = await getMediaCache(db, imageUrl);
+            const parseMediaUrl = (url: string | null) => {
+                if (url && url.startsWith('{')) {
+                    try {
+                        const payload = JSON.parse(url);
+                        if (payload.url && payload.mediaKey) {
+                            return { actualUrl: payload.url, mediaKey: new Uint8Array(Buffer.from(payload.mediaKey, 'base64')) };
+                        }
+                    } catch (e) {}
+                }
+                return { actualUrl: url, mediaKey: null };
+            };
+
+            const { actualUrl: parsedImageUrl, mediaKey: imageMediaKey } = parseMediaUrl(imageUrl);
+            const { actualUrl: parsedVoiceUrl, mediaKey: voiceMediaKey } = parseMediaUrl(voiceUri);
+            const { actualUrl: parsedDocumentUrl, mediaKey: documentMediaKey } = parseMediaUrl(documentUrl);
+
+            const isLocalImage = parsedImageUrl?.startsWith('file://') || parsedImageUrl?.startsWith('content://') || parsedImageUrl?.startsWith('file:/') || parsedImageUrl?.startsWith('data:image/');
+            if (parsedImageUrl && !isLocalImage) {
+                const cached = await getMediaCache(db, parsedImageUrl);
                 if (cached) {
                     if (isMounted) {
                         setLocalImageUrl(cached);
@@ -29,25 +46,25 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                     }
                 } else {
                     try {
-                        const filename = (typeof imageUrl === 'string' ? imageUrl.split('/').pop() : null) || 'media.jpg';
-                        const isE2EE = imageUrl.endsWith('.e2ee.txt');
-                        const localFileName = isE2EE ? filename.replace('.txt', '.jpg') : filename;
+                        const filename = (typeof parsedImageUrl === 'string' ? parsedImageUrl.split('/').pop() : null) || 'media.jpg';
+                        const isE2EE = !!imageMediaKey || parsedImageUrl.endsWith('.e2ee.txt');
+                        const localFileName = isE2EE ? filename.replace('.txt', '.jpg').replace('.bin', '.jpg') : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
                         
                         if (isE2EE) {
-                            const chatKey = customKey || useChatStore.getState().chatKey;
-                            if (chatKey) {
-                                const response = await fetch(imageUrl);
+                            const decryptKey = imageMediaKey || customKey || useChatStore.getState().chatKey;
+                            if (decryptKey) {
+                                const response = await fetch(parsedImageUrl);
                                 const encryptedText = await response.text();
-                                const base64 = await decryptFileBase64(encryptedText, chatKey);
+                                const base64 = await decryptFileBase64(encryptedText, decryptKey);
                                 await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-                                await saveMediaCache(db, imageUrl, localUri, 'image');
+                                await saveMediaCache(db, parsedImageUrl, localUri, 'image');
                                 if (isMounted) setLocalImageUrl(localUri);
                             }
                         } else {
-                            const download = await FileSystem.downloadAsync(imageUrl, localUri);
+                            const download = await FileSystem.downloadAsync(parsedImageUrl, localUri);
                             if (download.status === 200) {
-                                await saveMediaCache(db, imageUrl, download.uri, 'image');
+                                await saveMediaCache(db, parsedImageUrl, download.uri, 'image');
                                 if (isMounted) setLocalImageUrl(download.uri);
                             }
                         }
@@ -61,31 +78,31 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                 if (isMounted) setImageLoading(false);
             }
 
-            if (voiceUri && !voiceUri.startsWith('file://')) {
-                const cached = await getMediaCache(db, voiceUri);
+            if (parsedVoiceUrl && !parsedVoiceUrl.startsWith('file://')) {
+                const cached = await getMediaCache(db, parsedVoiceUrl);
                 if (cached) {
                     if (isMounted) setLocalVoiceUrl(cached);
                 } else {
                     try {
-                        const filename = (typeof voiceUri === 'string' ? voiceUri.split('/').pop() : null) || 'voice.m4a';
-                        const isE2EE = voiceUri.endsWith('.e2ee.txt');
-                        const localFileName = isE2EE ? filename.replace('.txt', '.m4a') : filename;
+                        const filename = (typeof parsedVoiceUrl === 'string' ? parsedVoiceUrl.split('/').pop() : null) || 'voice.m4a';
+                        const isE2EE = !!voiceMediaKey || parsedVoiceUrl.endsWith('.e2ee.txt');
+                        const localFileName = isE2EE ? filename.replace('.txt', '.m4a').replace('.bin', '.m4a') : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
 
                         if (isE2EE) {
-                            const chatKey = customKey || useChatStore.getState().chatKey;
-                            if (chatKey) {
-                                const response = await fetch(voiceUri);
+                            const decryptKey = voiceMediaKey || customKey || useChatStore.getState().chatKey;
+                            if (decryptKey) {
+                                const response = await fetch(parsedVoiceUrl);
                                 const encryptedText = await response.text();
-                                const base64 = await decryptFileBase64(encryptedText, chatKey);
+                                const base64 = await decryptFileBase64(encryptedText, decryptKey);
                                 await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-                                await saveMediaCache(db, voiceUri, localUri, 'audio');
+                                await saveMediaCache(db, parsedVoiceUrl, localUri, 'audio');
                                 if (isMounted) setLocalVoiceUrl(localUri);
                             }
                         } else {
-                            const download = await FileSystem.downloadAsync(voiceUri, localUri);
+                            const download = await FileSystem.downloadAsync(parsedVoiceUrl, localUri);
                             if (download.status === 200) {
-                                await saveMediaCache(db, voiceUri, download.uri, 'audio');
+                                await saveMediaCache(db, parsedVoiceUrl, download.uri, 'audio');
                                 if (isMounted) setLocalVoiceUrl(download.uri);
                             }
                         }
@@ -95,36 +112,36 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                 }
             }
 
-            if (documentUrl && !documentUrl.startsWith('file://')) {
-                const cached = await getMediaCache(db, documentUrl);
+            if (parsedDocumentUrl && !parsedDocumentUrl.startsWith('file://')) {
+                const cached = await getMediaCache(db, parsedDocumentUrl);
                 if (cached) {
                     if (isMounted) setLocalDocumentUrl(cached);
                 } else {
                     try {
-                        const filename = (typeof documentUrl === 'string' ? documentUrl.split('/').pop() : null) || 'doc.bin';
-                        const isE2EE = documentUrl.endsWith('.e2ee.txt');
+                        const filename = (typeof parsedDocumentUrl === 'string' ? parsedDocumentUrl.split('/').pop() : null) || 'doc.bin';
+                        const isE2EE = !!documentMediaKey || parsedDocumentUrl.endsWith('.e2ee.txt');
                         let ext = 'bin';
                         if (message?.file_name) {
                             const parts = message.file_name.split('.');
                             if (parts.length > 1) ext = parts[parts.length - 1];
                         }
-                        const localFileName = isE2EE ? filename.replace('.txt', `.${ext}`) : filename;
+                        const localFileName = isE2EE ? filename.replace('.txt', `.${ext}`).replace('.bin', `.${ext}`) : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
 
                         if (isE2EE) {
-                            const chatKey = customKey || useChatStore.getState().chatKey;
-                            if (chatKey) {
-                                const response = await fetch(documentUrl);
+                            const decryptKey = documentMediaKey || customKey || useChatStore.getState().chatKey;
+                            if (decryptKey) {
+                                const response = await fetch(parsedDocumentUrl);
                                 const encryptedText = await response.text();
-                                const base64 = await decryptFileBase64(encryptedText, chatKey);
+                                const base64 = await decryptFileBase64(encryptedText, decryptKey);
                                 await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-                                await saveMediaCache(db, documentUrl, localUri, 'document');
+                                await saveMediaCache(db, parsedDocumentUrl, localUri, 'document');
                                 if (isMounted) setLocalDocumentUrl(localUri);
                             }
                         } else {
-                            const download = await FileSystem.downloadAsync(documentUrl, localUri);
+                            const download = await FileSystem.downloadAsync(parsedDocumentUrl, localUri);
                             if (download.status === 200) {
-                                await saveMediaCache(db, documentUrl, download.uri, 'document');
+                                await saveMediaCache(db, parsedDocumentUrl, download.uri, 'document');
                                 if (isMounted) setLocalDocumentUrl(download.uri);
                             }
                         }

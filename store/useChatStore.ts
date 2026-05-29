@@ -1,6 +1,19 @@
 import { create } from 'zustand';
 import { uploadChatMessageMediaWithProgress } from '../utils/uploadHelper';
 import { useDbStore } from './useDbStore';
+import { decryptText, encryptText, getChatKey } from '@/utils/chatCrypto';
+import { saveToCache, getFromCache } from '@/lib/database';
+import { logErrorToDB } from '@/utils/errorLogger';
+import { supabase } from '@/lib/supabase';
+import { Alert } from 'react-native';
+import { 
+    getLocalMessages, 
+    saveLocalMessage, 
+    getChatClearTimestamp, 
+    getLocallyDeletedMessages, 
+    syncLedgerExpense, 
+    markMessageAsDeletedLocally 
+} from '@/lib/localDb';
 
 interface ChatState {
     messages: any[];
@@ -253,8 +266,13 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 const activeChatId = get().activeChatId;
                 if (activeChatId === friendId) {
-                    // Deduplicate by ID
-                    const uniqueMessages = Array.from(new Map(finalMessages.map(m => [m.id, m])).values());
+                    // Deduplicate by ID, preserving temp messages
+                    const pendingMsgs = get().messages.filter(m => String(m.id).startsWith('temp-'));
+                    const combined = [...pendingMsgs, ...finalMessages];
+                    const uniqueMessages = Array.from(new Map(combined.map(m => [m.id, m])).values());
+                    
+                    // Sort by created_at DESC so temp messages stay at bottom (index 0 usually, or keep original sort logic)
+                    uniqueMessages.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
                     set({
                         messages: uniqueMessages,
@@ -427,8 +445,10 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }
 
                 // ✅ Purane messages pehle, naye baad mein - Deduplicate by ID
-                const combinedMessages = [...filteredOlderMessages, ...messages].filter(m => m && m.id);
+                const pendingMsgs = get().messages.filter(m => String(m.id).startsWith('temp-'));
+                const combinedMessages = [...pendingMsgs, ...filteredOlderMessages, ...messages].filter(m => m && m.id);
                 const uniqueMessages = Array.from(new Map(combinedMessages.map(m => [m.id, m])).values());
+                uniqueMessages.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
                 // ✅ Single atomic set() — merged messages + cache update
                 set((state) => ({
@@ -591,7 +611,15 @@ export const useChatStore = create<ChatState>((set, get) => {
 
         sendMessage: async (text, friendId, currentUser, isGroup, replyToId, messageType) => {
             const { chatKey, activeChannel, messages, cache } = get();
-            if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !friendId || !currentUser || !chatKey) return;
+            if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !text.startsWith('[Video]') && !text.startsWith('[Document]')) return;
+            if (!friendId || !currentUser) return;
+            if (!chatKey) {
+                Alert.alert(
+                    "Encryption Key Missing",
+                    "Cannot send message. The other user has not set up End-to-End Encryption yet (they need to log in to the new app once to generate their keys)."
+                );
+                return;
+            }
 
             // Note: Group membership check is now handled locally in useChatRoom before calling this to save a DB trip.
 
@@ -610,7 +638,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
             const tempMsg: any = {
                 id: tempId,
-                message: text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Document]') ? '' : text,
+                message: text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Video]') || text.startsWith('[Document]') ? '' : text,
                 sender_id: currentUser.id,
                 receiver_id: isGroup ? null : friendId,
                 group_id: isGroup ? friendId : null,
@@ -619,8 +647,8 @@ export const useChatStore = create<ChatState>((set, get) => {
                 reply: replyObject,
                 message_type: messageType || 'text',
                 created_at: new Date().toISOString(),
-                file_url: text.startsWith('[Voice Message]') ? text.split(' ')[2] : (text.startsWith('[Image]') ? text.split(' ')[1] : (text.startsWith('[Document]') ? text.split(' | ')[0].replace('[Document] ', '').trim() : null)),
-                file_type: text.startsWith('[Voice Message]') ? 'audio/m4a' : (text.startsWith('[Image]') ? 'image/jpeg' : (text.startsWith('[Document]') ? text.split(' | ')[2].trim() : null)),
+                file_url: text.startsWith('[Voice Message]') ? text.split(' ')[2] : (text.startsWith('[Image]') || text.startsWith('[Video]') ? text.split(' ')[1] : (text.startsWith('[Document]') ? text.split(' | ')[0].replace('[Document] ', '').trim() : null)),
+                file_type: text.startsWith('[Voice Message]') ? 'audio/m4a' : (text.startsWith('[Image]') ? 'image/jpeg' : (text.startsWith('[Video]') ? 'video/mp4' : (text.startsWith('[Document]') ? text.split(' | ')[2].trim() : null))),
                 file_name: text.startsWith('[Document]') ? text.split(' | ')[1].trim() : null
             };
 
@@ -638,18 +666,22 @@ export const useChatStore = create<ChatState>((set, get) => {
             }
 
             try {
-                if (text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Document]')) {
+                if (text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Video]') || text.startsWith('[Document]')) {
                     const isVoice = text.startsWith('[Voice Message]');
                     const isDoc = text.startsWith('[Document]');
+                    const isVideo = text.startsWith('[Video]');
 
                     let localUri = '';
-                    let uploadType: 'image' | 'voice' | 'document' = 'image';
+                    let uploadType: 'image' | 'voice' | 'document' | 'video' = 'image';
                     let originalName = '';
                     let docMime = '';
 
                     if (isVoice) {
                         localUri = text.split(' ')[2];
                         uploadType = 'voice';
+                    } else if (isVideo) {
+                        localUri = text.split(' ')[1];
+                        uploadType = 'video';
                     } else if (isDoc) {
                         const parts = text.split(' | ');
                         localUri = parts[0].replace('[Document] ', '').trim();
@@ -673,14 +705,21 @@ export const useChatStore = create<ChatState>((set, get) => {
                                 }));
                             },
                             originalName,
-                            docMime
+                            docMime,
+                            true // encryptWithNewKey
                         );
-                        messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : (isDoc ? 'a document' : 'an image'))}`;
+                        messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : (isVideo ? 'a video' : (isDoc ? 'a document' : 'an image')))}`;
+
                     }
                 }
 
                 const encryptedText = await encryptText(messageToEncrypt, chatKey);
-                const encryptedFileUrl = fileData?.url ? await encryptText(fileData.url, chatKey) : null;
+                
+                let urlPayload = fileData?.url;
+                if (fileData?.mediaKey) {
+                    urlPayload = JSON.stringify({ url: fileData.url, mediaKey: fileData.mediaKey });
+                }
+                const encryptedFileUrl = urlPayload ? await encryptText(urlPayload, chatKey) : null;
                 const insertData: any = {
                     sender_id: currentUser.id,
                     message: encryptedText,
@@ -699,7 +738,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const { data, error } = await supabase.from('messages').insert([insertData]).select().single();
                 if (error) throw error;
 
-                const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject };
+                const finalMsg = { ...data, message: messageToEncrypt, file_url: urlPayload, reply: replyObject };
                 set((state) => {
                     const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
                     saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
@@ -741,6 +780,10 @@ export const useChatStore = create<ChatState>((set, get) => {
                 // ⚠️ We do NOT delete the message from the list! It will stay as 'pending' (clock icon)
                 // When internet comes back, the background syncPendingMessages will upload it.
                 logErrorToDB(error, 'ChatStore: Send Message', currentUser.id, currentUser.username);
+                // Show error on UI
+                import('react-native').then(({ Alert }) => {
+                    Alert.alert('Upload Failed', error?.message || JSON.stringify(error));
+                });
             }
         },
 
