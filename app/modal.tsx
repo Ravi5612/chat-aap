@@ -27,3 +27,5 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

@@ -260,3 +260,5 @@ export default function EditProfileScreen() {
         </View>
     );
 }
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

@@ -129,6 +129,30 @@ export const useHomeMenuActions = ({ currentUser, onRequireLockSetup, onRequireL
             case 'unlock':
                 onRequireLockVerify(friend);
                 break;
+            case 'hide':
+                const vaultPasscode = useFriendsStore.getState().vaultPasscode;
+                if (!vaultPasscode) {
+                    Alert.alert(
+                        "Ninja Vault Setup Required",
+                        "You haven't set up your Ninja Vault passcode yet. Please go to Profile -> Privacy to set it up.",
+                        [
+                            { text: "Cancel", style: "cancel" },
+                            { text: "Go to Profile", onPress: () => router.push('/profile' as any) }
+                        ]
+                    );
+                } else {
+                    const { toggleChatHiddenStatus } = useFriendsStore.getState();
+                    await toggleChatHiddenStatus(friend.id, friend.isGroup, true);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    Alert.alert("Chat Hidden", "This chat is now in your Ninja Vault. Search your passcode to view it.");
+                }
+                break;
+            case 'unhide':
+                const { toggleChatHiddenStatus } = useFriendsStore.getState();
+                await toggleChatHiddenStatus(friend.id, friend.isGroup, false);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert("Chat Unhidden", "This chat is now visible in your main list.");
+                break;
             default:
                 console.log('Action not implemented:', action);
         }

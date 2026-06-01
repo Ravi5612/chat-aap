@@ -73,6 +73,14 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
+                                    onPress={() => { onAction(friend.isHidden ? 'unhide' : 'hide', friend); onClose(); }}
+                                >
+                                    <Ionicons name={friend.isHidden ? "eye-outline" : "eye-off-outline"} size={20} color="#4B5563" />
+                                    <Text style={styles.actionText}>{friend.isHidden ? 'Unhide Chat' : 'Hide Chat (Ninja Vault)'}</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.actionItem}
                                     onPress={() => { onAction(friend.isBlocked ? 'unblock' : 'block', friend); onClose(); }}
                                 >
                                     <Ionicons name={friend.isBlocked ? "checkmark-circle-outline" : "ban-outline"} size={20} color={friend.isBlocked ? "#10B981" : "#EF4444"} />

@@ -26,7 +26,7 @@ export async function fetchAndFormatFriendsData(
     // 2. Fetch Blocked Users & Friendships (Without fragile foreign key joins)
     const [blockedRes, friendshipsRes] = await Promise.all([
         supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId),
-        supabase.from('friendships').select('is_favorite, is_archived, is_locked, disappearing_duration, user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+        supabase.from('friendships').select('is_favorite, is_archived, is_locked, is_hidden, disappearing_duration, user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`)
     ]);
     if (friendshipsRes.error) console.error('[DEBUG] friendships error:', friendshipsRes.error);
 
@@ -56,7 +56,7 @@ export async function fetchAndFormatFriendsData(
     if (friendIds.length > 0) {
         const { data: friendProfiles, error: fpError } = await supabase
             .from('profiles')
-            .select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search')
+            .select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search, public_key')
             .in('id', friendIds);
             
         console.log('[DEBUG] friendProfiles:', friendProfiles, fpError);
@@ -79,13 +79,13 @@ export async function fetchAndFormatFriendsData(
 
     const nowIso = new Date().toISOString();
     const statusQuery = supabase.from('statuses')
-        .select('id, user_id, content, media_type, media_url, thumbnail_url, background_color, expires_at, created_at, is_deleted, privacy_type, viewer_ids')
+        .select('id, user_id, content, media_type, media_url, thumbnail_url, background_color, expires_at, created_at, is_deleted, privacy_type, viewer_ids, encrypted_keys')
         .in('user_id', allRelevantIds)
         .gt('expires_at', nowIso)
         .eq('is_deleted', false);
     
     const [groupRes, statusRes, viewsRes, unreadRes, recentMsgsRes] = await Promise.all([
-        supabase.from('group_members').select('group_id, groups (id, name, avatar_url)').eq('user_id', userId),
+        supabase.from('group_members').select('group_id, is_hidden, groups (id, name, avatar_url)').eq('user_id', userId),
         statusQuery,
         supabase.from('status_views').select('status_id').eq('viewer_id', userId),
         supabase.from('messages').select('sender_id, group_id').or(`receiver_id.eq.${userId}, group_id.not.is.null`).eq('is_read', false),
@@ -110,11 +110,42 @@ export async function fetchAndFormatFriendsData(
 
     const sortedStatuses = [...filteredStatuses].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     const uniqueStatusUsers = [...new Set(sortedStatuses.map(s => s.user_id))];
-    const keyCache: Record<string, any> = {};
-    
-    await Promise.all(uniqueStatusUsers.map(async (uid) => {
-        try { keyCache[uid] = await getChatKey(uid, uid); } catch (e) { console.error('Failed to pre-fetch key for', uid, e); }
-    }));
+    // Build a map of friend's public keys
+    const friendPublicKeys: Record<string, string> = {};
+    friendships.forEach((f: any) => {
+        if (f.friend?.public_key) friendPublicKeys[f.friend.id] = f.friend.public_key;
+    });
+
+    // Also get current user's profile for my own statuses
+    const { data: myProfile } = await supabase.from('profiles').select('public_key').eq('id', userId).single();
+    if (myProfile?.public_key) {
+        friendPublicKeys[userId] = myProfile.public_key;
+    }
+
+    // Attempt to extract statusKey from the first found status for each user
+    const keyCache: Record<string, Uint8Array> = {};
+    for (const uid of uniqueStatusUsers) {
+        // Find the most recent status of this user
+        const latestStatus = sortedStatuses.find(s => s.user_id === uid);
+        if (latestStatus && latestStatus.encrypted_keys && latestStatus.encrypted_keys[userId]) {
+            const creatorPublicKey = friendPublicKeys[uid];
+            if (creatorPublicKey) {
+                try {
+                    const statusKey = await decryptKeyWithSharedSecret(latestStatus.encrypted_keys[userId], creatorPublicKey, userId);
+                    if (statusKey) {
+                        keyCache[uid] = statusKey;
+                    }
+                } catch (e) {
+                    console.error('Failed to decrypt status master key for', uid, e);
+                }
+            }
+        }
+        
+        // Fallback for old deterministic statuses
+        if (!keyCache[uid]) {
+            try { keyCache[uid] = await getChatKey(uid, uid); } catch (e) { console.error('Failed to pre-fetch key for', uid, e); }
+        }
+    }
 
     for (const s of sortedStatuses) {
         if (!statusInfoMap[s.user_id]) {
@@ -203,6 +234,7 @@ export async function fetchAndFormatFriendsData(
         const isLocked = (f.is_locked === true) || (existingItem?.isLocked === true);
         const isFavorite = (f.is_favorite === true) || (existingItem?.isFavorite === true);
         const isArchived = (f.is_archived === true) || (existingItem?.isArchived === true);
+        const isHidden = (f.is_hidden === true) || (existingItem?.isHidden === true);
 
         // isFormerChat = these people had a chat history but are NOT in friendships table.
         // They should NOT be marked as Unfriended - they may still be friends (data sync issue).
@@ -227,6 +259,7 @@ export async function fetchAndFormatFriendsData(
             isArchived: !!isArchived,
             isBlocked: blockedIds.includes(otherProfile.id),
             isLocked: !!isLocked,
+            isHidden: !!isHidden,
             disappearing_duration: f.disappearing_duration || 0,
             friend: {
                 allow_screenshot: otherProfile.allow_screenshot,
@@ -253,6 +286,7 @@ export async function fetchAndFormatFriendsData(
             isFavorite: existingItem?.isFavorite || false,
             isArchived: existingItem?.isArchived || false,
             isLocked: existingItem?.isLocked || false,
+            isHidden: m.is_hidden === true || existingItem?.isHidden === true,
             disappearing_duration: m.groups.disappearing_duration || 0,
             lastActivity: lastActivityMap[m.groups.id] || '0',
             statusCount: 0
@@ -264,7 +298,7 @@ export async function fetchAndFormatFriendsData(
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const { data: myAllStatuses } = await supabase.from('statuses').select('*').eq('user_id', userId).gt('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false });
 
-    const { data: myProfile } = await supabase.from('profiles').select('public_key').eq('id', userId).single();
+    // myProfile is already fetched above!
 
     const decryptedMyStatuses = await Promise.all((myAllStatuses || []).map(async (s) => {
         let decryptedContent = s.content;

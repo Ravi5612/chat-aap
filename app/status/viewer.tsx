@@ -64,22 +64,15 @@ export default function StatusViewer() {
         }
     })();
 
-    // 1.5 Get Status Key
-    const [statusKey, setStatusKey] = useState<Uint8Array | null>(null);
-    useEffect(() => {
-        if (userId) {
-            import('@/utils/chatCrypto').then(({ getChatKey }) => {
-                getChatKey(userId as string, userId as string).then(setStatusKey);
-            });
-        }
-    }, [userId]);
+    // Removed flawed getChatKey(userId, userId) logic.
+    // The true statusKey is now attached to the status object by useStatusFetcher.
 
     const { localImageUrl, localVoiceUrl, imageLoading } = useMessageMediaCache(
         currentStatusUI || {},
         currentStatusUI?.media_type !== 'text' ? currentStatusUI?.media_url : null,
         currentStatusUI?.audio_url || null,
         null,
-        statusKey
+        currentStatusUI?.statusKey || null
     );
 
     const renderedStatusUI = currentStatusUI ? {

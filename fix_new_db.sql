@@ -425,3 +425,21 @@ $$;
 -- Note: 'process_scheduled_msgs_job' is the job name
 SELECT cron.unschedule('process_scheduled_msgs_job');
 SELECT cron.schedule('process_scheduled_msgs_job', '* * * * *', 'SELECT public.process_scheduled_messages()');
+
+-- ==========================================
+-- NINJA VAULT (GHOST CHATS) SUPPORT
+-- ==========================================
+ALTER TABLE public.friendships ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.group_members ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE;
+
+
+
+-- Add expires_at to messages for disappearing messages
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE NULL;
+
+-- Add is_hidden for ghost chats (Ninja Vault)
+ALTER TABLE friendships ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE;
+ALTER TABLE group_members ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE;
+
+-- Reload schema cache
+NOTIFY pgrst, 'reload schema';

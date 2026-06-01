@@ -134,12 +134,17 @@ export function useStatusPost(
                             if (myEnc) encryptedKeys[user.id] = myEnc;
 
                             if (viewerProfiles && viewerProfiles.length > 0) {
-                                for (const p of viewerProfiles) {
+                                // Encrypt in parallel for speed, but batch if needed. For now, Promise.all is much faster than sequential.
+                                await Promise.all(viewerProfiles.map(async (p: any) => {
                                     if (p.public_key) {
-                                        const enc = await encryptKeyWithSharedSecret(statusKey, p.public_key, user.id);
-                                        if (enc) encryptedKeys[p.id] = enc;
+                                        try {
+                                            const enc = await encryptKeyWithSharedSecret(statusKey, p.public_key, user.id);
+                                            if (enc) encryptedKeys[p.id] = enc;
+                                        } catch (e) {
+                                            console.warn('Failed to encrypt status key for friend', p.id, e);
+                                        }
                                     }
-                                }
+                                }));
                             }
                         }
 

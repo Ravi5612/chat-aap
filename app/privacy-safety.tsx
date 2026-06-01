@@ -192,7 +192,21 @@ export default function PrivacySafetyScreen() {
                         />
                     </View>
 
-                    <Text style={styles.sectionLabel}>ACCOUNT SECURITY</Text>
+                    <Text style={styles.sectionLabel}>GENERAL PRIVACY SETTINGS</Text>
+
+                    <TouchableOpacity 
+                        onPress={() => router.push('/privacy-safety/ninja-vault' as any)}
+                        style={styles.tipCard}
+                    >
+                        <View style={[styles.iconContainer, { backgroundColor: '#111827' }]}>
+                            <Ionicons name="eye-off-outline" size={26} color="#FFF" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Ninja Vault (Ghost Chats)</Text>
+                            <Text style={styles.tipDesc}>Hide your most private conversations</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
+                    </TouchableOpacity>
 
                     <TouchableOpacity 
                         onPress={() => router.push('/change-password')}
@@ -348,3 +362,5 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     }
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

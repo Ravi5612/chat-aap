@@ -94,6 +94,10 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         textContent = '';
     }
 
+    if (translatedText) {
+        textContent = translatedText.text;
+    }
+
     const { localImageUrl, localVoiceUrl, localDocumentUrl, imageLoading } = useMessageMediaCache(message, imageUrl, voiceUri, documentUrl);
     const finalVideoUrl = videoUrl || message.file_url || null;
     const { decryptedStatusContent, decryptedStatusMedia } = useStatusContext(message.status_context);
@@ -285,23 +289,6 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                                     </View>
                                 ));
                             })()}
-                        </View>
-                    )}
-
-                    {/* Translated Text Box */}
-                    {translatedText && (
-                        <View style={{
-                            maxWidth: '85%', marginTop: 4,
-                            backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.15)' : 'rgba(246,133,55,0.08)',
-                            borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6,
-                            borderWidth: 1, borderColor: isCurrentUser ? 'rgba(255,255,255,0.3)' : 'rgba(246,133,55,0.2)',
-                        }}>
-                            <Text style={{ fontSize: 10, color: isCurrentUser ? 'rgba(255,255,255,0.7)' : '#F68537', fontWeight: '600', marginBottom: 2 }}>
-                                🌐 Translated to {translatedText.lang}
-                            </Text>
-                            <Text style={{ fontSize: 13, color: isCurrentUser ? 'white' : '#374151' }}>
-                                {translatedText.text}
-                            </Text>
                         </View>
                     )}
 

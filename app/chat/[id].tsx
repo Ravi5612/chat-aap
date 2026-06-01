@@ -143,13 +143,26 @@ export default function ChatScreen() {
             case 'edit': setEditingMessage(selectedMessage); setReplyingTo(null); break;
             case 'translate': {
                 const msgId = selectedMessage.id;
-                // Toggle: agar already translated hai toh hide karo
                 if (translatedMessages[msgId]) {
                     setTranslatedMessages(prev => { const n = { ...prev }; delete n[msgId]; return n; });
                     return;
                 }
                 const rawText = selectedMessage.message || '';
-                translateMessage(rawText).then(result => {
+                const cleanText = rawText
+                    .replace(/\[Image\]\s*\S+/g, '')
+                    .replace(/\[Video\]\s*\S+/g, '')
+                    .replace(/\[Voice Message\]\s*\S+/g, '')
+                    .replace(/\[Document\][^|]+\|?[^|]*/g, '')
+                    .replace(/\[Contact\][^|]+\|?[^|]*/g, '')
+                    .replace(/\[Location\][^|]+\|?[^|]*/g, '')
+                    .trim();
+
+                if (!cleanText) {
+                    Alert.alert('Nothing to translate', 'This message has no text to translate.');
+                    return;
+                }
+
+                translateMessage(cleanText).then(result => {
                     if (result) {
                         setTranslatedMessages(prev => ({
                             ...prev,
@@ -404,3 +417,5 @@ const styles = StyleSheet.create({
         fontWeight: 'bold'
     }
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

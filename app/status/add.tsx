@@ -352,3 +352,5 @@ const styles = StyleSheet.create({
     musicStickerTitle: { color: 'white', fontSize: 14, fontWeight: 'bold' },
     musicStickerArtist: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

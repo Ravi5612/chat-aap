@@ -100,3 +100,5 @@ const styles = StyleSheet.create({
     },
     infoText: { flex: 1, fontSize: 13, color: '#64748B', lineHeight: 18 },
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

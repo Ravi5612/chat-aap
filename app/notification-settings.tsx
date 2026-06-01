@@ -119,3 +119,5 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     }
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

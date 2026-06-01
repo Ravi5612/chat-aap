@@ -1,4 +1,4 @@
-import { View, FlatList, Text, RefreshControl, Alert } from 'react-native';
+import { View, FlatList, Text, RefreshControl, Alert, Keyboard, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -35,6 +35,10 @@ function HomeScreen() {
     const { receivedRequests } = useReceivedRequests();
     const { sentRequests } = useSentRequests();
     const { getCounts } = useNotifications();
+    const isVaultOpen = useFriendsStore(state => state.isVaultOpen);
+    const vaultPasscode = useFriendsStore(state => state.vaultPasscode);
+    const setVaultOpen = useFriendsStore(state => state.setVaultOpen);
+    const loadVaultPasscode = useFriendsStore(state => state.loadVaultPasscode);
     
     const [activeTab, setActiveTab] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -63,7 +67,7 @@ function HomeScreen() {
         onRequireLockVerify: requireLockVerify
     });
 
-    const { filteredItems, tabCounts } = useHomeFilters(combinedItems, activeTab, searchQuery);
+    const { filteredItems, tabCounts } = useHomeFilters(combinedItems, activeTab, searchQuery, isVaultOpen);
     const { handleViewUserStatus } = useStatusActions(currentUser, loadFriends);
 
     useEffect(() => {
@@ -71,6 +75,21 @@ function HomeScreen() {
             useAuthStore.getState().syncProfile();
         }
     }, [currentUser, profile]);
+
+    useEffect(() => {
+        loadVaultPasscode();
+    }, []);
+
+    const handleSearchChange = useCallback((text: string) => {
+        if (vaultPasscode && text === vaultPasscode) {
+            setVaultOpen(true);
+            setSearchQuery('');
+            Keyboard.dismiss();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else {
+            setSearchQuery(text);
+        }
+    }, [vaultPasscode, setVaultOpen]);
 
     const handleLongPress = useCallback((friend: any) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -143,13 +162,22 @@ function HomeScreen() {
                     contentContainerStyle={{ paddingBottom: 110 }}
                     ListHeaderComponent={
                         <View>
-                            <FilterTabs
-                                activeTab={activeTab}
-                                onTabChange={setActiveTab}
-                                counts={tabCounts}
-                                onSearchChange={setSearchQuery}
-                            />
-                            {activeTab === 'all' && !searchQuery && (showContactSuggestions || showNearbySuggestions) && (
+                            {isVaultOpen ? (
+                                <View style={{ backgroundColor: '#111827', padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, borderRadius: 12, marginHorizontal: 16, marginTop: 12 }}>
+                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>🥷 Ninja Vault Unlocked</Text>
+                                    <TouchableOpacity onPress={() => setVaultOpen(false)} style={{ backgroundColor: '#EF4444', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+                                        <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>Lock Vault</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <FilterTabs
+                                    activeTab={activeTab}
+                                    onTabChange={setActiveTab}
+                                    counts={tabCounts}
+                                    onSearchChange={handleSearchChange}
+                                />
+                            )}
+                            {!isVaultOpen && activeTab === 'all' && !searchQuery && (showContactSuggestions || showNearbySuggestions) && (
                                 <HomeSuggestions
                                     showContactSuggestions={showContactSuggestions}
                                     showNearbySuggestions={showNearbySuggestions}

@@ -101,3 +101,5 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     }
 });
+
+export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

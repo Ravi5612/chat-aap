@@ -130,6 +130,7 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                             content: decryptedContent,
                             media_url: decryptedMediaUrl,
                             audio_url: decryptedAudioUrl,
+                            statusKey: statusKey,
                             profiles: profile || { username: 'User', avatar_url: null },
                             mentionedProfiles
                         };
