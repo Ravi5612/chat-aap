@@ -59,7 +59,7 @@ export default function LoginPage() {
                         )}
                     </TouchableOpacity>
 
-                    <Text style={{ textAlign: 'center', marginTop: 10, color: '#FF1493', fontSize: 12, fontWeight: 'bold' }}>
+                    <Text style={{ textAlign: 'center', marginTop: 10, color: '#F68537', fontSize: 12, fontWeight: 'bold' }}>
                         OTA Update: Magic Successful! ✨ (v1.1.0)
                     </Text>
 
@@ -69,7 +69,7 @@ export default function LoginPage() {
                     >
                         <Text style={{ color: '#6B7280', fontSize: 15 }}>
                             {toggleLabel}
-                            <Text style={{ color: '#FF1493', fontWeight: 'bold' }}>
+                            <Text style={{ color: '#F68537', fontWeight: 'bold' }}>
                                 {toggleAction}
                             </Text>
                         </Text>
@@ -83,12 +83,12 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
     actionButton: {
         width: '100%',
-        backgroundColor: '#FF1493',
+        backgroundColor: '#F68537',
         paddingVertical: 18,
         borderRadius: 16,
         alignItems: 'center',
         marginTop: 8,
-        shadowColor: '#FF1493',
+        shadowColor: '#F68537',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.3,
         shadowRadius: 10,
