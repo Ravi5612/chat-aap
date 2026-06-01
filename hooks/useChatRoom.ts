@@ -30,12 +30,12 @@ export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: bool
     useChatRealtime(friendId, currentUser, isGroup);
 
     // 3. Handlers
-    const handleSendMessage = useCallback((text: string, replyToId?: string) => {
+    const handleSendMessage = useCallback((text: string, replyToId?: string, disappearingDuration?: number, messageType?: string, scheduledAt?: Date) => {
         if (isGroup && !isMember) {
             require('react-native').Alert.alert('Access Denied', 'You are no longer a participant of this group.');
             return;
         }
-        if (currentUser) sendMessage(text, friendId, currentUser, isGroup, replyToId);
+        if (currentUser) sendMessage(text, friendId, currentUser, isGroup, replyToId, messageType, disappearingDuration, scheduledAt);
     }, [friendId, currentUser, isGroup, isMember, sendMessage]);
 
     const handleReact = useCallback((messageId: string, emoji: string) => {

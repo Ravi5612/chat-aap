@@ -9,7 +9,7 @@ import { useDbStore } from '../useDbStore';
 import { StoreGet, StoreSet } from './chatTypes';
 
 export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
-    sendMessage: async (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string) => {
+    sendMessage: async (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string, disappearingDuration?: number, scheduledAt?: Date) => {
         const { chatKey, activeChannel, messages } = get();
         if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !text.startsWith('[Document]') && !friendId || !currentUser || !chatKey) return;
 
@@ -41,11 +41,13 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             file_name: text.startsWith('[Document]') ? text.split(' | ')[1].trim() : null
         };
 
-        const updatedMessages = [...messages, tempMsg];
-        set((state) => ({
-            messages: updatedMessages,
-            cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
-        }));
+        const updatedMessages = scheduledAt ? messages : [...messages, tempMsg];
+        if (!scheduledAt) {
+            set((state) => ({
+                messages: updatedMessages,
+                cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
+            }));
+        }
 
         const { db } = useDbStore.getState();
         if (db) {
@@ -99,42 +101,60 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             const insertData: any = {
                 sender_id: currentUser.id,
                 message: encryptedText,
-                status: 'sent',
-                is_read: false,
-                reply_to_id: replyToId,
+                status: scheduledAt ? 'pending' : 'sent',
                 file_url: encryptedFileUrl,
                 file_name: fileData?.name || null,
                 file_type: fileData?.type || null,
                 file_size: fileData?.size || null,
-                message_type: messageType || 'text'
+                message_type: messageType || 'text',
             };
+            
+            if (!scheduledAt) {
+                insertData.is_read = false;
+                insertData.reply_to_id = replyToId;
+                insertData.expires_at = disappearingDuration ? new Date(Date.now() + disappearingDuration * 1000).toISOString() : null;
+            } else {
+                insertData.scheduled_at = scheduledAt.toISOString();
+            }
+
             if (isGroup) insertData.group_id = friendId;
             else insertData.receiver_id = friendId;
 
-            const { data, error } = await supabase.from('messages').insert([insertData]).select().single();
+            const targetTable = scheduledAt ? 'scheduled_messages' : 'messages';
+            const { data, error } = await supabase.from(targetTable).insert([insertData]).select().single();
             if (error) throw error;
 
-            const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject };
-            set((state) => {
-                const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
-                saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
-                const newProgress = { ...state.uploadProgress };
-                delete newProgress[tempId];
-                return {
-                    messages: newMessages,
-                    uploadProgress: newProgress,
-                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
-                };
-            });
+            if (!scheduledAt) {
+                const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject };
+                set((state) => {
+                    const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
+                    saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
+                    const newProgress = { ...state.uploadProgress };
+                    delete newProgress[tempId];
+                    return {
+                        messages: newMessages,
+                        uploadProgress: newProgress,
+                        cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
+                    };
+                });
 
-            if (db) {
-                try {
-                    await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
-                } catch (e) {
-                    console.warn('[DB] Failed to delete temp message:', e);
+                if (db) {
+                    try {
+                        await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
+                    } catch (e) {
+                        console.warn('[DB] Failed to delete temp message:', e);
+                    }
+                    saveLocalMessage(db, finalMsg);
+                    syncLedgerExpense(db, finalMsg, currentUser.id);
                 }
-                saveLocalMessage(db, finalMsg);
-                syncLedgerExpense(db, finalMsg, currentUser.id);
+            } else {
+                // For scheduled messages, just clean up upload progress and notify success
+                set((state) => {
+                    const newProgress = { ...state.uploadProgress };
+                    delete newProgress[tempId];
+                    return { uploadProgress: newProgress };
+                });
+                require('react-native').Alert.alert('Success', 'Message scheduled successfully!');
             }
 
             // broadcast removed to save data

@@ -16,6 +16,8 @@ interface ChatMenuProps {
     onLeaveGroup: () => void;
     onSetWallpaper: () => void;
     onLedger: () => void;
+    onSetDisappearingMessages: () => void;
+    onViewScheduledMessages?: () => void;
 }
 
 export default function ChatMenu({ 
@@ -30,7 +32,9 @@ export default function ChatMenu({
     isGroup, 
     onLeaveGroup, 
     onSetWallpaper, 
-    onLedger 
+    onLedger,
+    onSetDisappearingMessages,
+    onViewScheduledMessages
 }: ChatMenuProps) {
     if (!visible) return null;
 
@@ -45,6 +49,8 @@ export default function ChatMenu({
         { label: 'Mute Notifications', icon: 'volume-mute-outline', onPress: () => { }, color: '#F68537' },
         { label: 'Set Wallpaper', icon: 'image-outline', onPress: onSetWallpaper, color: '#F68537' },
         { label: 'Clear Chat', icon: 'trash-outline', onPress: onClearChat, color: '#F68537' },
+        { label: 'Disappearing Messages ⏳', icon: 'timer-outline', onPress: onSetDisappearingMessages, color: '#F59E0B' },
+        { label: 'Scheduled Messages ⏰', icon: 'calendar-outline', onPress: onViewScheduledMessages || (() => {}), color: '#8B5CF6' },
     ];
 
     const dangerItems = [];

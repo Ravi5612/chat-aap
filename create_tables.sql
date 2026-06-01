@@ -16,7 +16,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   show_email boolean DEFAULT false,
   show_phone boolean DEFAULT false,
   current_session_id text,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  dp_privacy text DEFAULT 'everyone',
+  dp_selected_friends uuid[] DEFAULT '{}',
+  hide_dp_in_search boolean DEFAULT false,
+  about_privacy text DEFAULT 'everyone'
 );
 
 -- Friends table

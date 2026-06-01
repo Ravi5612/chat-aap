@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { getLocalConversations, getLocalBlocks, syncLocalBlocks, getLocalStatuses, pruneExpiredStatuses, saveLocalStatus, syncLocalStatuses, saveLocalProfile, saveLocalConversation } from '@/lib/localDb';
-import { decryptText, getChatKey } from '@/utils/chatCrypto';
+import { decryptText, getChatKey, decryptKeyWithSharedSecret } from '@/utils/chatCrypto';
+import { getVisibleAvatar } from '@/utils/privacyHelper';
 
 export async function fetchAndFormatFriendsData(
     userId: string,
@@ -25,7 +26,7 @@ export async function fetchAndFormatFriendsData(
     // 2. Fetch Blocked Users & Friendships (Without fragile foreign key joins)
     const [blockedRes, friendshipsRes] = await Promise.all([
         supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId),
-        supabase.from('friendships').select('is_favorite, is_archived, is_locked, user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+        supabase.from('friendships').select('is_favorite, is_archived, is_locked, disappearing_duration, user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`)
     ]);
     if (friendshipsRes.error) console.error('[DEBUG] friendships error:', friendshipsRes.error);
 
@@ -55,7 +56,7 @@ export async function fetchAndFormatFriendsData(
     if (friendIds.length > 0) {
         const { data: friendProfiles, error: fpError } = await supabase
             .from('profiles')
-            .select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download')
+            .select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search')
             .in('id', friendIds);
             
         console.log('[DEBUG] friendProfiles:', friendProfiles, fpError);
@@ -183,17 +184,19 @@ export async function fetchAndFormatFriendsData(
     const missingUserIds = Array.from(recentChatUserIds).filter(id => !friendIds.includes(id) && id !== userId);
     let missingProfiles: any[] = [];
     if (missingUserIds.length > 0) {
-        const { data } = await supabase.from('profiles').select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download').in('id', missingUserIds);
+        const { data } = await supabase.from('profiles').select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search').in('id', missingUserIds);
         if (data) missingProfiles = data;
     }
 
     // Format Friends
     const allProfilesToFormat = [
         ...friendships.map((f: any) => ({ otherProfile: f.friend, f, isFriend: true })),
-        ...missingProfiles.map(p => ({ otherProfile: p, f: {}, isFriend: false }))
+        ...missingProfiles.map(p => ({ otherProfile: p, f: {}, isFriend: false, isFormerChat: true }))
     ];
 
-    const formattedFriends = allProfilesToFormat.map(({ otherProfile, f, isFriend }: any) => {
+    const { getVisibleAvatar } = require('@/utils/privacyHelper');
+
+    const formattedFriends = allProfilesToFormat.map(({ otherProfile, f, isFriend, isFormerChat }: any) => {
         if (!otherProfile) return null;
         const sInfo = statusInfoMap[otherProfile.id] || { count: 0, viewedCount: 0 };
         const existingItem = localConv.find(i => i.id === otherProfile.id);
@@ -201,12 +204,17 @@ export async function fetchAndFormatFriendsData(
         const isFavorite = (f.is_favorite === true) || (existingItem?.isFavorite === true);
         const isArchived = (f.is_archived === true) || (existingItem?.isArchived === true);
 
+        // isFormerChat = these people had a chat history but are NOT in friendships table.
+        // They should NOT be marked as Unfriended - they may still be friends (data sync issue).
+        // Only mark isUnfriended = true when explicitly NOT a friend AND NOT a former chat partner.
+        const isUnfriended = !isFriend && !isFormerChat;
+
         return {
             id: otherProfile.id,
             name: otherProfile.username || 'Unknown',
             email: otherProfile.show_email !== false ? otherProfile.email : null,
             phone: otherProfile.show_phone ? otherProfile.phone : null,
-            img: otherProfile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(otherProfile.username || 'User')}&backgroundColor=F68537`,
+            img: getVisibleAvatar(otherProfile, userId, isFriend, false),
             unreadCount: unreadCountsMap[otherProfile.id] || 0,
             statusCount: sInfo.count,
             allStatusesViewed: sInfo.count > 0 && sInfo.count === sInfo.viewedCount,
@@ -214,11 +222,12 @@ export async function fetchAndFormatFriendsData(
             lastActivity: lastActivityMap[otherProfile.id] || '0',
             isGroup: false,
             isFriend: isFriend,
-            isUnfriended: !isFriend,
+            isUnfriended: isUnfriended,
             isFavorite: !!isFavorite,
             isArchived: !!isArchived,
             isBlocked: blockedIds.includes(otherProfile.id),
             isLocked: !!isLocked,
+            disappearing_duration: f.disappearing_duration || 0,
             friend: {
                 allow_screenshot: otherProfile.allow_screenshot,
                 allow_status_download: otherProfile.allow_status_download
@@ -244,6 +253,7 @@ export async function fetchAndFormatFriendsData(
             isFavorite: existingItem?.isFavorite || false,
             isArchived: existingItem?.isArchived || false,
             isLocked: existingItem?.isLocked || false,
+            disappearing_duration: m.groups.disappearing_duration || 0,
             lastActivity: lastActivityMap[m.groups.id] || '0',
             statusCount: 0
         };
@@ -254,21 +264,31 @@ export async function fetchAndFormatFriendsData(
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const { data: myAllStatuses } = await supabase.from('statuses').select('*').eq('user_id', userId).gt('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false });
 
+    const { data: myProfile } = await supabase.from('profiles').select('public_key').eq('id', userId).single();
+
     const decryptedMyStatuses = await Promise.all((myAllStatuses || []).map(async (s) => {
         let decryptedContent = s.content;
         let decryptedMediaUrl = s.media_url;
 
-        if (s.content && s.content.trim().startsWith('{')) {
-            try {
-                const statusKey = await getChatKey(userId, userId);
-                decryptedContent = await decryptText(s.content, statusKey);
-            } catch (e) { console.error('My status content decryption error:', e); }
+        let statusKey = null;
+        if (s.encrypted_keys && s.encrypted_keys[userId] && myProfile?.public_key) {
+            statusKey = await decryptKeyWithSharedSecret(s.encrypted_keys[userId], myProfile.public_key, userId);
         }
-        if (s.media_url && s.media_url.trim().startsWith('{')) {
-            try {
-                const statusKey = await getChatKey(userId, userId);
-                decryptedMediaUrl = await decryptText(s.media_url, statusKey);
-            } catch (e) { console.error('My status media decryption error:', e); }
+        if (!statusKey) {
+            statusKey = await getChatKey(userId, userId);
+        }
+
+        if (statusKey) {
+            if (s.content && s.content.trim().startsWith('{')) {
+                try {
+                    decryptedContent = await decryptText(s.content, statusKey);
+                } catch (e) { console.error('My status content decryption error:', e); }
+            }
+            if (s.media_url && s.media_url.trim().startsWith('{')) {
+                try {
+                    decryptedMediaUrl = await decryptText(s.media_url, statusKey);
+                } catch (e) { console.error('My status media decryption error:', e); }
+            }
         }
 
         return { ...s, content: decryptedContent, media_url: decryptedMediaUrl };

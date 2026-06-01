@@ -47,13 +47,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Step 2: Network calls background mein — logout ko block nahi karenge
         try {
             if (user?.id) {
-                supabase.from('profiles')
-                    .update({ is_online: false })
-                    .eq('id', user.id)
-                    .then(() => {})
-                    .catch(() => {});
+                await supabase.from('profiles').update({ is_online: false }).eq('id', user.id);
             }
-            supabase.auth.signOut().catch(() => {});
+            await supabase.auth.signOut();
         } catch (error) {
             console.error("Error signing out:", error);
         }

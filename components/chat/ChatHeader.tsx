@@ -28,6 +28,11 @@ interface ChatHeaderProps {
     handleUnfriend: () => void;
     handleSetWallpaper: () => void;
     setLedgerVisible: (visible: boolean) => void;
+    onSetDisappearingMessages: () => void;
+    onViewScheduledMessages: () => void;
+    disappearingDuration: number;
+    autoListenMode: boolean;
+    onToggleAutoListen: () => void;
 }
 
 export default function ChatHeader({
@@ -50,7 +55,12 @@ export default function ChatHeader({
     handleBlockToggle,
     handleUnfriend,
     handleSetWallpaper,
-    setLedgerVisible
+    setLedgerVisible,
+    onSetDisappearingMessages,
+    onViewScheduledMessages,
+    disappearingDuration,
+    autoListenMode,
+    onToggleAutoListen,
 }: ChatHeaderProps) {
     const router = useRouter();
     const [menuVisible, setMenuVisible] = useState(false);
@@ -81,9 +91,32 @@ export default function ChatHeader({
                             {isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(lastSeen))}
                         </Text>
                     </View>
+                    {disappearingDuration > 0 && (
+                        <View style={{ backgroundColor: '#FDF0D5', padding: 4, borderRadius: 12, marginLeft: 4 }}>
+                            <Ionicons name="timer" size={14} color="#F59E0B" />
+                        </View>
+                    )}
                 </TouchableOpacity>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                {/* Auto-Listen Mode Toggle */}
+                <TouchableOpacity
+                    onPress={() => { Haptics.selectionAsync(); onToggleAutoListen(); }}
+                    style={{
+                        width: 36, height: 36, borderRadius: 18,
+                        alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: autoListenMode ? '#F68537' : 'rgba(246,133,55,0.1)',
+                        borderWidth: 1.5,
+                        borderColor: autoListenMode ? '#F68537' : 'rgba(246,133,55,0.3)',
+                    }}
+                >
+                    <Ionicons
+                        name={autoListenMode ? 'volume-high' : 'volume-high-outline'}
+                        size={18}
+                        color={autoListenMode ? 'white' : '#F68537'}
+                    />
+                </TouchableOpacity>
+
                 {isFriend && !isBlocked && !iAmBlocked && (
                     <>
                         <TouchableOpacity 
@@ -122,6 +155,14 @@ export default function ChatHeader({
                     }} 
                     onSetWallpaper={handleSetWallpaper} 
                     onLedger={() => { setMenuVisible(false); setLedgerVisible(true); }} 
+                    onSetDisappearingMessages={() => {
+                        setMenuVisible(false);
+                        onSetDisappearingMessages();
+                    }}
+                    onViewScheduledMessages={() => {
+                        setMenuVisible(false);
+                        onViewScheduledMessages();
+                    }}
                 />
             </View>
         </View>

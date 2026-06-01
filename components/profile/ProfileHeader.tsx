@@ -31,9 +31,8 @@ export default function ProfileHeader({ avatarUrl, fullName, bio }: ProfileHeade
                     <Text style={styles.name}>{fullName}</Text>
                     <Text style={{ fontSize: 22, marginLeft: 4 }}>🚩</Text>
                 </View>
-                <Text style={styles.occupation}>SADAIVA DHARMIK</Text>
                 <Text style={styles.bio}>
-                    "{bio || 'Dedicated to the path of righteousness and cultural heritage.'}"
+                    {bio ? `"${bio}"` : 'No bio set yet.'}
                 </Text>
             </View>
         </View>

@@ -19,12 +19,14 @@ const NEARBY_RADIUS_KM = 1.0;
 const REFRESH_INTERVAL_MS = 60000; // 1 minute smart poll
 
 export const useNearbySuggestions = () => {
-    const { user: currentUser } = useAuthStore();
+    const { user: currentUser, profile } = useAuthStore();
     const currentUserId = currentUser?.id || '';
     const { currentLocation, startTracking } = useLocationStore();
     
     const [nearbyPeople, setNearbyPeople] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    
+    const isEnabled = profile?.nearby_notifications_enabled ?? false;
 
     // Refs to prevent dependency loops
     const locationRef = useRef(currentLocation);
@@ -35,7 +37,10 @@ export const useNearbySuggestions = () => {
     }, [currentLocation]);
 
     const fetchNearby = useCallback(async () => {
-        if (!currentUserId || !locationRef.current) return;
+        if (!currentUserId || !locationRef.current || !isEnabled) {
+            setNearbyPeople([]);
+            return;
+        }
 
         setLoading(true);
         try {
@@ -85,6 +90,7 @@ export const useNearbySuggestions = () => {
                 .from('profiles')
                 .select('id, username, avatar_url, last_lat, last_long, gender, is_online')
                 .eq('is_online', true)
+                .eq('nearby_notifications_enabled', true)
                 .neq('id', currentUserId)
                 .gte('last_lat', latitude - boxRange)
                 .lte('last_lat', latitude + boxRange)
@@ -112,7 +118,7 @@ export const useNearbySuggestions = () => {
         } finally {
             setLoading(false);
         }
-    }, [currentUserId]);
+    }, [currentUserId, isEnabled]);
 
     // Initial boot
     useEffect(() => {
@@ -146,13 +152,13 @@ export const useNearbySuggestions = () => {
     // Smart Interval Polling (Replaces dangerous unfiltered DB subscription)
     // Runs every 1 minute to check for new people who walked into your range.
     useEffect(() => {
-        if (!currentUserId) return;
+        if (!currentUserId || !isEnabled) return;
         const intervalId = setInterval(() => {
             fetchNearby();
         }, REFRESH_INTERVAL_MS);
         
         return () => clearInterval(intervalId);
-    }, [currentUserId, fetchNearby]);
+    }, [currentUserId, fetchNearby, isEnabled]);
 
-    return { nearbyPeople, loading, refresh: fetchNearby };
+    return { nearbyPeople, loading, refresh: fetchNearby, isEnabled };
 };

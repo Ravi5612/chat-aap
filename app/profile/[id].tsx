@@ -4,12 +4,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/useAuthStore';
+import { getVisibleAvatar } from '@/utils/privacyHelper';
 
 export default function UserProfileScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [isFriendState, setIsFriendState] = useState(false);
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -21,7 +24,20 @@ export default function UserProfileScreen() {
                 .single();
 
             if (!error) {
-                setProfile(data);
+                let isFriend = false;
+                const currentUserId = useAuthStore.getState().user?.id;
+                
+                if (currentUserId) {
+                    const { data: friendship } = await supabase.from('friendships')
+                        .select('id')
+                        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${id}),and(user_id.eq.${id},friend_id.eq.${currentUserId})`)
+                        .single();
+                    isFriend = !!friendship;
+                    setIsFriendState(isFriend);
+                }
+
+                const visibleAvatar = getVisibleAvatar(data, currentUserId, isFriend, false);
+                setProfile({ ...data, avatar_url: visibleAvatar });
             }
             setLoading(false);
         };
@@ -115,12 +131,27 @@ export default function UserProfileScreen() {
                     </View>
                 </View>
 
-                <View style={{ marginHorizontal: 16, backgroundColor: 'white', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 10, elevation: 1 }}>
-                    <Text style={{ fontSize: 13, color: '#F68537', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 1 }}>About</Text>
-                    <Text style={{ fontSize: 16, color: '#4B5563', lineHeight: 24 }}>
-                        Hey there! I am using ChatWarriors. Let's connect and chat! 🛡️✨
-                    </Text>
-                </View>
+                {(() => {
+                    const privacy = profile.about_privacy || 'everyone';
+                    const currentUserId = useAuthStore.getState().user?.id;
+                    const isSelf = currentUserId === profile.id;
+                    
+                    let canSeeAbout = false;
+                    if (isSelf) canSeeAbout = true;
+                    else if (privacy === 'everyone') canSeeAbout = true;
+                    else if (privacy === 'friends' && isFriendState) canSeeAbout = true;
+
+                    if (!canSeeAbout) return null;
+
+                    return (
+                        <View style={{ marginHorizontal: 16, backgroundColor: 'white', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 10, elevation: 1 }}>
+                            <Text style={{ fontSize: 13, color: '#F68537', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 1 }}>About</Text>
+                            <Text style={{ fontSize: 16, color: '#4B5563', lineHeight: 24 }}>
+                                {profile.about || profile.bio || "Hey there! I am using ChatWarriors."}
+                            </Text>
+                        </View>
+                    );
+                })()}
 
                 <View style={{ marginHorizontal: 16, marginTop: 16, backgroundColor: 'white', borderRadius: 24, overflow: 'hidden' }}>
                     <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>

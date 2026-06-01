@@ -16,7 +16,7 @@ export interface ChatState {
     initChat: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMoreMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
-    sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string) => Promise<void>;
+    sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string, disappearingDuration?: number, scheduledAt?: Date) => Promise<void>;
     reactToMessage: (messageId: string, emoji: string, currentUser: any) => Promise<void>;
     saveEdit: (messageId: string, newText: string, currentUser: any) => Promise<void>;
     deleteMessage: (messageId: string, forEveryone: boolean) => Promise<void>;

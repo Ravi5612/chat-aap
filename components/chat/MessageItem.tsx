@@ -4,6 +4,7 @@ import Animated from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Speech from 'expo-speech';
 import FlyingReaction from './FlyingReaction';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 
@@ -23,6 +24,8 @@ interface MessageItemProps {
     onImagePress?: (uri: string, isVideo?: boolean) => void;
     friendName?: string;
     flyingEmoji?: any;
+    translatedText?: { text: string; lang: string } | null;
+    autoListenMode?: boolean;
 }
 
 const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
@@ -32,12 +35,14 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
         prevProps.message === nextProps.message &&
         prevProps.isCurrentUser === nextProps.isCurrentUser &&
         prevProps.friendName === nextProps.friendName &&
+        prevProps.translatedText === nextProps.translatedText &&
+        prevProps.autoListenMode === nextProps.autoListenMode &&
         ((prevProps.flyingEmoji?.messageId === prevMsgId) === (nextProps.flyingEmoji?.messageId === nextMsgId)) &&
         (!prevMsgId || prevProps.flyingEmoji?.messageId !== prevMsgId || prevProps.flyingEmoji?.id === nextProps.flyingEmoji?.id)
     );
 };
 
-const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji }: MessageItemProps) => {
+const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji, translatedText, autoListenMode }: MessageItemProps) => {
     const { panGesture, animatedStyle, iconAnimatedStyle } = useMessageGestures(isCurrentUser, message, onReply);
     const uploadProgress = useChatStore(state => state.uploadProgress[message.id]);
 
@@ -109,6 +114,18 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                     <Ionicons name={isScreenshot ? "scan-outline" : "ban-outline"} size={16} color={isScreenshot ? '#EF4444' : (isCurrentUser ? '#F97316' : '#6B7280')} />
                     <Text style={{ fontSize: 12, fontWeight: '700', color: isScreenshot ? '#DC2626' : (isCurrentUser ? '#C2410C' : '#374151'), fontStyle: 'italic' }}>
                         {isScreenshot ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend') : (isCurrentUser ? 'You deleted this message' : 'This message was deleted')}
+                    </Text>
+                </View>
+            </View>
+        );
+    }
+
+    if (message.message_type === 'info') {
+        return (
+            <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 8, paddingHorizontal: 16, width: '100%' }}>
+                <View style={{ backgroundColor: '#FEF08A', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, maxWidth: '85%' }}>
+                    <Text style={{ fontSize: 11, color: '#A16207', textAlign: 'center' }}>
+                        {textContent || message.message}
                     </Text>
                 </View>
             </View>
@@ -208,16 +225,56 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                         />
                     </TouchableOpacity>
 
+                    {/* Auto-Listen Speaker Icon */}
+                    {autoListenMode && (
+                        <TouchableOpacity
+                            onPress={() => {
+                                Haptics.selectionAsync();
+                                const rawText = message.message || '';
+                                const cleanText = rawText
+                                    .replace(/\[Image\]\s*\S+/g, 'Image')
+                                    .replace(/\[Video\]\s*\S+/g, 'Video')
+                                    .replace(/\[Voice Message\]\s*\S+/g, 'Voice Message')
+                                    .replace(/\[Document\][^|]+\|?[^|]*/g, 'Document')
+                                    .replace(/\[Contact\][^|]+\|?[^|]*/g, 'Contact')
+                                    .replace(/\[Location\][^|]+\|?[^|]*/g, 'Location')
+                                    .trim();
+                                if (!cleanText) return;
+                                const isHindi = /[\u0900-\u097F]/.test(cleanText);
+                                Speech.isSpeakingAsync().then(speaking => {
+                                    if (speaking) { Speech.stop(); }
+                                    else {
+                                        Speech.speak(cleanText, {
+                                            language: isHindi ? 'hi-IN' : 'en-US',
+                                            pitch: 1.0, rate: 0.9,
+                                        });
+                                    }
+                                });
+                            }}
+                            style={{
+                                position: 'absolute',
+                                bottom: -8,
+                                [isCurrentUser ? 'left' : 'right']: -8,
+                                width: 26, height: 26, borderRadius: 13,
+                                backgroundColor: '#F68537',
+                                alignItems: 'center', justifyContent: 'center',
+                                elevation: 3,
+                                shadowColor: '#F68537',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.4, shadowRadius: 3,
+                            }}
+                        >
+                            <Ionicons name="volume-high" size={12} color="white" />
+                        </TouchableOpacity>
+                    )}
                     {message.reactions && Object.keys(message.reactions).length > 0 && (
                         <View style={{ marginTop: -10, zIndex: 20, flexDirection: 'row', gap: 4, marginRight: isCurrentUser ? 8 : 0, marginLeft: isCurrentUser ? 0 : 8 }}>
                             {(() => {
                                 const aggregated: Record<string, number> = {};
                                 Object.entries(message.reactions).forEach(([key, value]) => {
                                     if (key.length === 36) {
-                                        // new format: key = userId, value = emoji
                                         aggregated[value as string] = (aggregated[value as string] || 0) + 1;
                                     } else {
-                                        // old format: key = emoji, value = count
                                         aggregated[key] = (aggregated[key] || 0) + (value as number);
                                     }
                                 });
@@ -228,6 +285,23 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                                     </View>
                                 ));
                             })()}
+                        </View>
+                    )}
+
+                    {/* Translated Text Box */}
+                    {translatedText && (
+                        <View style={{
+                            maxWidth: '85%', marginTop: 4,
+                            backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.15)' : 'rgba(246,133,55,0.08)',
+                            borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6,
+                            borderWidth: 1, borderColor: isCurrentUser ? 'rgba(255,255,255,0.3)' : 'rgba(246,133,55,0.2)',
+                        }}>
+                            <Text style={{ fontSize: 10, color: isCurrentUser ? 'rgba(255,255,255,0.7)' : '#F68537', fontWeight: '600', marginBottom: 2 }}>
+                                🌐 Translated to {translatedText.lang}
+                            </Text>
+                            <Text style={{ fontSize: 13, color: isCurrentUser ? 'white' : '#374151' }}>
+                                {translatedText.text}
+                            </Text>
                         </View>
                     )}
 

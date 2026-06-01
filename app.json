@@ -114,7 +114,14 @@
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow ChatWarriors to access the microphone for voice typing",
+          "speechRecognitionPermission": "Allow ChatWarriors to recognize your speech for voice typing"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

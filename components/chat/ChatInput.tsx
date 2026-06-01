@@ -14,9 +14,15 @@ import { useMediaPicker } from '@/hooks/chatInput/useMediaPicker';
 import { useLocationPicker } from '@/hooks/chatInput/useLocationPicker';
 import { useDocumentPicker } from '@/hooks/chatInput/useDocumentPicker';
 import CustomCameraModal from './CustomCameraModal';
+import ScheduleMessageModal from './ScheduleMessageModal';
+import {
+    ExpoSpeechRecognitionModule,
+    useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
+import { Text } from 'react-native';
 
 interface ChatInputProps {
-    onSendMessage: (text: string) => void;
+    onSendMessage: (text: string, scheduledAt?: Date) => void;
     onTyping?: (isTyping: boolean) => void;
     disabled?: boolean;
     replyingTo?: any;
@@ -41,6 +47,9 @@ export default function ChatInput({
     const [emojiModalVisible, setEmojiModalVisible] = useState(false);
     const [contactModalVisible, setContactModalVisible] = useState(false);
     const [cameraModalVisible, setCameraModalVisible] = useState(false);
+    const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+    const [isVoiceTyping, setIsVoiceTyping] = useState(false);
+    const [voiceLang, setVoiceLang] = useState('hi-IN'); // Default to Hindi
 
     const insets = useSafeAreaInsets();
     const hasMeasured = insets.top > 0 || insets.bottom > 0;
@@ -70,7 +79,47 @@ export default function ChatInput({
         if (initialMessage) setMessage(initialMessage);
     }, [initialMessage]);
 
-    const handleSubmit = () => {
+    useSpeechRecognitionEvent('start', () => setIsVoiceTyping(true));
+    useSpeechRecognitionEvent('end', () => setIsVoiceTyping(false));
+    useSpeechRecognitionEvent('error', (event) => {
+        console.log('Voice Error:', event.error, event.message);
+        setIsVoiceTyping(false);
+    });
+    useSpeechRecognitionEvent('result', (event) => {
+        if (event.results && event.results.length > 0) {
+            const transcript = event.results[0]?.transcript;
+            if (transcript) {
+                setMessage(prev => prev + (prev.length > 0 ? " " : "") + transcript);
+            }
+        }
+    });
+
+    const startVoiceTyping = async () => {
+        try {
+            const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+            if (!result.granted) {
+                console.warn('Voice permission not granted');
+                return;
+            }
+            ExpoSpeechRecognitionModule.start({
+                lang: voiceLang,
+                interimResults: true,
+                continuous: false,
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const stopVoiceTyping = () => {
+        try {
+            ExpoSpeechRecognitionModule.stop();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleSubmit = (scheduledDate?: Date) => {
         if (!message.trim() && !selectedMedia) {
             if (Date.now() - lastSentTimeRef.current < 500) return;
             setIsRecording(true);
@@ -84,7 +133,7 @@ export default function ChatInput({
                 const prefix = selectedMedia.type === 'video' ? '[Video]' : '[Image]';
                 finalMessage = `${prefix} ${selectedMedia.uri} ${message.trim()}`;
             }
-            onSendMessage(finalMessage);
+            onSendMessage(finalMessage, scheduledDate);
         }
         lastSentTimeRef.current = Date.now();
         setMessage('');
@@ -143,6 +192,14 @@ export default function ChatInput({
 
                 <View style={[styles.inputRow, { opacity: isRecording ? 0 : 1 }]}>
                     <View style={styles.inputBubble}>
+                        <TouchableOpacity 
+                            onPress={() => setVoiceLang(prev => prev === 'hi-IN' ? 'en-US' : 'hi-IN')}
+                            style={{ padding: 8, paddingRight: 4 }}
+                        >
+                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#F68537' }}>
+                                {voiceLang === 'hi-IN' ? 'HI' : 'EN'}
+                            </Text>
+                        </TouchableOpacity>
                         <TouchableOpacity
                             onPress={() => {
                                 if (emojiModalVisible) { setEmojiModalVisible(false); inputRef.current?.focus(); }
@@ -156,13 +213,13 @@ export default function ChatInput({
                         <TextInput
                             ref={inputRef}
                             style={styles.textInput}
-                            placeholder={editingMessage ? "Edit message..." : "Message"}
-                            placeholderTextColor="#94A3B8"
+                            placeholder={isVoiceTyping ? "Listening..." : (editingMessage ? "Edit message..." : "Message")}
+                            placeholderTextColor={isVoiceTyping ? "#F68537" : "#94A3B8"}
                             value={message}
                             onChangeText={handleChangeText}
                             multiline
                             maxLength={1000}
-                            editable={!disabled}
+                            editable={!disabled && !isVoiceTyping}
                         />
 
                         <AttachmentMenu
@@ -171,6 +228,7 @@ export default function ChatInput({
                             onLocation={handleLocation}
                             onContact={() => setContactModalVisible(true)}
                             onDocument={handleDocument}
+                            onSchedule={() => setScheduleModalVisible(true)}
                         />
 
                         {!message.trim() && !selectedMedia && (
@@ -180,7 +238,21 @@ export default function ChatInput({
                         )}
                     </View>
 
-                    <TouchableOpacity onPress={handleSubmit} disabled={disabled} style={styles.sendBtn}>
+                    <TouchableOpacity 
+                        onPress={() => handleSubmit()} 
+                        onLongPress={() => {
+                            if (!message.trim() && !selectedMedia) {
+                                startVoiceTyping();
+                            }
+                        }}
+                        onPressOut={() => {
+                            if (isVoiceTyping) {
+                                stopVoiceTyping();
+                            }
+                        }}
+                        disabled={disabled} 
+                        style={[styles.sendBtn, isVoiceTyping && { backgroundColor: '#EF4444' }]}
+                    >
                         <Ionicons
                             name={editingMessage ? "checkmark" : (message.trim() || selectedMedia ? "send" : "mic")}
                             size={24}
@@ -209,6 +281,12 @@ export default function ChatInput({
                     visible={cameraModalVisible}
                     onClose={() => setCameraModalVisible(false)}
                     onCapture={(media) => setSelectedMedia(media)}
+                />
+
+                <ScheduleMessageModal
+                    visible={scheduleModalVisible}
+                    onClose={() => setScheduleModalVisible(false)}
+                    onSchedule={(date) => handleSubmit(date)}
                 />
             </View>
         </View>

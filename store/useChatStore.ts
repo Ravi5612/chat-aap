@@ -33,7 +33,7 @@ interface ChatState {
     initChat: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
     loadMoreMessages: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;
-    sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string) => Promise<void>;
+    sendMessage: (text: string, friendId: string, currentUser: any, isGroup: boolean, replyToId?: string, messageType?: string, disappearingDuration?: number, scheduledAt?: Date) => Promise<void>;
     reactToMessage: (messageId: string, emoji: string, currentUser: any) => Promise<void>;
     saveEdit: (messageId: string, newText: string, currentUser: any) => Promise<void>;
     deleteMessage: (messageId: string, forEveryone: boolean) => Promise<void>;
@@ -253,12 +253,12 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
                 }));
 
-                let finalMessages = decryptedMessages;
+                let finalMessages = decryptedMessages.filter(m => !m.expires_at || new Date(m.expires_at).getTime() > Date.now());
                 try {
                     const { db } = useDbStore.getState();
                     const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
                     if (localDeletedIds && localDeletedIds.length > 0) {
-                        finalMessages = decryptedMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                        finalMessages = finalMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
                     }
                 } catch (e) {
                     console.warn('[ChatStore] Local filter failed:', e);
@@ -294,7 +294,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 }
 
                 // Update cache with deduplicated messages
-                const uniqueMessagesArray = Array.from(new Map(decryptedMessages.map(m => [m.id, m])).values());
+                const uniqueMessagesArray = Array.from(new Map(finalMessages.map(m => [m.id, m])).values());
                 set((state) => ({
                     cache: { ...state.cache, [friendId]: { messages: uniqueMessagesArray, key: chatKey } }
                 }));
@@ -433,12 +433,12 @@ export const useChatStore = create<ChatState>((set, get) => {
                     }
                 }));
 
-                let filteredOlderMessages = decryptedOlderMessages;
+                let filteredOlderMessages = decryptedOlderMessages.filter(m => !m.expires_at || new Date(m.expires_at).getTime() > Date.now());
                 try {
                     const { db } = useDbStore.getState();
                     const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
                     if (localDeletedIds && localDeletedIds.length > 0) {
-                        filteredOlderMessages = decryptedOlderMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                        filteredOlderMessages = filteredOlderMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
                     }
                 } catch (e) {
                     console.warn('[ChatStore] LoadMore filter failed:', e);
@@ -579,12 +579,12 @@ export const useChatStore = create<ChatState>((set, get) => {
                         }
                     }));
 
-                    let filtered = decryptedMessages;
+                    let filtered = decryptedMessages.filter(m => !m.expires_at || new Date(m.expires_at).getTime() > Date.now());
                     try {
                         const { db } = useDbStore.getState();
                         const localDeletedIds = db ? await getLocallyDeletedMessages(db) : [];
                         if (localDeletedIds && localDeletedIds.length > 0) {
-                            filtered = decryptedMessages.filter(m => m && m.id && !localDeletedIds.includes(m.id));
+                            filtered = filtered.filter(m => m && m.id && !localDeletedIds.includes(m.id));
                         }
                     } catch (e) {
                         console.warn('[ChatStore] loadMessagesUpToId filter failed:', e);
@@ -609,7 +609,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             return false;
         },
 
-        sendMessage: async (text, friendId, currentUser, isGroup, replyToId, messageType) => {
+        sendMessage: async (text, friendId, currentUser, isGroup, replyToId, messageType, disappearingDuration, scheduledAt) => {
             const { chatKey, activeChannel, messages, cache } = get();
             if ((!text || !text.trim()) && !text.startsWith('[Voice Message]') && !text.startsWith('[Image]') && !text.startsWith('[Video]') && !text.startsWith('[Document]')) return;
             if (!friendId || !currentUser) return;
@@ -652,16 +652,17 @@ export const useChatStore = create<ChatState>((set, get) => {
                 file_name: text.startsWith('[Document]') ? text.split(' | ')[1].trim() : null
             };
 
-            const updatedMessages = [...messages, tempMsg];
-            // ✅ Merged into single atomic set() call
-            set((state) => ({
-                messages: updatedMessages,
-                cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
-            }));
+            const updatedMessages = scheduledAt ? messages : [...messages, tempMsg];
+            if (!scheduledAt) {
+                set((state) => ({
+                    messages: updatedMessages,
+                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
+                }));
+            }
 
             // ✅ Save to Local SQLite DB immediately!
             const { db } = useDbStore.getState();
-            if (db) {
+            if (db && !scheduledAt) {
                 saveLocalMessage(db, tempMsg);
             }
 
@@ -723,47 +724,64 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const insertData: any = {
                     sender_id: currentUser.id,
                     message: encryptedText,
-                    status: 'sent',
-                    is_read: false,
-                    reply_to_id: replyToId,
+                    status: scheduledAt ? 'pending' : 'sent',
                     file_url: encryptedFileUrl,
                     file_name: fileData?.name || null,
                     file_type: fileData?.type || null,
                     file_size: fileData?.size || null,
-                    message_type: messageType || 'text'
+                    message_type: messageType || 'text',
                 };
+
+                if (!scheduledAt) {
+                    insertData.is_read = false;
+                    insertData.reply_to_id = replyToId;
+                    insertData.expires_at = disappearingDuration ? new Date(Date.now() + disappearingDuration * 1000).toISOString() : null;
+                } else {
+                    insertData.scheduled_at = scheduledAt.toISOString();
+                }
+
                 if (isGroup) insertData.group_id = friendId;
                 else insertData.receiver_id = friendId;
 
-                const { data, error } = await supabase.from('messages').insert([insertData]).select().single();
+                const targetTable = scheduledAt ? 'scheduled_messages' : 'messages';
+                const { data, error } = await supabase.from(targetTable).insert([insertData]).select().single();
                 if (error) throw error;
 
-                const finalMsg = { ...data, message: messageToEncrypt, file_url: urlPayload, reply: replyObject };
-                set((state) => {
-                    const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
-                    saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
-                    // ✅ Clear progress for this message on success
-                    const newProgress = { ...state.uploadProgress };
-                    delete newProgress[tempId];
-                    return {
-                        messages: newMessages,
-                        uploadProgress: newProgress,
-                        cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
-                    };
-                });
+                if (!scheduledAt) {
+                    const finalMsg = { ...data, message: messageToEncrypt, file_url: urlPayload, reply: replyObject };
+                    set((state) => {
+                        const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
+                        saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
+                        // ✅ Clear progress for this message on success
+                        const newProgress = { ...state.uploadProgress };
+                        delete newProgress[tempId];
+                        return {
+                            messages: newMessages,
+                            uploadProgress: newProgress,
+                            cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
+                        };
+                    });
 
-                // ✅ Update Local DB (Delete temp message and insert synced one)
-                if (db) {
-                    try {
-                        await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
-                    } catch (e) {
-                        console.warn('[DB] Failed to delete temp message:', e);
+                    // ✅ Update Local DB (Delete temp message and insert synced one)
+                    if (db) {
+                        try {
+                            await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
+                        } catch (e) {
+                            console.warn('[DB] Failed to delete temp message:', e);
+                        }
+                        saveLocalMessage(db, finalMsg);
+                        syncLedgerExpense(db, finalMsg, currentUser.id);
                     }
-                    saveLocalMessage(db, finalMsg);
-                    syncLedgerExpense(db, finalMsg, currentUser.id);
+                } else {
+                    set((state) => {
+                        const newProgress = { ...state.uploadProgress };
+                        delete newProgress[tempId];
+                        return { uploadProgress: newProgress };
+                    });
+                    require('react-native').Alert.alert('Success', 'Message scheduled successfully!');
                 }
 
-                if (activeChannel) {
+                if (activeChannel && !scheduledAt) {
                     activeChannel.send({
                         type: 'broadcast',
                         event: 'new_message',
@@ -914,6 +932,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             try {
                 const promises = friendIds.map(async (fid) => {
                     const fKey = await getChatKey(currentUser.id, fid);
+                    if (!fKey) throw new Error("Encryption key not found for friend " + fid);
                     const encText = await encryptText(messageText, fKey);
                     return supabase.from('messages').insert({
                         sender_id: currentUser.id,

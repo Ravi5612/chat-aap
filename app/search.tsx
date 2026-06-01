@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useDbStore } from '@/store/useDbStore';
 import { saveLocalSearch, getLocalSearches, clearLocalSearch } from '@/lib/localDb';
 import * as Haptics from 'expo-haptics';
+import { getVisibleAvatar } from '@/utils/privacyHelper';
 
 export default function SearchPeopleScreen() {
     const [query, setQuery] = useState('');
@@ -86,9 +87,11 @@ export default function SearchPeopleScreen() {
                     const isFriend = friendIds.includes(p.id);
                     const sentReq = sentRequests?.find(r => r.receiver_id === p.id);
                     const recReq = receivedRequests?.find(r => r.sender_id === p.id);
+                    const visibleAvatar = getVisibleAvatar(p, currentUser?.id, isFriend, true);
 
                     return {
                         ...p,
+                        avatar_url: visibleAvatar,
                         isFriend,
                         requestStatus: sentReq?.status || recReq?.status || null
                     };
@@ -161,7 +164,7 @@ export default function SearchPeopleScreen() {
                     renderItem={({ item }) => (
                         <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', flexDirection: 'row', alignItems: 'center' }}>
                             <Image
-                                source={{ uri: item.avatar_url || 'https://via.placeholder.com/150' }}
+                                source={{ uri: item.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.username || 'User')}&backgroundColor=F68537` }}
                                 style={{ width: 48, height: 48, borderRadius: 24, marginRight: 16 }}
                             />
                             <View style={{ flex: 1 }}>

@@ -100,7 +100,7 @@ export const useContactSuggestions = () => {
                     chunkPromises.push(
                         supabase
                             .from('profiles')
-                            .select('id, username, phone, avatar_url, email')
+                            .select('id, username, phone, avatar_url, email, dp_privacy, dp_selected_friends, hide_dp_in_search')
                             .in('phone', chunk)
                             .neq('id', currentUserId)
                     );
@@ -150,6 +150,8 @@ export const useContactSuggestions = () => {
                 const sentRequestIds = new Set(requestsRes.data?.filter(r => r.sender_id === currentUserId && r.status !== 'rejected').map(r => r.receiver_id) || []);
                 const receivedRequestIds = new Set(requestsRes.data?.filter(r => r.receiver_id === currentUserId && r.status !== 'rejected').map(r => r.sender_id) || []);
 
+                const { getVisibleAvatar } = require('@/utils/privacyHelper');
+
                 const finalSuggestions = registeredProfiles
                     .filter(p => 
                         !friendIds.has(p.id) && 
@@ -157,6 +159,7 @@ export const useContactSuggestions = () => {
                     )
                     .map(p => ({
                         ...p,
+                        avatar_url: getVisibleAvatar(p, currentUserId, false, true),
                         requestStatus: sentRequestIds.has(p.id) ? 'pending' : null
                     }));
 

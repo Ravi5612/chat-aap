@@ -82,7 +82,7 @@ export const useCallLogs = () => {
             if (__DEV__) console.log(`[DEBUG] useCallLogs: Querying logs for UUID: "${currentUser.id}"`);
             const { data: rawLogs, error: logError } = await supabase
                 .from('call_logs')
-                .select('*, caller:profiles!caller_id(id,username,avatar_url,email), receiver:profiles!receiver_id(id,username,avatar_url,email)')
+                .select('*')
                 .or(`caller_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
                 .order('created_at', { ascending: false })
                 .range(offset, offset + PAGE_SIZE - 1);
@@ -90,12 +90,27 @@ export const useCallLogs = () => {
             if (logError) throw logError;
 
             if (rawLogs && rawLogs.length > 0) {
-                // Supabase joins can return arrays for one-to-many relationships even if we expect single objects, 
-                // but since these are explicit one-to-one FK links, they are objects. We handle both just in case.
+                // Fetch profiles manually to bypass PostgREST foreign key relation issues
+                const userIds = new Set<string>();
+                rawLogs.forEach(log => {
+                    if (log.caller_id) userIds.add(log.caller_id);
+                    if (log.receiver_id) userIds.add(log.receiver_id);
+                });
+
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id,username,avatar_url,email')
+                    .in('id', Array.from(userIds));
+
+                const profileMap: Record<string, any> = {};
+                if (profiles) {
+                    profiles.forEach(p => profileMap[p.id] = p);
+                }
+
                 const enrichedLogs = rawLogs.map((log: any) => ({
                     ...log,
-                    caller: Array.isArray(log.caller) ? log.caller[0] : log.caller,
-                    receiver: Array.isArray(log.receiver) ? log.receiver[0] : log.receiver
+                    caller: profileMap[log.caller_id] || null,
+                    receiver: profileMap[log.receiver_id] || null
                 }));
 
                 if (isRefresh || offset === 0) {

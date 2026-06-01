@@ -129,6 +129,8 @@ export default function MessageContextMenu({
                             <View style={styles.actionsList}>
                                 <ActionItem icon="arrow-undo-outline" label="Reply" onPress={() => onAction('reply')} />
                                 <ActionItem icon="copy-outline" label="Copy Text" onPress={() => onAction('copy')} />
+                                <ActionItem icon="language-outline" label="Translate 🌐" onPress={() => onAction('translate')} />
+                                <ActionItem icon="volume-high-outline" label="Listen 🔊" onPress={() => onAction('listen')} />
                                 <ActionItem icon="share-outline" label="Forward" onPress={() => onAction('forward')} />
                                 {canEdit && <ActionItem icon="information-circle-outline" label="Info" onPress={() => onAction('info')} />}
                                 {canEdit && <ActionItem icon="create-outline" label="Edit" onPress={() => onAction('edit')} />}

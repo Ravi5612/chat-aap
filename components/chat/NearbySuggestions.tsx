@@ -8,11 +8,35 @@ import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 
 export default function NearbySuggestions() {
-    const { nearbyPeople, loading } = useNearbySuggestions();
+    const { nearbyPeople, loading, isEnabled } = useNearbySuggestions();
     const currentUser = useAuthStore(state => state.user);
     const profile = useAuthStore(state => state.profile);
+    const updateProfile = useAuthStore(state => state.updateProfile);
 
     const [requestedIds, setRequestedIds] = React.useState<string[]>([]);
+
+    if (!isEnabled) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.emptyCard}>
+                    <View style={styles.emptyIconCircle}>
+                        <Ionicons name="radar-outline" size={32} color="#94A3B8" />
+                    </View>
+                    <Text style={styles.emptyTitle}>Nearby Discovery is Off</Text>
+                    <Text style={styles.emptyText}>
+                        Turn on Nearby Discovery to find other warriors within 1 KM of your location.
+                    </Text>
+                    <TouchableOpacity 
+                        style={[styles.addButton, { marginTop: 10, paddingHorizontal: 20 }]}
+                        onPress={() => updateProfile({ nearby_notifications_enabled: true })}
+                    >
+                        <Ionicons name="power" size={16} color="white" />
+                        <Text style={styles.addText}>Turn On</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
 
     if (!loading && nearbyPeople.length === 0) {
         return (
@@ -25,10 +49,17 @@ export default function NearbySuggestions() {
                     <Text style={styles.emptyText}>
                         Abhi aapke aas-paas koi bhi warrior online nahi hai. Jaise hi koi aayega, yahan dikh jayega!
                     </Text>
-                    <View style={styles.emptyHintRow}>
+                    <View style={[styles.emptyHintRow, { marginBottom: 12 }]}>
                         <Ionicons name="radio-outline" size={14} color="#94A3B8" />
                         <Text style={styles.emptyHint}>Scanning within 1 KM radius</Text>
                     </View>
+                    <TouchableOpacity 
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+                        onPress={() => updateProfile({ nearby_notifications_enabled: false })}
+                    >
+                        <Ionicons name="power" size={14} color="#EF4444" />
+                        <Text style={{ fontSize: 11, color: '#EF4444', fontWeight: 'bold' }}>Turn Off Nearby</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         );

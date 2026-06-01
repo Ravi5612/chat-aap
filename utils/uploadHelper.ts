@@ -125,10 +125,16 @@ export const uploadWithProgressToCloudinary = (
             const xhr = new XMLHttpRequest();
             xhr.open('POST', uploadUrl);
 
+            let lastProgressTime = 0;
             xhr.upload.onprogress = (event) => {
                 if (event.lengthComputable) {
                     const percent = Math.round((event.loaded / event.total) * 100);
-                    onProgress(percent);
+                    const now = Date.now();
+                    // Throttle updates to max 1 per 200ms to prevent UI freezing, unless it's 100%
+                    if (now - lastProgressTime > 200 || percent === 100) {
+                        onProgress(percent);
+                        lastProgressTime = now;
+                    }
                 }
             };
 

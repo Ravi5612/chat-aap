@@ -59,7 +59,37 @@ export default function PrivacySafetyScreen() {
                         />
                     </View>
 
-                    <Text style={styles.sectionLabel}>PRIVACY SETTINGS</Text>
+                    <Text style={styles.sectionLabel}>PROFILE VISIBILITY</Text>
+
+                    <TouchableOpacity 
+                        onPress={() => router.push('/privacy-safety/profile-photo' as any)}
+                        style={styles.tipCard}
+                    >
+                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
+                            <Ionicons name="image-outline" size={26} color="#F68537" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Profile Photo</Text>
+                            <Text style={styles.tipDesc}>Control who can see your picture</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        onPress={() => router.push('/privacy-safety/about-privacy' as any)}
+                        style={styles.tipCard}
+                    >
+                        <View style={[styles.iconContainer, { backgroundColor: '#EC489910' }]}>
+                            <Ionicons name="document-text-outline" size={26} color="#EC4899" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>About / Bio</Text>
+                            <Text style={styles.tipDesc}>Control who can see your about info</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
+                    </TouchableOpacity>
+
+                    <Text style={styles.sectionLabel}>GENERAL PRIVACY SETTINGS</Text>
 
                     {/* Show Email */}
                     <View style={styles.tipCard}>
@@ -101,25 +131,7 @@ export default function PrivacySafetyScreen() {
                         />
                     </View>
 
-                    {/* Show Bio */}
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#EC489910' }]}>
-                            <Ionicons name="document-text-outline" size={26} color="#EC4899" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Show Bio</Text>
-                            <Text style={styles.tipDesc}>Let others read your bio/about me section.</Text>
-                        </View>
-                        <Switch 
-                            value={profile?.show_bio ?? true}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ show_bio: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#FCE7F3' }}
-                            thumbColor={profile?.show_bio ? '#EC4899' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
+
 
                     {/* Show Online Status */}
                     <View style={styles.tipCard}>

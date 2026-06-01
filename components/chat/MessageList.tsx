@@ -19,11 +19,13 @@ interface MessageListProps {
     flyingEmoji?: any;
     onLoadMore?: () => void;
     loadingMore?: boolean;
+    translatedMessages?: Record<string, { text: string; lang: string }>;
+    autoListenMode?: boolean;
 }
 
 export default function MessageList({
     messages, currentUser, onReply, onLongPress, onImagePress,
-    friendName, flyingEmoji, onLoadMore, loadingMore = false,
+    friendName, flyingEmoji, onLoadMore, loadingMore = false, translatedMessages = {}, autoListenMode = false,
 }: MessageListProps) {
 
     const {
@@ -48,9 +50,11 @@ export default function MessageList({
                 onImagePress={onImagePress}
                 friendName={friendName}
                 flyingEmoji={flyingEmoji}
+                translatedText={translatedMessages[item.id] || null}
+                autoListenMode={autoListenMode}
             />
         );
-    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji, handleScrollToMessage]);
+    }, [currentUser?.id, onLongPress, onReply, onImagePress, friendName, flyingEmoji, handleScrollToMessage, translatedMessages, autoListenMode]);
 
     const keyExtractor = useCallback((item: any) => item.id, []);
 

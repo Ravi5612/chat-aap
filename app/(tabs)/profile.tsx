@@ -88,7 +88,7 @@ export default function ProfileScreen() {
                     {/* Logout Button */}
                     <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
                         <View style={styles.logoutIconBg}>
-                            <Ionicons name="power" size={20} color="#F68537" />
+                            <Ionicons name="power" size={20} color="#FFFFFF" />
                         </View>
                         <Text style={styles.logoutText}>Logout</Text>
                     </TouchableOpacity>
@@ -120,22 +120,21 @@ const styles = StyleSheet.create({
     logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 24,
-        marginTop: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        marginHorizontal: 24,
+        marginTop: 16,
+        backgroundColor: '#F68537',
+        borderRadius: 16,
+        justifyContent: 'center',
     },
     logoutIconBg: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        backgroundColor: '#FFF7ED',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
+        marginRight: 8,
     },
     logoutText: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#F68537',
+        color: '#FFFFFF',
     }
 });
 

@@ -22,7 +22,11 @@ CREATE TABLE public.profiles (
   allow_status_download bool DEFAULT false,
   last_lat numeric,
   last_long numeric,
-  allow_screenshot bool DEFAULT true
+  allow_screenshot bool DEFAULT true,
+  dp_privacy text DEFAULT 'everyone',
+  dp_selected_friends uuid[] DEFAULT '{}',
+  hide_dp_in_search bool DEFAULT false,
+  about_privacy text DEFAULT 'everyone'
 );
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -357,3 +361,67 @@ CREATE TRIGGER on_auth_user_created
 
 -- Reload schema cache
 NOTIFY pgrst, 'reload schema';
+
+-- Add new privacy columns without dropping tables
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS dp_privacy text DEFAULT 'everyone';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS dp_selected_friends uuid[] DEFAULT '{}';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hide_dp_in_search boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS about_privacy text DEFAULT 'everyone';
+
+-- Disappearing Messages Support
+ALTER TABLE public.friendships ADD COLUMN IF NOT EXISTS disappearing_duration integer DEFAULT 0;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+
+-- ==========================================
+-- SCHEDULED MESSAGES & CRON JOB
+-- ==========================================
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+DROP TABLE IF EXISTS public.scheduled_messages CASCADE;
+
+CREATE TABLE public.scheduled_messages (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  sender_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+  receiver_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+  group_id uuid REFERENCES public.groups(id) ON DELETE CASCADE,
+  message text,
+  file_url text,
+  file_type text,
+  file_name text,
+  file_size numeric,
+  message_type text DEFAULT 'text',
+  scheduled_at timestamptz NOT NULL,
+  status text DEFAULT 'pending',
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.scheduled_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can insert scheduled messages" ON public.scheduled_messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
+CREATE POLICY "Users can view their scheduled messages" ON public.scheduled_messages FOR SELECT USING (auth.uid() = sender_id);
+CREATE POLICY "Users can update their scheduled messages" ON public.scheduled_messages FOR UPDATE USING (auth.uid() = sender_id);
+CREATE POLICY "Users can delete their scheduled messages" ON public.scheduled_messages FOR DELETE USING (auth.uid() = sender_id);
+
+-- Function to process scheduled messages
+CREATE OR REPLACE FUNCTION public.process_scheduled_messages()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Insert pending messages whose time has come into the main messages table
+  INSERT INTO public.messages (sender_id, receiver_id, group_id, message, file_url, file_type, file_name, file_size, message_type, status, is_read, created_at)
+  SELECT sender_id, receiver_id, group_id, message, file_url, file_type, file_name, file_size, message_type, 'sent', false, now()
+  FROM public.scheduled_messages
+  WHERE status = 'pending' AND scheduled_at <= now();
+
+  -- Mark them as sent
+  UPDATE public.scheduled_messages
+  SET status = 'sent'
+  WHERE status = 'pending' AND scheduled_at <= now();
+END;
+$$;
+
+-- Schedule the cron job to run every minute
+-- Note: 'process_scheduled_msgs_job' is the job name
+SELECT cron.unschedule('process_scheduled_msgs_job');
+SELECT cron.schedule('process_scheduled_msgs_job', '* * * * *', 'SELECT public.process_scheduled_messages()');

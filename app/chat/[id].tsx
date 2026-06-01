@@ -10,6 +10,7 @@ import ChatInput from '@/components/chat/ChatInput';
 import { useChatRoom } from '@/hooks/useChatRoom';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useChatStore } from '@/store/useChatStore';
 
 // Custom Hooks
 import { useChatSync } from '@/hooks/useChatSync';
@@ -21,6 +22,10 @@ import ChatHeader from '@/components/chat/ChatHeader';
 import ChatSkeleton from '@/components/chat/ChatSkeleton';
 import ChatModals from '@/components/chat/ChatModals';
 import { UnfriendedBanner, BlockedBanner } from '@/components/chat/ChatBanners';
+import DisappearingMessagesModal from '@/components/chat/DisappearingMessagesModal';
+import ScheduledMessagesListModal from '@/components/chat/ScheduledMessagesListModal';
+import { translateMessage } from '@/services/translationService';
+import * as Speech from 'expo-speech';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
@@ -51,6 +56,9 @@ export default function ChatScreen() {
         flyingEmoji, isMember, handleLoadMore
     } = chatRoom;
 
+    // chatKey for encryption - used in ScheduledMessagesListModal
+    const chatKey = useChatStore(state => state.chatKey);
+
     const { handleStartCall } = useCallManager(currentUser, [], false);
 
     const [replyingTo, setReplyingTo] = useState<any>(null);
@@ -67,6 +75,28 @@ export default function ChatScreen() {
     const [viewerIsVideo, setViewerIsVideo] = useState(false);
     const [ledgerVisible, setLedgerVisible] = useState(false);
     const [infoVisible, setInfoVisible] = useState(false);
+    const [disappearingModalVisible, setDisappearingModalVisible] = useState(false);
+    const [scheduledListModalVisible, setScheduledListModalVisible] = useState(false);
+    const [translatedMessages, setTranslatedMessages] = useState<Record<string, { text: string; lang: string }>>({});
+    const [autoListenMode, setAutoListenMode] = useState(false);
+    
+    const disappearingDuration = friendData?.disappearing_duration || 0;
+
+    const handleSetDisappearingDuration = async (duration: number) => {
+        if (!currentUser?.id || !safeFriendId) return;
+        try {
+            await supabase.from('friendships').update({ disappearing_duration: duration })
+                .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${safeFriendId}),and(user_id.eq.${safeFriendId},friend_id.eq.${currentUser.id})`);
+            
+            const infoText = duration === 0 
+                ? `${currentUser.user_metadata?.username || 'User'} turned off disappearing messages.`
+                : `${currentUser.user_metadata?.username || 'User'} set disappearing messages to ${duration === 86400 ? '24 Hours' : (duration === 604800 ? '7 Days' : '30 Days')}.`;
+            
+            await handleSendMessageOriginal(infoText, undefined, undefined, 'info');
+        } catch (error) {
+            console.error('Failed to set disappearing duration', error);
+        }
+    };
 
     const handleMessageLongPress = useCallback((msg: any, y: number) => {
         setSelectedMessage(msg);
@@ -83,7 +113,7 @@ export default function ChatScreen() {
     const { wallpaper, setWallpaper, draft, handleDraftChange } = useChatSync(roomId, safeFriendId, currentUser, isGroup === 'true', messages);
     const { handleClearChat, handleBlockToggle, handleUnfriend, handleSetWallpaper } = useChatActions(currentUser, safeFriendId, roomId, friendName as string, isGroup === 'true', isBlocked, setWallpaper);
 
-    const handleSendMessage = async (text: string) => {
+    const handleSendMessage = async (text: string, scheduledAt?: Date) => {
         if (!text.trim() || !currentUser) return;
         if (isBlocked) return Alert.alert("Blocked", "Unblock this user to send messages.");
         if (iAmBlocked) return Alert.alert("Blocked", "You are blocked by this user.");
@@ -92,7 +122,7 @@ export default function ChatScreen() {
         setReplyingTo(null);
         handleDraftChange('');
 
-        try { await handleSendMessageOriginal(text, replyId); } 
+        try { await handleSendMessageOriginal(text, replyId, disappearingDuration, undefined, scheduledAt); } 
         catch (error) { console.error('[CHAT] Send failed:', error); }
     };
 
@@ -111,6 +141,61 @@ export default function ChatScreen() {
             case 'forward': setForwardText(selectedMessage.message || ''); setForwardModalVisible(true); break;
             case 'info': setInfoVisible(true); break;
             case 'edit': setEditingMessage(selectedMessage); setReplyingTo(null); break;
+            case 'translate': {
+                const msgId = selectedMessage.id;
+                // Toggle: agar already translated hai toh hide karo
+                if (translatedMessages[msgId]) {
+                    setTranslatedMessages(prev => { const n = { ...prev }; delete n[msgId]; return n; });
+                    return;
+                }
+                const rawText = selectedMessage.message || '';
+                translateMessage(rawText).then(result => {
+                    if (result) {
+                        setTranslatedMessages(prev => ({
+                            ...prev,
+                            [msgId]: { text: result.translatedText, lang: result.detectedLang }
+                        }));
+                    } else {
+                        Alert.alert('Translation Failed', 'Could not translate this message. Please try again.');
+                    }
+                });
+                break;
+            }
+            case 'listen': {
+                const textToSpeak = selectedMessage.message || '';
+                // Clean up special tags like [Image], [Voice Message] etc.
+                const cleanText = textToSpeak
+                    .replace(/\[Image\]\s*\S+/g, 'Image')
+                    .replace(/\[Video\]\s*\S+/g, 'Video')
+                    .replace(/\[Voice Message\]\s*\S+/g, 'Voice Message')
+                    .replace(/\[Document\][^|]+\|?[^|]*/g, 'Document')
+                    .replace(/\[Contact\][^|]+\|?[^|]*/g, 'Contact')
+                    .replace(/\[Location\][^|]+\|?[^|]*/g, 'Location')
+                    .trim();
+
+                if (!cleanText) {
+                    Alert.alert('Nothing to read', 'This message has no text to speak.');
+                    break;
+                }
+
+                // Detect language - Hindi characters range
+                const isHindi = /[\u0900-\u097F]/.test(cleanText);
+                const lang = isHindi ? 'hi-IN' : 'en-US';
+
+                // Stop if already speaking, else start
+                Speech.isSpeakingAsync().then(isSpeaking => {
+                    if (isSpeaking) {
+                        Speech.stop();
+                    } else {
+                        Speech.speak(cleanText, {
+                            language: lang,
+                            pitch: 1.0,
+                            rate: 0.9,
+                        });
+                    }
+                });
+                break;
+            }
             case 'delete': 
                 Alert.alert("Delete Message", "Choose how you want to delete this message.", [
                     { text: "Cancel", style: "cancel" },
@@ -202,6 +287,11 @@ export default function ChatScreen() {
                 handleUnfriend={handleUnfriend}
                 handleSetWallpaper={handleSetWallpaper}
                 setLedgerVisible={setLedgerVisible}
+                onSetDisappearingMessages={() => setDisappearingModalVisible(true)}
+                onViewScheduledMessages={() => setScheduledListModalVisible(true)}
+                disappearingDuration={disappearingDuration}
+                autoListenMode={autoListenMode}
+                onToggleAutoListen={() => setAutoListenMode(prev => !prev)}
             />
 
             <View style={{ flex: 1 }}>
@@ -215,6 +305,8 @@ export default function ChatScreen() {
                     flyingEmoji={flyingEmoji}
                     onLoadMore={handleLoadMore}
                     loadingMore={loadingMore}
+                    translatedMessages={translatedMessages}
+                    autoListenMode={autoListenMode}
                 />
                 
                 {isTyping && (
@@ -231,7 +323,7 @@ export default function ChatScreen() {
 
                 {!isBlocked && !iAmBlocked && isFriend !== false && (
                     <ChatInput
-                        onSendMessage={handleSendMessage}
+                        onSendMessage={(text, scheduledAt) => handleSendMessage(text, scheduledAt)}
                         onTyping={handleTypingStatus}
                         replyingTo={replyingTo}
                         onCancelReply={() => setReplyingTo(null)}
@@ -272,6 +364,21 @@ export default function ChatScreen() {
                 infoVisible={infoVisible}
                 setInfoVisible={setInfoVisible}
                 allowDownload={friendData?.friend?.allow_status_download ?? true}
+            />
+
+            <DisappearingMessagesModal
+                visible={disappearingModalVisible}
+                onClose={() => setDisappearingModalVisible(false)}
+                currentDuration={disappearingDuration}
+                onSelectDuration={handleSetDisappearingDuration}
+            />
+
+            <ScheduledMessagesListModal
+                visible={scheduledListModalVisible}
+                onClose={() => setScheduledListModalVisible(false)}
+                friendId={safeFriendId}
+                isGroup={isGroup === 'true'}
+                chatKey={chatKey}
             />
         </KeyboardAvoidingView>
     );
