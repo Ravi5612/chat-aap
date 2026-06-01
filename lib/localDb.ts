@@ -38,7 +38,8 @@ export const initDatabase = async () => {
                 avatar TEXT,
                 is_locked INTEGER DEFAULT 0,
                 is_favorite INTEGER DEFAULT 0,
-                is_archived INTEGER DEFAULT 0
+                is_archived INTEGER DEFAULT 0,
+                is_hidden INTEGER DEFAULT 0
             );
 
 
@@ -206,6 +207,14 @@ export const initDatabase = async () => {
             console.log('[DB] Migration: Added is_favorite and is_archived to conversations');
         } catch (e) {
             // Columns probably already exist, ignore
+        }
+
+        // Migration: Ensure is_hidden exists
+        try {
+            await db.execAsync('ALTER TABLE conversations ADD COLUMN is_hidden INTEGER DEFAULT 0;');
+            console.log('[DB] Migration: Added is_hidden to conversations');
+        } catch (e) {
+            // Column probably already exists, ignore
         }
 
         // Migration: Ensure email exists in conversations
@@ -828,8 +837,8 @@ export const getLocalCallLogs = async (db: SQLite.SQLiteDatabase, userId: string
 export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any) => {
     try {
         await db.runAsync(
-            `INSERT OR REPLACE INTO conversations (id, name, email, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived, is_unfriended) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT OR REPLACE INTO conversations (id, name, email, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived, is_unfriended, is_hidden) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 conv.id,
                 conv.name || 'Unknown',
@@ -842,7 +851,8 @@ export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any
                 conv.isLocked ? 1 : 0,
                 conv.isFavorite ? 1 : 0,
                 conv.isArchived ? 1 : 0,
-                conv.isUnfriended ? 1 : 0
+                conv.isUnfriended ? 1 : 0,
+                conv.isHidden ? 1 : 0
             ]
         );
 
@@ -867,6 +877,7 @@ export const getLocalConversations = async (db: SQLite.SQLiteDatabase) => {
             isFavorite: row.is_favorite === 1,
             isArchived: row.is_archived === 1,
             isUnfriended: row.is_unfriended === 1,
+            isHidden: row.is_hidden === 1,
             lastActivity: row.last_message_at
         }));
 
