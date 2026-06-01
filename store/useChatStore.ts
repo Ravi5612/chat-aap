@@ -747,8 +747,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                 const { data, error } = await supabase.from(targetTable).insert([insertData]).select().single();
                 if (error) throw error;
 
+                let finalMsg: any = null;
                 if (!scheduledAt) {
-                    const finalMsg = { ...data, message: messageToEncrypt, file_url: urlPayload, reply: replyObject };
+                    finalMsg = { ...data, message: messageToEncrypt, file_url: urlPayload, reply: replyObject };
                     set((state) => {
                         const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
                         saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
@@ -781,7 +782,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                     require('react-native').Alert.alert('Success', 'Message scheduled successfully!');
                 }
 
-                if (activeChannel && !scheduledAt) {
+                if (activeChannel && !scheduledAt && finalMsg) {
                     activeChannel.send({
                         type: 'broadcast',
                         event: 'new_message',
