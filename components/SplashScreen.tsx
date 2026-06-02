@@ -127,7 +127,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationFinish })
             
             <Animated.View style={[styles.illustrationContainer, illustrationStyle]}>
                 <Image
-                    source={require('@/assets/images/splash-illustration.jpg')}
+                    source={require('@/assets/images/splash-illustration.png')}
                     style={styles.illustration}
                     contentFit="contain"
                 />
