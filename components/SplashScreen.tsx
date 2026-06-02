@@ -28,6 +28,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationFinish })
     // 3. Opacity
     const opacity = useSharedValue(0);
 
+    // Illustration animation
+    const illustrationOpacity = useSharedValue(0);
+    const illustrationTranslateY = useSharedValue(50);
+
     const logoStyle = useAnimatedStyle(() => {
         return {
             transform: [
@@ -38,24 +42,33 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationFinish })
         };
     });
 
-    useEffect(() => {
-        // Animation Sequence
+    const illustrationStyle = useAnimatedStyle(() => {
+        return {
+            opacity: illustrationOpacity.value,
+            transform: [{ translateY: illustrationTranslateY.value }]
+        };
+    });
 
-        // Step 1: Slide in from left + Fade In (Slower, start after small delay)
-        opacity.value = withDelay(300, withTiming(1, { duration: 1500 }));
-        translateX.value = withDelay(300, withSpring(0, {
+    useEffect(() => {
+        // Step 1: Slide in from left + Fade In Logo
+        opacity.value = withDelay(100, withTiming(1, { duration: 1000 }));
+        translateX.value = withDelay(100, withSpring(0, {
             damping: 15,
-            stiffness: 40, // Reduced stiffness for slower bounce
-            mass: 1.5      // Increased mass for "heavier" feel
+            stiffness: 60, 
+            mass: 1
         }));
 
-        // Step 2: Zoom In gradually (Starts after slide completes approx)
-        scale.value = withDelay(1800, withTiming(1.8, { // Increased zoom factor slightly
-            duration: 3000, // Doubled duration for very slow zoom
+        // Fade up illustration shortly after logo starts
+        illustrationOpacity.value = withDelay(500, withTiming(1, { duration: 1000 }));
+        illustrationTranslateY.value = withDelay(500, withSpring(0, { damping: 15, stiffness: 60 }));
+
+        // Step 2: Zoom In gradually
+        scale.value = withDelay(800, withTiming(1.3, { 
+            duration: 2500,
             easing: Easing.bezier(0.25, 0.1, 0.25, 1),
         }, (finished) => {
             if (finished) {
-                // Step 3: Finish -> Trigger Callback to hide splash
+                // Step 3: Finish -> Trigger Callback
                 runOnJS(onAnimationFinish)();
             }
         }));
@@ -70,6 +83,14 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationFinish })
                     contentFit="contain"
                 />
             </Animated.View>
+            
+            <Animated.View style={[styles.illustrationContainer, illustrationStyle]}>
+                <Image
+                    source={require('@/assets/images/splash-illustration.jpg')}
+                    style={styles.illustration}
+                    contentFit="contain"
+                />
+            </Animated.View>
         </View>
     );
 };
@@ -77,19 +98,31 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationFinish })
 const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#FFF5E6', // Light orange background matching app theme
+        backgroundColor: '#FFFFFF', // Clean white background to match illustration
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
+        paddingTop: 80, // Push everything down a bit
     },
     logoContainer: {
-        width: 200,
-        height: 200,
+        width: 280, // Made logo bigger
+        height: 120,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 40,
+    },
+    logo: {
+        width: '100%',
+        height: '100%',
+    },
+    illustrationContainer: {
+        width: width * 0.9,
+        height: width * 0.9,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    logo: {
+    illustration: {
         width: '100%',
         height: '100%',
     }
