@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Text } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -134,7 +134,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onAnimationFinish })
                 
                 {/* Floating Message Bubble */}
                 <Animated.View style={[styles.bubble, bubbleStyle]}>
-                    <Text style={{ fontSize: 28, textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }}>💬</Text>
+                    <Text style={{ fontSize: 32 }}>💬</Text>
                 </Animated.View>
             </Animated.View>
         </View>
