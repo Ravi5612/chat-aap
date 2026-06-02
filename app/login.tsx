@@ -20,9 +20,9 @@ export default function LoginPage() {
         toggleMode,
     } = useAuthForm();
 
-    const title = isForgotPassword ? "Reset Password" : isSignUp ? "Create Account" : "Welcome Back";
-    const subtitle = isForgotPassword ? "We'll send a link to your email" : isSignUp ? "Join Chat Warriors today!" : "Login to your account";
-    const btnLabel = isForgotPassword ? "Send Reset Link" : isSignUp ? "Sign Up" : "Login";
+    const title = isForgotPassword ? "Reset Password" : isSignUp ? "Create Account" : "Welcome to ChatWarrior";
+    const subtitle = isForgotPassword ? "We'll send a link to your email" : isSignUp ? "Join Chat Warriors today!" : "Connect with friends across India";
+    const btnLabel = isForgotPassword ? "Send Reset Link" : isSignUp ? "Sign Up" : "LOG IN";
     const toggleLabel = isForgotPassword
         ? "Back to Login"
         : isSignUp ? "Already have an account? " : "Don't have an account? ";
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
         width: '100%',
         backgroundColor: '#F68537',
         paddingVertical: 18,
-        borderRadius: 16,
+        borderRadius: 25,
         alignItems: 'center',
         marginTop: 8,
         shadowColor: '#F68537',

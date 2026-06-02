@@ -37,15 +37,18 @@ export default function AuthFormFields({
         return (
             <>
                 <Text style={styles.label}>Email Address</Text>
-                <TextInput
-                    value={resetEmail}
-                    onChangeText={setResetEmail}
-                    placeholder="you@example.com"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    style={inputStyle}
-                    editable={!loading}
-                />
+                <View style={styles.inputContainer}>
+                    <Ionicons name="mail-outline" size={20} color="#F68537" style={styles.iconLeft} />
+                    <TextInput
+                        value={resetEmail}
+                        onChangeText={setResetEmail}
+                        placeholder="you@example.com"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        style={styles.input}
+                        editable={!loading}
+                    />
+                </View>
             </>
         );
     }
@@ -55,47 +58,57 @@ export default function AuthFormFields({
             {isSignUp ? (
                 <>
                     <Text style={styles.label}>Email Address</Text>
-                    <TextInput
-                        value={email}
-                        onChangeText={setEmail}
-                        placeholder="you@example.com"
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        style={inputStyle}
-                        editable={!loading}
-                    />
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="mail-outline" size={20} color="#F68537" style={styles.iconLeft} />
+                        <TextInput
+                            value={email}
+                            onChangeText={setEmail}
+                            placeholder="you@example.com"
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            style={styles.input}
+                            editable={!loading}
+                        />
+                    </View>
                     <Text style={styles.label}>Phone Number</Text>
-                    <TextInput
-                        value={phone}
-                        onChangeText={setPhone}
-                        placeholder="For your friends to find you"
-                        keyboardType="phone-pad"
-                        style={inputStyle}
-                        editable={!loading}
-                    />
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="call-outline" size={20} color="#F68537" style={styles.iconLeft} />
+                        <TextInput
+                            value={phone}
+                            onChangeText={setPhone}
+                            placeholder="For your friends to find you"
+                            keyboardType="phone-pad"
+                            style={styles.input}
+                            editable={!loading}
+                        />
+                    </View>
                 </>
             ) : (
                 <>
-                    <Text style={styles.label}>Email or Phone Number</Text>
-                    <TextInput
-                        value={identifier}
-                        onChangeText={setIdentifier}
-                        placeholder="Enter email or phone"
-                        autoCapitalize="none"
-                        style={inputStyle}
-                        editable={!loading}
-                    />
+                    <Text style={styles.label}>Username / Mobile Number</Text>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="person-outline" size={20} color="#F68537" style={styles.iconLeft} />
+                        <TextInput
+                            value={identifier}
+                            onChangeText={setIdentifier}
+                            placeholder="Enter username or phone"
+                            autoCapitalize="none"
+                            style={styles.input}
+                            editable={!loading}
+                        />
+                    </View>
                 </>
             )}
 
             <Text style={styles.label}>Password</Text>
-            <View style={{ position: 'relative', width: '100%' }}>
+            <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#F68537" style={styles.iconLeft} />
                 <TextInput
                     value={password}
                     onChangeText={setPassword}
                     placeholder="Secret password"
                     secureTextEntry={!showPassword}
-                    style={[inputStyle, { paddingRight: 50 }]}
+                    style={styles.input}
                     editable={!loading}
                 />
                 <TouchableOpacity
@@ -105,7 +118,7 @@ export default function AuthFormFields({
                     <Ionicons
                         name={showPassword ? "eye-off-outline" : "eye-outline"}
                         size={22}
-                        color="#9CA3AF"
+                        color="#F68537"
                     />
                 </TouchableOpacity>
             </View>
@@ -113,13 +126,14 @@ export default function AuthFormFields({
             {isSignUp && setConfirmPassword && confirmPassword !== undefined && (
                 <>
                     <Text style={styles.label}>Confirm Password</Text>
-                    <View style={{ position: 'relative', width: '100%' }}>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="lock-closed-outline" size={20} color="#F68537" style={styles.iconLeft} />
                         <TextInput
                             value={confirmPassword}
                             onChangeText={setConfirmPassword}
                             placeholder="Confirm your secret password"
                             secureTextEntry={!showPassword}
-                            style={[inputStyle, { paddingRight: 50 }]}
+                            style={styles.input}
                             editable={!loading}
                         />
                     </View>
@@ -129,9 +143,9 @@ export default function AuthFormFields({
             {!isSignUp && (
                 <TouchableOpacity
                     onPress={onForgotPassword}
-                    style={{ alignSelf: 'flex-end', marginBottom: 16 }}
+                    style={{ alignSelf: 'center', marginTop: 8, marginBottom: 16 }}
                 >
-                    <Text style={{ color: '#F68537', fontWeight: '600' }}>Forgot Password?</Text>
+                    <Text style={{ color: '#1F2937', fontWeight: '500', fontSize: 14 }}>Forgot Password?</Text>
                 </TouchableOpacity>
             )}
         </>
@@ -140,27 +154,38 @@ export default function AuthFormFields({
 
 const styles = StyleSheet.create({
     label: {
-        color: '#374151',
+        color: '#F68537',
         fontWeight: '600',
         marginBottom: 8,
         fontSize: 14,
         paddingLeft: 4,
     },
-    input: {
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
         width: '100%',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        fontSize: 16,
-        backgroundColor: 'white',
+        borderColor: '#F68537',
+        borderRadius: 25,
+        backgroundColor: '#FFFFFF',
         marginBottom: 16,
+        paddingHorizontal: 16,
+        height: 50,
+        shadowColor: '#F68537',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    iconLeft: {
+        marginRight: 10,
+    },
+    input: {
+        flex: 1,
+        fontSize: 16,
+        color: '#1F2937',
     },
     eyeBtn: {
-        position: 'absolute',
-        right: 12,
-        top: 12,
         padding: 4,
     }
 });
