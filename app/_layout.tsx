@@ -98,6 +98,8 @@ export default function RootLayout() {
         let didFetchCache = false;
         // Check for cached session to render Home instantly
         const cachedSessionStr = await SecureStore.getItemAsync('supabase_session').catch(() => null);
+        const lastUserId = await SecureStore.getItemAsync('last_user_id').catch(() => null);
+
         if (cachedSessionStr) {
           try {
             const cachedSession = JSON.parse(cachedSessionStr);
@@ -113,10 +115,24 @@ export default function RootLayout() {
 
         const { data: { session: liveSession } } = await supabase.auth.getSession();
         setSession(liveSession);
+        
         if (liveSession) {
-          if (!didFetchCache || !cachedSessionStr || JSON.parse(cachedSessionStr).user.id !== liveSession.user.id) {
+          const currentUserId = liveSession.user.id;
+          
+          // Security Check: If a different user logged in without proper logout, wipe the database
+          if (lastUserId && lastUserId !== currentUserId) {
+              const { db } = useDbStore.getState();
+              if (db) {
+                  const { clearAllLocalData } = require('@/lib/localDb');
+                  await clearAllLocalData(db);
+                  console.log('[SECURITY] Wiped local database due to user account switch');
+              }
+          }
+          await SecureStore.setItemAsync('last_user_id', currentUserId);
+
+          if (!didFetchCache || !cachedSessionStr || JSON.parse(cachedSessionStr).user.id !== currentUserId) {
              await useAuthStore.getState().syncProfile();
-             await useFriendsStore.getState().fetchBlockedUsers(liveSession.user.id);
+             await useFriendsStore.getState().fetchBlockedUsers(currentUserId);
           }
           try {
              const publicKeyBase64 = await initializeX25519Keys(liveSession.user.id);
