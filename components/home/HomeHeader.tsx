@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { GlassHeader } from '@/components/ui/GlassHeader';
 import { useRouter } from 'expo-router';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface HomeHeaderProps {
     profile: any;
@@ -19,13 +20,16 @@ const HomeHeader = memo(function HomeHeader({
     unreadNotificationsCount
 }: HomeHeaderProps) {
     const router = useRouter();
+    const user = useAuthStore(state => state.user);
+    
+    const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || user?.user_metadata?.full_name || 'User')}&backgroundColor=F68537`;
 
     return (
         <GlassHeader>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)}>
                     <Image
-                        source={{ uri: profile?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || 'User')}&backgroundColor=F68537` }}
+                        source={{ uri: avatarUrl }}
                         style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: Platform.OS === 'android' ? 'white' : '#F68537' }}
                     />
                 </TouchableOpacity>
