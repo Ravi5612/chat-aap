@@ -6,8 +6,8 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
-    ImageBackground,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChatLoader from '@/components/ui/ChatLoader';
 
@@ -20,10 +20,9 @@ interface AuthScreenProps {
 
 export default function AuthScreen({ title, subtitle, loading = false, children }: AuthScreenProps) {
     return (
-        <ImageBackground 
-            source={require('@/assets/images/auth-bg.png')} 
+        <LinearGradient 
+            colors={['#0F172A', '#1E293B']} 
             style={{ flex: 1 }}
-            resizeMode="cover"
         >
             <SafeAreaView style={{ flex: 1 }}>
                 <KeyboardAvoidingView
@@ -35,20 +34,15 @@ export default function AuthScreen({ title, subtitle, loading = false, children 
                     <View style={{
                         alignItems: 'center',
                         paddingTop: 80,
-                        paddingBottom: 30,
+                        paddingBottom: 40,
                     }}>
-                        <Text style={{ fontSize: 24, marginBottom: -10, zIndex: 10 }}>🇮🇳</Text>
                         <Text style={{ 
-                            fontSize: 48, 
+                            fontSize: 36, 
                             fontWeight: '900', 
                             color: '#FFFFFF',
-                            fontStyle: 'italic',
                             letterSpacing: 2,
-                            textShadowColor: '#F68537',
-                            textShadowOffset: { width: 2, height: 2 },
-                            textShadowRadius: 1,
                         }}>
-                            CHATWARRIOR
+                            CHATWARRIOR<Text style={{ color: '#F68537' }}>.</Text>
                         </Text>
                     </View>
 
@@ -84,6 +78,6 @@ export default function AuthScreen({ title, subtitle, loading = false, children 
 
             {loading && <ChatLoader />}
             </SafeAreaView>
-        </ImageBackground>
+        </LinearGradient>
     );
 }
