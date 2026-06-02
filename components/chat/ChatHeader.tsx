@@ -77,6 +77,20 @@ export default function ChatHeader({
         return `last seen ${date.toLocaleDateString()}`;
     };
 
+    const friendFromStore = useFriendsStore(state => state.friends.find(f => f.id === friendId));
+    const gender = friendFromStore?.gender;
+
+    let avatarSource;
+    if (friendImage) {
+        avatarSource = { uri: friendImage };
+    } else if (isGroup) {
+        avatarSource = { uri: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName || 'Group')}&backgroundColor=F68537` };
+    } else if (gender === 'female') {
+        avatarSource = require('@/assets/images/default-avatar-female.jpg');
+    } else {
+        avatarSource = require('@/assets/images/default-avatar-male.jpg');
+    }
+
     return (
         <View style={{ paddingTop: safeTop, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 10, zIndex: 1000, elevation: 4 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -84,7 +98,7 @@ export default function ChatHeader({
                     <Ionicons name="chevron-back" size={28} color="#F68537" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={isGroup ? () => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any) : handleViewProfile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Image source={{ uri: friendImage || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName || 'User')}&backgroundColor=F68537` }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }} contentFit="cover" />
+                    <Image source={avatarSource} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }} contentFit="cover" />
                     <View>
                         <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName || 'User'}</Text>
                         <Text style={{ fontSize: 10, color: isTyping ? '#10B981' : (isUserOnline ? '#10B981' : '#94A3B8'), fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>

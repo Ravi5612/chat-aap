@@ -7,6 +7,7 @@ interface PrivacyProfile {
     dp_selected_friends?: string[] | null;
     hide_dp_in_search?: boolean | null;
     username?: string | null;
+    gender?: string | null;
 }
 
 /**
@@ -22,11 +23,17 @@ export function getVisibleAvatar(
     viewerId: string | undefined,
     isFriend: boolean = false,
     isSearchContext: boolean = false
-): string | null {
-    if (!targetProfile) return null;
+): any {
+    if (!targetProfile) return require('@/assets/images/default-avatar-male.jpg');
 
-    const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(targetProfile.username || 'User')}&backgroundColor=F68537`;
-    const actualAvatar = targetProfile.avatar_url || defaultAvatar;
+    let defaultAvatar;
+    if (targetProfile.gender === 'female') {
+        defaultAvatar = require('@/assets/images/default-avatar-female.jpg');
+    } else {
+        defaultAvatar = require('@/assets/images/default-avatar-male.jpg');
+    }
+
+    const actualAvatar = targetProfile.avatar_url ? { uri: targetProfile.avatar_url } : defaultAvatar;
 
     // 1. If viewer is the owner, they can always see their own DP
     if (viewerId && targetProfile.id === viewerId) {

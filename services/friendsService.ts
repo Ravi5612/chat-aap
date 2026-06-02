@@ -56,7 +56,7 @@ export async function fetchAndFormatFriendsData(
     if (friendIds.length > 0) {
         const { data: friendProfiles, error: fpError } = await supabase
             .from('profiles')
-            .select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search, public_key')
+            .select('id, username, email, phone, avatar_url, gender, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search, public_key')
             .in('id', friendIds);
             
         console.log('[DEBUG] friendProfiles:', friendProfiles, fpError);
@@ -215,7 +215,7 @@ export async function fetchAndFormatFriendsData(
     const missingUserIds = Array.from(recentChatUserIds).filter(id => !friendIds.includes(id) && id !== userId);
     let missingProfiles: any[] = [];
     if (missingUserIds.length > 0) {
-        const { data } = await supabase.from('profiles').select('id, username, email, phone, avatar_url, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search').in('id', missingUserIds);
+        const { data } = await supabase.from('profiles').select('id, username, email, phone, avatar_url, gender, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search').in('id', missingUserIds);
         if (data) missingProfiles = data;
     }
 
@@ -247,6 +247,7 @@ export async function fetchAndFormatFriendsData(
             email: otherProfile.show_email !== false ? otherProfile.email : null,
             phone: otherProfile.show_phone ? otherProfile.phone : null,
             img: getVisibleAvatar(otherProfile, userId, isFriend, false),
+            gender: otherProfile?.gender,
             unreadCount: unreadCountsMap[otherProfile.id] || 0,
             statusCount: sInfo.count,
             allStatusesViewed: sInfo.count > 0 && sInfo.count === sInfo.viewedCount,

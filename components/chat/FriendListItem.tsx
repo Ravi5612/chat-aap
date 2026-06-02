@@ -125,7 +125,7 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                 >
                     {friend.img ? (
                         <Image
-                            source={{ uri: friend.img }}
+                            source={friend.img}
                             style={{
                                 width: 48,
                                 height: 48,
@@ -136,22 +136,7 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                                 padding: hasStatus ? 2 : 0
                             }}
                         />
-                    ) : (
-                        <View style={{
-                            width: 48,
-                            height: 48,
-                            backgroundColor: '#F68537',
-                            borderRadius: 16,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            borderWidth: hasStatus ? 2 : 0,
-                            borderColor: ringColor
-                        }}>
-                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
-                                {friend.name?.substring(0, 2).toUpperCase() || 'UN'}
-                            </Text>
-                        </View>
-                    )}
+                    ) : null}
 
                     {isOnline && (
                         <View style={{

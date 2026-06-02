@@ -4,18 +4,18 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 interface ProfileHeaderProps {
-    avatarUrl: string | null | undefined;
+    avatarSource: any;
     fullName: string;
     bio: string | null | undefined;
 }
 
-export default function ProfileHeader({ avatarUrl, fullName, bio }: ProfileHeaderProps) {
+export default function ProfileHeader({ avatarSource, fullName, bio }: ProfileHeaderProps) {
     return (
         <View style={styles.profileHeader}>
             <View style={styles.avatarContainer}>
                 <View style={styles.avatarOuterRing}>
                     <Image
-                        source={avatarUrl ? { uri: avatarUrl } : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}&backgroundColor=F68537`}
+                        source={avatarSource}
                         style={styles.avatar}
                         contentFit="cover"
                         transition={500}

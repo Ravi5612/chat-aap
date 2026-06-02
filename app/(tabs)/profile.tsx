@@ -47,7 +47,15 @@ export default function ProfileScreen() {
         }
     };
 
-    const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url;
+    let avatarSource;
+    if (profile?.avatar_url) {
+        avatarSource = { uri: profile.avatar_url };
+    } else if (profile?.gender === 'female') {
+        avatarSource = require('@/assets/images/default-avatar-female.jpg');
+    } else {
+        avatarSource = require('@/assets/images/default-avatar-male.jpg');
+    }
+
     const fullName = profile?.username || user?.user_metadata?.full_name || 'Chat Warrior';
 
     return (
@@ -70,7 +78,7 @@ export default function ProfileScreen() {
                     contentContainerStyle={{ paddingBottom: 60 }}
                 >
                     <ProfileHeader 
-                        avatarUrl={avatarUrl} 
+                        avatarSource={avatarSource} 
                         fullName={fullName} 
                         bio={profile?.bio} 
                     />

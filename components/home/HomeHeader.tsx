@@ -20,16 +20,24 @@ const HomeHeader = memo(function HomeHeader({
     unreadNotificationsCount
 }: HomeHeaderProps) {
     const router = useRouter();
-    const user = useAuthStore(state => state.user);
     
-    const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || user?.user_metadata?.full_name || 'User')}&backgroundColor=F68537`;
+    // Determine the avatar source
+    let avatarSource;
+    if (profile?.avatar_url) {
+        avatarSource = { uri: profile.avatar_url };
+    } else if (profile?.gender === 'female') {
+        avatarSource = require('@/assets/images/default-avatar-female.jpg');
+    } else {
+        // Default to male/other icon if not female or not specified
+        avatarSource = require('@/assets/images/default-avatar-male.jpg');
+    }
 
     return (
         <GlassHeader>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TouchableOpacity onPress={() => router.push('/(tabs)/profile' as any)}>
                     <Image
-                        source={{ uri: avatarUrl }}
+                        source={avatarSource}
                         style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: Platform.OS === 'android' ? 'white' : '#F68537' }}
                     />
                 </TouchableOpacity>

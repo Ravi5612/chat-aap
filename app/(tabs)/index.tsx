@@ -107,7 +107,8 @@ function HomeScreen() {
             useFriendsStore.getState().clearUnreadCount(friend.id);
             const nameParam = encodeURIComponent(friend.name || 'Chat');
             const groupParam = friend.isGroup ? 'true' : 'false';
-            const imageParam = encodeURIComponent(friend.img || '');
+            const imageStr = typeof friend.img === 'object' && friend.img?.uri ? friend.img.uri : '';
+            const imageParam = encodeURIComponent(imageStr);
             const url = `/chat/${friend.id}?name=${nameParam}&isGroup=${groupParam}&image=${imageParam}`;
             setTimeout(() => { router.push(url as any); }, 10);
         } catch (err: any) {

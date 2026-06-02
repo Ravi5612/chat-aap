@@ -52,7 +52,8 @@ export const useReceivedRequests = () => {
             username,
             email,
             phone,
-            avatar_url
+            avatar_url,
+            gender
           )
         `)
                 .eq('receiver_id', user.id)

@@ -52,7 +52,8 @@ export const useSentRequests = () => {
             username,
             email,
             phone,
-            avatar_url
+            avatar_url,
+            gender
           )
         `)
                 .eq('sender_id', user.id)
