@@ -29,6 +29,8 @@ export function getVisibleAvatar(
     let defaultAvatar;
     if (targetProfile.gender === 'female') {
         defaultAvatar = require('@/assets/images/default-avatar-female.jpg');
+    } else if (targetProfile.gender === 'other') {
+        defaultAvatar = require('@/assets/images/default-avatar-other.png');
     } else {
         defaultAvatar = require('@/assets/images/default-avatar-male.jpg');
     }

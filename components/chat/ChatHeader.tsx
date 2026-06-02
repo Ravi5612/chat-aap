@@ -87,6 +87,8 @@ export default function ChatHeader({
         avatarSource = { uri: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName || 'Group')}&backgroundColor=F68537` };
     } else if (gender === 'female') {
         avatarSource = require('@/assets/images/default-avatar-female.jpg');
+    } else if (gender === 'other') {
+        avatarSource = require('@/assets/images/default-avatar-other.png');
     } else {
         avatarSource = require('@/assets/images/default-avatar-male.jpg');
     }

@@ -14,6 +14,8 @@ export default function ProfileInfoScreen() {
         avatarSource = { uri: profile.avatar_url };
     } else if (profile?.gender === 'female') {
         avatarSource = require('@/assets/images/default-avatar-female.jpg');
+    } else if (profile?.gender === 'other') {
+        avatarSource = require('@/assets/images/default-avatar-other.png');
     } else {
         avatarSource = require('@/assets/images/default-avatar-male.jpg');
     }
