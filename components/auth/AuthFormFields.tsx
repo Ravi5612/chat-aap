@@ -171,11 +171,6 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         paddingHorizontal: 16,
         height: 50,
-        shadowColor: '#F68537',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-        elevation: 2,
     },
     iconLeft: {
         marginRight: 10,
