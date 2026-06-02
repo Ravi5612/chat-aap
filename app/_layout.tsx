@@ -221,15 +221,7 @@ export default function RootLayout() {
   }, [initializing]);
 
   if (initializing) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#FFF5E6', alignItems: 'center', justifyContent: 'center' }}>
-        <Image 
-          source={require('@/assets/images/logo.png')} 
-          style={{ width: 120, height: 120 }} 
-          resizeMode="contain" 
-        />
-      </View>
-    );
+    return <SplashScreen onAnimationFinish={() => {}} />;
   }
 
   return (
