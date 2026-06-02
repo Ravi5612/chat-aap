@@ -43,6 +43,7 @@ interface ChatState {
     setFlyingEmoji: (emoji: any) => void;
     markAsRead: (messageId: string, currentUser: any, friendId: string, isGroup: boolean) => Promise<void>;
     loadMessagesUpToId: (friendId: string, currentUser: any, isGroup: boolean, targetMsgId: string, targetCreatedAt: string) => Promise<boolean>;
+    reset: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => {
@@ -1019,6 +1020,18 @@ export const useChatStore = create<ChatState>((set, get) => {
             // Only clear active state, keep messages/key in cache
             set({ activeChannel: null, activeChatId: null, isTyping: false, pageOffset: 0, hasMore: true, loadingMore: false });
             if (typingTimeout) clearTimeout(typingTimeout);
+        },
+
+        reset: () => {
+            set({
+                messages: [],
+                cache: {},
+                activeChannel: null,
+                activeChatId: null,
+                chatKey: null,
+                isTyping: false,
+                uploadProgress: {}
+            });
         }
     };
 });

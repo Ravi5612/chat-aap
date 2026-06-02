@@ -3,7 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import { useDbStore } from './useDbStore';
-import { saveLocalProfile, getLocalProfile, updateLocalProfile, getPendingProfileSync } from '@/lib/localDb';
+import { saveLocalProfile, getLocalProfile, updateLocalProfile, getPendingProfileSync, clearAllLocalData } from '@/lib/localDb';
 import * as SecureStore from 'expo-secure-store';
 
 interface AuthState {
@@ -39,9 +39,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     signOut: async () => {
         const { user } = get();
 
+        // 🛑 Clear All Local Stores and Databases
+        const { db } = useDbStore.getState();
+        if (db) {
+            await clearAllLocalData(db);
+        }
+
+        const { useFriendsStore } = require('./useFriendsStore');
+        const { useChatStore } = require('./useChatStore');
+        
+        useFriendsStore.getState().reset();
+        useChatStore.getState().reset();
+
         // Step 1: Turant state clear karo aur login pe bhejo — koi wait nahi!
         set({ session: null, user: null, profile: null });
         SecureStore.deleteItemAsync('supabase_session').catch(() => {});
+        SecureStore.deleteItemAsync('ninja_vault_passcode').catch(() => {}); // clear vault passcode too
         router.replace('/login');
 
         // Step 2: Network calls background mein — logout ko block nahi karenge
