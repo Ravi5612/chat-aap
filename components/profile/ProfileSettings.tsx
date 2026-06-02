@@ -10,7 +10,7 @@ export default function ProfileSettings() {
         <View style={{ padding: 24 }}>
             <Text style={styles.sectionTitle}>ACCOUNT SETTINGS</Text>
 
-            <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.settingsItem}>
+            <TouchableOpacity onPress={() => router.push('/profile-info')} style={styles.settingsItem}>
                 <View style={[styles.settingsIconBg, { backgroundColor: '#FFF7ED' }]}>
                     <Ionicons name="person-outline" size={20} color="#F68537" />
                 </View>
