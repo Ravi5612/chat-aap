@@ -54,23 +54,19 @@ export default function AuthScreen({ title, subtitle, loading = false, children 
 
                 {/* Scrollable Form Content */}
                 <ScrollView
-                    contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+                    contentContainerStyle={{ flexGrow: 1 }}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     bounces={false}
                 >
                     <View style={{
-                        backgroundColor: 'white',
+                        backgroundColor: '#FFFFFF',
                         padding: 24,
-                        paddingTop: 32,
-                        borderRadius: 30,
-                        shadowColor: '#F68537',
-                        shadowOffset: { width: 0, height: 10 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 20,
-                        elevation: 10,
+                        paddingTop: 40,
+                        borderTopLeftRadius: 40,
+                        borderTopRightRadius: 40,
+                        flex: 1,
                         gap: 16,
-                        marginHorizontal: 12,
                     }}>
                         {/* Page Title & Subtitle inside card */}
                         <Text style={{ fontSize: 24, fontWeight: '800', color: '#1E293B', textAlign: 'center' }}>
