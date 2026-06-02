@@ -51,14 +51,9 @@ export default function SetupProfilePage() {
     };
 
     const inputStyle = {
-        width: '100%' as const,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
+        flex: 1,
         fontSize: 16,
-        backgroundColor: 'white',
+        color: '#1F2937',
     };
 
     return (
@@ -71,16 +66,19 @@ export default function SetupProfilePage() {
                 <View style={{ gap: 20 }}>
                     <View>
                         <Text style={styles.label}>Your Name</Text>
-                        <TextInput
-                            value={name}
-                            onChangeText={setName}
-                            placeholder="Type your name here"
-                            style={inputStyle}
-                            editable={!loading}
-                            placeholderTextColor="#9CA3AF"
-                            autoFocus
-                        />
-                        <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 6, paddingLeft: 4 }}>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="person-outline" size={20} color="#F68537" style={styles.iconLeft} />
+                            <TextInput
+                                value={name}
+                                onChangeText={setName}
+                                placeholder="Type your name here"
+                                style={inputStyle}
+                                editable={!loading}
+                                placeholderTextColor="#9CA3AF"
+                                autoFocus
+                            />
+                        </View>
+                        <Text style={{ color: '#6B7280', fontSize: 12, marginTop: -10, marginBottom: 6, paddingLeft: 12 }}>
                             This name will be visible to your contacts.
                         </Text>
                     </View>
@@ -142,17 +140,37 @@ export default function SetupProfilePage() {
 
 const styles = StyleSheet.create({
     label: {
-        color: '#374151',
+        color: '#F68537',
         fontWeight: '600',
         marginBottom: 8,
         fontSize: 14,
         paddingLeft: 4,
     },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        borderWidth: 1,
+        borderColor: '#F68537',
+        borderRadius: 25,
+        backgroundColor: '#FFFFFF',
+        marginBottom: 16,
+        paddingHorizontal: 16,
+        height: 50,
+        shadowColor: '#F68537',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    iconLeft: {
+        marginRight: 10,
+    },
     actionButton: {
         width: '100%',
         backgroundColor: '#F68537',
         paddingVertical: 18,
-        borderRadius: 16,
+        borderRadius: 25,
         alignItems: 'center',
         marginTop: 12,
         shadowColor: '#F68537',
