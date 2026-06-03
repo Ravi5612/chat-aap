@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert, DeviceEventEmitter } from 'react-native';
+import { getFromCache, saveToCache } from '@/lib/database';
 
 export const useReceivedRequests = () => {
     const [receivedRequests, setReceivedRequests] = useState<any[]>([]);
@@ -33,9 +33,12 @@ export const useReceivedRequests = () => {
         };
 
         init();
+        
+        const eventSub = DeviceEventEmitter.addListener('friend_requests_changed', loadReceivedRequests);
 
         return () => {
             if (channel) supabase.removeChannel(channel);
+            eventSub.remove();
         };
     }, []);
 
@@ -46,9 +49,9 @@ export const useReceivedRequests = () => {
 
             // Load from cache instantly
             try {
-                const cached = await AsyncStorage.getItem(`received_requests_${user.id}`);
+                const cached = getFromCache(`received_requests_${user.id}`);
                 if (cached) {
-                    setReceivedRequests(JSON.parse(cached));
+                    setReceivedRequests(cached);
                     setLoading(false);
                 }
             } catch(e) {}
@@ -74,7 +77,7 @@ export const useReceivedRequests = () => {
             
             // Save to cache silently
             try {
-                await AsyncStorage.setItem(`received_requests_${user.id}`, JSON.stringify(data || []));
+                saveToCache(`received_requests_${user.id}`, data || []);
             } catch(e) {}
         } catch (error) {
             console.error(error);

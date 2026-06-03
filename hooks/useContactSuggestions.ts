@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Contacts from 'expo-contacts';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Alert } from 'react-native';
+import { Alert, DeviceEventEmitter } from 'react-native';
 import { getFromCache, saveToCache } from '@/lib/database';
 
 // Memory cache keyed by user ID to prevent cross-user data leaks on logout/login
@@ -231,17 +231,58 @@ export const useContactSuggestions = () => {
                 if (__DEV__) console.warn("Notification failed to send:", notifErr);
             }
 
+            DeviceEventEmitter.emit('friend_requests_changed');
+
         } catch (error: any) {
             if (__DEV__) console.error("Overall sendRequest error:", error);
             Alert.alert('Error', 'Failed to send friend request. ' + error.message);
         }
     }, [currentUser, currentUserId]);
 
+    const cancelRequest = useCallback(async (receiverId: string) => {
+        if (!currentUserId || !currentUser) return;
+        
+        try {
+            // Optimistic update UI
+            setSuggestions(prev => prev.map(p => 
+                p.id === receiverId ? { ...p, requestStatus: null } : p
+            ));
+
+            const { error: requestError } = await supabase
+                .from('friend_requests')
+                .delete()
+                .eq('sender_id', currentUserId)
+                .eq('receiver_id', receiverId)
+                .eq('status', 'pending');
+
+            if (requestError) {
+                if (__DEV__) console.error("Friend request cancel error:", requestError);
+                // Revert on error
+                setSuggestions(prev => prev.map(p => 
+                    p.id === receiverId ? { ...p, requestStatus: 'pending' } : p
+                ));
+                throw new Error(requestError.message);
+            }
+
+            // Also remove from cache
+            saveToCache('contact_suggestions', suggestions.map(p => 
+                p.id === receiverId ? { ...p, requestStatus: null } : p
+            ));
+
+            DeviceEventEmitter.emit('friend_requests_changed');
+            
+        } catch (error: any) {
+            if (__DEV__) console.error("Overall cancelRequest error:", error);
+            Alert.alert('Error', 'Failed to cancel friend request. ' + error.message);
+        }
+    }, [currentUser, currentUserId, suggestions]);
+
     return {
         suggestions,
         loading,
         permissionGranted,
         loadSuggestions,
-        sendRequest
+        sendRequest,
+        cancelRequest
     };
 };

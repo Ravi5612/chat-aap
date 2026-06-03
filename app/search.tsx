@@ -1,4 +1,4 @@
-import { View, Text, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
@@ -140,10 +140,32 @@ export default function SearchPeopleScreen() {
                 is_read: false
             }]);
 
+            DeviceEventEmitter.emit('friend_requests_changed');
             Alert.alert('Success', 'Friend request sent! ✅');
             handleSearch(query);
         } catch (error: any) {
             Alert.alert('Error', error.message);
+        }
+    };
+
+    const cancelFriendRequest = async (receiverId: string) => {
+        try {
+            const { error } = await supabase
+                .from('friend_requests')
+                .delete()
+                .eq('sender_id', currentUser.id)
+                .eq('receiver_id', receiverId)
+                .eq('status', 'pending');
+
+            if (error) throw error;
+            
+            // Optimistic update
+            setResults(prev => prev.map(p => 
+                p.id === receiverId ? { ...p, requestStatus: null } : p
+            ));
+            DeviceEventEmitter.emit('friend_requests_changed');
+        } catch (error: any) {
+            Alert.alert('Error', 'Failed to cancel request: ' + error.message);
         }
     };
 
@@ -188,9 +210,12 @@ export default function SearchPeopleScreen() {
                                     <Text style={{ color: '#166534', fontWeight: 'bold' }}>Friends</Text>
                                 </View>
                             ) : item.requestStatus === 'pending' ? (
-                                <View style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999 }}>
+                                <TouchableOpacity 
+                                    onPress={() => cancelFriendRequest(item.id)}
+                                    style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 9999 }}
+                                >
                                     <Text style={{ color: '#1E40AF', fontWeight: 'bold' }}>Pending</Text>
-                                </View>
+                                </TouchableOpacity>
                             ) : (
                                 <TouchableOpacity
                                     onPress={() => sendFriendRequest(item.id)}

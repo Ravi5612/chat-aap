@@ -12,7 +12,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 function ContactSuggestionsInner() {
-    const { suggestions, loading, permissionGranted, loadSuggestions, sendRequest } = useContactSuggestions();
+    const { suggestions, loading, permissionGranted, loadSuggestions, sendRequest, cancelRequest } = useContactSuggestions();
 
     if (permissionGranted === false) {
         return (
@@ -86,9 +86,15 @@ function ContactSuggestionsInner() {
                                 </View>
 
                                 {user.requestStatus === 'pending' ? (
-                                    <View style={styles.pendingBadge}>
+                                    <TouchableOpacity 
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            cancelRequest(user.id);
+                                        }}
+                                        style={[styles.pendingBadge, { opacity: 0.8 }]}
+                                    >
                                         <Text style={styles.pendingText}>Pending</Text>
-                                    </View>
+                                    </TouchableOpacity>
                                 ) : (
                                     <TouchableOpacity 
                                         onPress={() => {
