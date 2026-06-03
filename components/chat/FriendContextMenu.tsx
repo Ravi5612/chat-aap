@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, memo } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, TouchableWithoutFeedback, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,7 +9,13 @@ interface FriendContextMenuProps {
     onAction: (action: string, friend: any) => void;
 }
 
-export default function FriendContextMenu({ visible, friend, onClose, onAction }: FriendContextMenuProps) {
+const FriendContextMenu = memo(({ visible, friend, onClose, onAction }: FriendContextMenuProps) => {
+    
+    const handleMenuAction = useCallback((actionType: string) => {
+        onAction(actionType, friend);
+        onClose();
+    }, [onAction, friend, onClose]);
+
     if (!friend) return null;
 
     return (
@@ -33,7 +39,7 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
                             <View style={styles.actionList}>
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction('profile', friend); onClose(); }}
+                                    onPress={() => handleMenuAction('profile')}
                                 >
                                     <Ionicons name="person-outline" size={20} color="#4B5563" />
                                     <Text style={styles.actionText}>View Profile</Text>
@@ -41,7 +47,7 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction('group', friend); onClose(); }}
+                                    onPress={() => handleMenuAction('group')}
                                 >
                                     <Ionicons name="people-outline" size={20} color="#4B5563" />
                                     <Text style={styles.actionText}>{friend.isGroup ? 'Manage Members' : 'Create Group with User'}</Text>
@@ -49,7 +55,7 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction('favorite', friend); onClose(); }}
+                                    onPress={() => handleMenuAction('favorite')}
                                 >
                                     <Ionicons name={friend.isFavourite ? "star" : "star-outline"} size={20} color={friend.isFavourite ? "#FBBF24" : "#4B5563"} />
                                     <Text style={styles.actionText}>{friend.isFavourite ? 'Remove from Favourites' : 'Add to Favourites'}</Text>
@@ -57,7 +63,7 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction('archive', friend); onClose(); }}
+                                    onPress={() => handleMenuAction('archive')}
                                 >
                                     <Ionicons name="archive-outline" size={20} color="#4B5563" />
                                     <Text style={styles.actionText}>{friend.isArchived ? 'Unarchive Chat' : 'Archive Chat'}</Text>
@@ -65,7 +71,7 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction(friend.isLocked ? 'unlock' : 'lock', friend); onClose(); }}
+                                    onPress={() => handleMenuAction(friend.isLocked ? 'unlock' : 'lock')}
                                 >
                                     <Ionicons name={friend.isLocked ? "lock-open-outline" : "lock-closed-outline"} size={20} color="#4B5563" />
                                     <Text style={styles.actionText}>{friend.isLocked ? 'Unlock Chat' : 'Lock Chat'}</Text>
@@ -73,7 +79,7 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction(friend.isHidden ? 'unhide' : 'hide', friend); onClose(); }}
+                                    onPress={() => handleMenuAction(friend.isHidden ? 'unhide' : 'hide')}
                                 >
                                     <Ionicons name={friend.isHidden ? "eye-outline" : "eye-off-outline"} size={20} color="#4B5563" />
                                     <Text style={styles.actionText}>{friend.isHidden ? 'Unhide Chat' : 'Hide Chat (Ninja Vault)'}</Text>
@@ -81,10 +87,10 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction(friend.isBlocked ? 'unblock' : 'block', friend); onClose(); }}
+                                    onPress={() => handleMenuAction(friend.isBlocked ? 'unblock' : 'block')}
                                 >
                                     <Ionicons name={friend.isBlocked ? "checkmark-circle-outline" : "ban-outline"} size={20} color={friend.isBlocked ? "#10B981" : "#EF4444"} />
-                                    <Text style={[styles.actionText, { color: friend.isBlocked ? '#10B981' : '#EF4444' }]}>
+                                    <Text style={[styles.actionText, friend.isBlocked ? styles.colorGreen : styles.colorRed]}>
                                         {friend.isBlocked ? 'Unblock User' : 'Block User'}
                                     </Text>
                                 </TouchableOpacity>
@@ -95,19 +101,19 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
                                 {(!friend.isGroup && !friend.isUnfriended) && (
                                     <TouchableOpacity
                                         style={styles.actionItem}
-                                        onPress={() => { onAction('unfriend', friend); onClose(); }}
+                                        onPress={() => handleMenuAction('unfriend')}
                                     >
                                         <Ionicons name="person-remove-outline" size={20} color="#EF4444" />
-                                        <Text style={[styles.actionText, { color: '#EF4444' }]}>Unfriend</Text>
+                                        <Text style={[styles.actionText, styles.colorRed]}>Unfriend</Text>
                                     </TouchableOpacity>
                                 )}
 
                                 <TouchableOpacity
                                     style={styles.actionItem}
-                                    onPress={() => { onAction('delete', friend); onClose(); }}
+                                    onPress={() => handleMenuAction('delete')}
                                 >
                                     <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                                    <Text style={[styles.actionText, { color: '#EF4444' }]}>Delete Chat</Text>
+                                    <Text style={[styles.actionText, styles.colorRed]}>Delete Chat</Text>
                                 </TouchableOpacity>
                             </View>
 
@@ -121,7 +127,9 @@ export default function FriendContextMenu({ visible, friend, onClose, onAction }
             </TouchableWithoutFeedback>
         </Modal>
     );
-}
+});
+
+export default FriendContextMenu;
 
 const styles = StyleSheet.create({
     overlay: {
@@ -189,4 +197,10 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#F68537',
     },
+    colorRed: {
+        color: '#EF4444',
+    },
+    colorGreen: {
+        color: '#10B981',
+    }
 });

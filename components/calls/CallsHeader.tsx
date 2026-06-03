@@ -7,14 +7,16 @@ interface CallsHeaderProps {
     selectedCount: number;
     onCancelSelection: () => void;
     onDeletePress: () => void;
+    onNewCallPress?: () => void;
 }
 
-export default function CallsHeader({
+const CallsHeader = React.memo(({
     isSelectionMode,
     selectedCount,
     onCancelSelection,
     onDeletePress,
-}: CallsHeaderProps) {
+    onNewCallPress,
+}: CallsHeaderProps) => {
     return (
         <View style={[
             styles.headerContainer,
@@ -33,14 +35,16 @@ export default function CallsHeader({
             ) : (
                 <>
                     <Text style={styles.titleText}>Calls</Text>
-                    <TouchableOpacity style={styles.iconButton}>
+                    <TouchableOpacity style={styles.iconButton} onPress={onNewCallPress}>
                         <Ionicons name="call-outline" size={24} color="#F68537" />
                     </TouchableOpacity>
                 </>
             )}
         </View>
     );
-}
+});
+
+export default CallsHeader;
 
 const styles = StyleSheet.create({
     headerContainer: {

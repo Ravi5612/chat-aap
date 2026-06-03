@@ -10,13 +10,13 @@ interface DeleteCallLogsModalProps {
     onDelete: () => void;
 }
 
-export default function DeleteCallLogsModal({
+const DeleteCallLogsModal = React.memo(({
     visible,
     isDeleting,
     selectedCount,
     onCancel,
     onDelete,
-}: DeleteCallLogsModalProps) {
+}: DeleteCallLogsModalProps) => {
     return (
         <Modal
             visible={visible}
@@ -56,7 +56,9 @@ export default function DeleteCallLogsModal({
             </View>
         </Modal>
     );
-}
+});
+
+export default DeleteCallLogsModal;
 
 const styles = StyleSheet.create({
     modalOverlay: {

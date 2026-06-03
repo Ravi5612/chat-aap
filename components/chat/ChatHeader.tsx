@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useMemo, memo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -35,7 +35,20 @@ interface ChatHeaderProps {
     onToggleAutoListen: () => void;
 }
 
-export default function ChatHeader({
+// Moved outside component — pure function, never changes
+const formatLastSeen = (timestamp: string | undefined): string => {
+    if (!timestamp) return 'offline';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (diffInDays === 0 && now.getDate() === date.getDate()) return `last seen today at ${timeStr}`;
+    if (diffInDays === 1 || (diffInDays === 0 && now.getDate() !== date.getDate())) return `last seen yesterday at ${timeStr}`;
+    return `last seen ${date.toLocaleDateString()}`;
+};
+
+const ChatHeader = memo(({
     safeTop,
     friendId,
     friendName,
@@ -61,70 +74,69 @@ export default function ChatHeader({
     disappearingDuration,
     autoListenMode,
     onToggleAutoListen,
-}: ChatHeaderProps) {
+}: ChatHeaderProps) => {
     const router = useRouter();
     const [menuVisible, setMenuVisible] = useState(false);
 
-    const formatLastSeen = (timestamp: string | undefined) => {
-        if (!timestamp) return 'offline';
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffInMs = now.getTime() - date.getTime();
-        const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        if (diffInDays === 0 && now.getDate() === date.getDate()) return `last seen today at ${timeStr}`;
-        if (diffInDays === 1 || (diffInDays === 0 && now.getDate() !== date.getDate())) return `last seen yesterday at ${timeStr}`;
-        return `last seen ${date.toLocaleDateString()}`;
-    };
+    const gender = useFriendsStore(state => state.friends.find(f => f.id === friendId)?.gender);
 
-    const friendFromStore = useFriendsStore(state => state.friends.find(f => f.id === friendId));
-    const gender = friendFromStore?.gender;
+    // Memoized — only recalculates when friendImage/friendName/isGroup/gender change
+    const avatarSource = useMemo(() => {
+        if (friendImage) return friendImage;
+        if (isGroup) return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName || 'Group')}&backgroundColor=F68537`;
+        if (gender === 'female') return require('@/assets/images/default-avatar-female.jpg');
+        if (gender === 'other') return require('@/assets/images/default-avatar-other.png');
+        return require('@/assets/images/default-avatar-male.jpg');
+    }, [friendImage, isGroup, friendName, gender]);
 
-    let avatarSource;
-    if (friendImage) {
-        avatarSource = { uri: friendImage };
-    } else if (isGroup) {
-        avatarSource = { uri: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName || 'Group')}&backgroundColor=F68537` };
-    } else if (gender === 'female') {
-        avatarSource = require('@/assets/images/default-avatar-female.jpg');
-    } else if (gender === 'other') {
-        avatarSource = require('@/assets/images/default-avatar-other.png');
-    } else {
-        avatarSource = require('@/assets/images/default-avatar-male.jpg');
-    }
+    // Stable friend object for call handlers
+    const friendObj = useMemo(() => ({ id: friendId, name: friendName, img: friendImage }), [friendId, friendName, friendImage]);
+
+    const goBack = useCallback(() => { Haptics.selectionAsync(); router.back(); }, [router]);
+    const goGroupInfo = useCallback(() => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any), [router, friendId, friendName, friendImage]);
+    const handleProfilePress = useCallback(() => isGroup ? goGroupInfo() : handleViewProfile(), [isGroup, goGroupInfo, handleViewProfile]);
+    const startVideoCall = useCallback(() => handleStartCall(friendObj, 'video', isGroup), [handleStartCall, friendObj, isGroup]);
+    const startAudioCall = useCallback(() => handleStartCall(friendObj, 'audio', isGroup), [handleStartCall, friendObj, isGroup]);
+    const toggleMenu = useCallback(() => setMenuVisible(v => !v), []);
+    const closeMenu = useCallback(() => setMenuVisible(false), []);
+    const toggleAutoListen = useCallback(() => { Haptics.selectionAsync(); onToggleAutoListen(); }, [onToggleAutoListen]);
+    const openLedger = useCallback(() => { closeMenu(); setLedgerVisible(true); }, [closeMenu, setLedgerVisible]);
+    const openDisappearing = useCallback(() => { closeMenu(); onSetDisappearingMessages(); }, [closeMenu, onSetDisappearingMessages]);
+    const openScheduled = useCallback(() => { closeMenu(); onViewScheduledMessages(); }, [closeMenu, onViewScheduledMessages]);
+    const leaveGroup = useCallback(async () => {
+        if (!currentUserId || !friendId) return;
+        const success = await useFriendsStore.getState().leaveGroup(currentUserId, friendId);
+        if (success) router.back();
+    }, [currentUserId, friendId, router]);
+
+    const statusColor = isTyping || isUserOnline ? '#10B981' : '#94A3B8';
+    const statusText = isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(lastSeen));
 
     return (
-        <View style={{ paddingTop: safeTop, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 10, zIndex: 1000, elevation: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <TouchableOpacity onPress={() => { Haptics.selectionAsync(); router.back(); }}>
+        <View style={[styles.container, { paddingTop: safeTop }]}>
+            <View style={styles.leftSection}>
+                <TouchableOpacity onPress={goBack}>
                     <Ionicons name="chevron-back" size={28} color="#F68537" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={isGroup ? () => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any) : handleViewProfile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Image source={avatarSource} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' }} contentFit="cover" />
+                <TouchableOpacity onPress={handleProfilePress} style={styles.profileRow}>
+                    <Image source={avatarSource} style={styles.avatar} contentFit="cover" />
                     <View>
-                        <Text style={{ fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 }}>{friendName || 'User'}</Text>
-                        <Text style={{ fontSize: 10, color: isTyping ? '#10B981' : (isUserOnline ? '#10B981' : '#94A3B8'), fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                            {isTyping ? 'typing...' : (isUserOnline ? 'online' : formatLastSeen(lastSeen))}
-                        </Text>
+                        <Text style={styles.friendName}>{friendName || 'User'}</Text>
+                        <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
                     </View>
                     {disappearingDuration > 0 && (
-                        <View style={{ backgroundColor: '#FDF0D5', padding: 4, borderRadius: 12, marginLeft: 4 }}>
+                        <View style={styles.timerBadge}>
                             <Ionicons name="timer" size={14} color="#F59E0B" />
                         </View>
                     )}
                 </TouchableOpacity>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+
+            <View style={styles.rightSection}>
                 {/* Auto-Listen Mode Toggle */}
                 <TouchableOpacity
-                    onPress={() => { Haptics.selectionAsync(); onToggleAutoListen(); }}
-                    style={{
-                        width: 36, height: 36, borderRadius: 18,
-                        alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: autoListenMode ? '#F68537' : 'rgba(246,133,55,0.1)',
-                        borderWidth: 1.5,
-                        borderColor: autoListenMode ? '#F68537' : 'rgba(246,133,55,0.3)',
-                    }}
+                    onPress={toggleAutoListen}
+                    style={[styles.iconBtn, autoListenMode ? styles.iconBtnActive : styles.iconBtnInactive]}
                 >
                     <Ionicons
                         name={autoListenMode ? 'volume-high' : 'volume-high-outline'}
@@ -135,52 +147,66 @@ export default function ChatHeader({
 
                 {isFriend && !isBlocked && !iAmBlocked && (
                     <>
-                        <TouchableOpacity 
-                            onPress={() => handleStartCall({ id: friendId, name: friendName, img: friendImage }, 'video', isGroup)} 
-                            style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                        >
+                        <TouchableOpacity onPress={startVideoCall} style={styles.callBtn}>
                             <Ionicons name="videocam" size={18} color="white" />
                         </TouchableOpacity>
-                        <TouchableOpacity 
-                            onPress={() => handleStartCall({ id: friendId, name: friendName, img: friendImage }, 'audio', isGroup)} 
-                            style={{ backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}
-                        >
+                        <TouchableOpacity onPress={startAudioCall} style={styles.callBtn}>
                             <Ionicons name="call" size={18} color="white" />
                         </TouchableOpacity>
                     </>
                 )}
 
-                <TouchableOpacity onPress={() => setMenuVisible(!menuVisible)} style={{ padding: 4 }}>
+                <TouchableOpacity onPress={toggleMenu} style={styles.menuBtn}>
                     <Ionicons name="ellipsis-vertical" size={24} color="#F68537" />
                 </TouchableOpacity>
-                <ChatMenu 
-                    visible={menuVisible} 
-                    onClose={() => setMenuVisible(false)} 
-                    onViewProfile={handleViewProfile} 
-                    onGroupInfo={() => router.push(`/group-info?groupId=${friendId}&groupName=${encodeURIComponent(friendName || 'Group')}&groupImage=${encodeURIComponent(friendImage || '')}` as any)}
-                    onClearChat={handleClearChat} 
-                    onBlockUser={handleBlockToggle} 
+                <ChatMenu
+                    visible={menuVisible}
+                    onClose={closeMenu}
+                    onViewProfile={handleViewProfile}
+                    onGroupInfo={goGroupInfo}
+                    onClearChat={handleClearChat}
+                    onBlockUser={handleBlockToggle}
                     onUnfriend={handleUnfriend}
-                    isBlocked={isBlocked} 
-                    isMember={isMember} 
-                    isGroup={isGroup} 
-                    onLeaveGroup={async () => {
-                        if (!currentUserId || !friendId) return;
-                        const success = await useFriendsStore.getState().leaveGroup(currentUserId, friendId);
-                        if (success) router.back();
-                    }} 
-                    onSetWallpaper={handleSetWallpaper} 
-                    onLedger={() => { setMenuVisible(false); setLedgerVisible(true); }} 
-                    onSetDisappearingMessages={() => {
-                        setMenuVisible(false);
-                        onSetDisappearingMessages();
-                    }}
-                    onViewScheduledMessages={() => {
-                        setMenuVisible(false);
-                        onViewScheduledMessages();
-                    }}
+                    isBlocked={isBlocked}
+                    isMember={isMember}
+                    isGroup={isGroup}
+                    onLeaveGroup={leaveGroup}
+                    onSetWallpaper={handleSetWallpaper}
+                    onLedger={openLedger}
+                    onSetDisappearingMessages={openDisappearing}
+                    onViewScheduledMessages={openScheduled}
                 />
             </View>
         </View>
     );
-}
+});
+
+const styles = StyleSheet.create({
+    container: {
+        backgroundColor: 'white',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+        paddingVertical: 10,
+        zIndex: 1000,
+        elevation: 4,
+    },
+    leftSection: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    profileRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    avatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F68537' },
+    friendName: { fontWeight: '900', color: '#F68537', fontSize: 16, letterSpacing: -0.5 },
+    statusText: { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 },
+    timerBadge: { backgroundColor: '#FDF0D5', padding: 4, borderRadius: 12, marginLeft: 4 },
+    rightSection: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+    iconBtnActive: { backgroundColor: '#F68537', borderColor: '#F68537' },
+    iconBtnInactive: { backgroundColor: 'rgba(246,133,55,0.1)', borderColor: 'rgba(246,133,55,0.3)' },
+    callBtn: { backgroundColor: '#F68537', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+    menuBtn: { padding: 4 },
+});
+
+export default ChatHeader;
+

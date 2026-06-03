@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import { View, Text, TouchableOpacity, Modal, FlatList, TextInput, ActivityIndicator, StyleSheet, Platform, SafeAreaView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,29 +12,77 @@ interface ForwardMessageModalProps {
     messageText: string;
 }
 
-export default function ForwardMessageModal({ visible, onClose, onForward, messageText }: ForwardMessageModalProps) {
+// ─── Memoized Friend Item ─────────────────────────────────────────────────────
+const FriendItem = memo(({ 
+    item, 
+    isSelected, 
+    onToggle 
+}: { 
+    item: any; 
+    isSelected: boolean; 
+    onToggle: (id: string) => void;
+}) => {
+    const handlePress = useCallback(() => {
+        onToggle(item.id);
+    }, [item.id, onToggle]);
+
+    return (
+        <TouchableOpacity
+            onPress={handlePress}
+            activeOpacity={0.7}
+            style={styles.friendItem}
+        >
+            <View style={styles.avatarContainer}>
+                <Image source={{ uri: item.img }} style={styles.avatar} />
+                {isSelected && (
+                    <View style={styles.selectionOverlay}>
+                        <Ionicons name="checkmark-circle" size={24} color="#F68537" />
+                    </View>
+                )}
+            </View>
+            <View style={styles.friendInfo}>
+                <Text style={styles.friendName}>{item.name}</Text>
+                <Text style={styles.friendSub}>{item.email || 'Recent chat'}</Text>
+            </View>
+            <View style={[
+                styles.checkbox,
+                isSelected && styles.checkboxActive
+            ]}>
+                {isSelected && <Ionicons name="checkmark" size={14} color="white" />}
+            </View>
+        </TouchableOpacity>
+    );
+});
+
+const ForwardMessageModal = memo(({ visible, onClose, onForward, messageText }: ForwardMessageModalProps) => {
     const { combinedItems, loading } = useFriends();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-    const filteredFriends = combinedItems.filter(f =>
-        !f.isGroup && !f.isLocked && f.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredFriends = useMemo(() => {
+        const query = searchQuery.toLowerCase();
+        return combinedItems.filter(f =>
+            !f.isGroup && !f.isLocked && f.name.toLowerCase().includes(query)
+        );
+    }, [combinedItems, searchQuery]);
 
-
-    const toggleSelect = (id: string) => {
+    const toggleSelect = useCallback((id: string) => {
         Haptics.selectionAsync();
         setSelectedIds(prev =>
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
         );
-    };
+    }, []);
 
-    const handleSend = () => {
+    const handleSend = useCallback(() => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onForward(selectedIds);
         setSelectedIds([]);
         onClose();
-    };
+    }, [onForward, selectedIds, onClose]);
+
+    const clearSearch = useCallback(() => {
+        setSearchQuery('');
+    }, []);
 
     const renderHeader = () => (
         <View style={styles.header}>
@@ -57,6 +105,24 @@ export default function ForwardMessageModal({ visible, onClose, onForward, messa
         </View>
     );
 
+    const renderItem = useCallback(({ item }: { item: any }) => {
+        const isSelected = selectedIds.includes(item.id);
+        return (
+            <FriendItem
+                item={item}
+                isSelected={isSelected}
+                onToggle={toggleSelect}
+            />
+        );
+    }, [selectedIds, toggleSelect]);
+
+    const renderEmptyComponent = useCallback(() => (
+        <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={48} color="#E2E8F0" />
+            <Text style={styles.emptyText}>No contacts found</Text>
+        </View>
+    ), []);
+
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
             <SafeAreaView style={styles.container}>
@@ -65,7 +131,7 @@ export default function ForwardMessageModal({ visible, onClose, onForward, messa
                 {/* Message Preview Capsule */}
                 <View style={styles.previewContainer}>
                     <View style={styles.previewCapsule}>
-                        <Ionicons name="share-social" size={14} color="#94A3B8" style={{ marginRight: 6 }} />
+                        <Ionicons name="share-social" size={14} color="#94A3B8" style={styles.shareIcon} />
                         <Text style={styles.previewText} numberOfLines={1}>
                             {messageText || "Media Message"}
                         </Text>
@@ -84,7 +150,7 @@ export default function ForwardMessageModal({ visible, onClose, onForward, messa
                             onChangeText={setSearchQuery}
                         />
                         {searchQuery.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearchQuery('')}>
+                            <TouchableOpacity onPress={clearSearch}>
                                 <Ionicons name="close-circle" size={18} color="#CBD5E1" />
                             </TouchableOpacity>
                         )}
@@ -92,53 +158,22 @@ export default function ForwardMessageModal({ visible, onClose, onForward, messa
                 </View>
 
                 {loading ? (
-                    <ActivityIndicator style={{ marginTop: 40 }} color="#F68537" />
+                    <ActivityIndicator style={styles.loader} color="#F68537" />
                 ) : (
                     <FlatList
                         data={filteredFriends}
                         keyExtractor={item => item.id}
-                        renderItem={({ item }) => {
-                            const isSelected = selectedIds.includes(item.id);
-                            return (
-                                <TouchableOpacity
-                                    onPress={() => toggleSelect(item.id)}
-                                    activeOpacity={0.7}
-                                    style={styles.friendItem}
-                                >
-                                    <View style={styles.avatarContainer}>
-                                        <Image source={{ uri: item.img }} style={styles.avatar} />
-                                        {isSelected && (
-                                            <View style={styles.selectionOverlay}>
-                                                <Ionicons name="checkmark-circle" size={24} color="#F68537" />
-                                            </View>
-                                        )}
-                                    </View>
-                                    <View style={styles.friendInfo}>
-                                        <Text style={styles.friendName}>{item.name}</Text>
-                                        <Text style={styles.friendSub}>{item.email || 'Recent chat'}</Text>
-                                    </View>
-                                    <View style={[
-                                        styles.checkbox,
-                                        isSelected && styles.checkboxActive
-                                    ]}>
-                                        {isSelected && <Ionicons name="checkmark" size={14} color="white" />}
-                                    </View>
-                                </TouchableOpacity>
-                            );
-                        }}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Ionicons name="people-outline" size={48} color="#E2E8F0" />
-                                <Text style={styles.emptyText}>No contacts found</Text>
-                            </View>
-                        }
-                        contentContainerStyle={{ paddingBottom: 40 }}
+                        renderItem={renderItem}
+                        ListEmptyComponent={renderEmptyComponent}
+                        contentContainerStyle={styles.listContent}
                     />
                 )}
             </SafeAreaView>
         </Modal>
     );
-}
+});
+
+export default ForwardMessageModal;
 
 const styles = StyleSheet.create({
     container: {
@@ -276,5 +311,14 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#94A3B8',
         fontWeight: '500',
+    },
+    shareIcon: {
+        marginRight: 6,
+    },
+    loader: {
+        marginTop: 40,
+    },
+    listContent: {
+        paddingBottom: 40,
     }
 });

@@ -11,14 +11,14 @@ interface ChangePasswordFormProps {
     onForgotPassword: () => void;
 }
 
-export default function ChangePasswordForm({
+const ChangePasswordForm = ({
     loading,
     currentPassword, setCurrentPassword,
     newPassword, setNewPassword,
     confirmPassword, setConfirmPassword,
     onSubmit,
     onForgotPassword,
-}: ChangePasswordFormProps) {
+}: ChangePasswordFormProps) => {
     return (
         <View>
             <View style={styles.inputGroup}>
@@ -75,7 +75,7 @@ export default function ChangePasswordForm({
             </TouchableOpacity>
         </View>
     );
-}
+};
 
 const styles = StyleSheet.create({
     inputGroup: { marginBottom: 20 },
@@ -95,3 +95,5 @@ const styles = StyleSheet.create({
     forgotButton: { alignItems: 'center', marginTop: 20, padding: 10 },
     forgotButtonText: { color: '#F68537', fontWeight: '700', fontSize: 14 },
 });
+
+export default React.memo(ChangePasswordForm);

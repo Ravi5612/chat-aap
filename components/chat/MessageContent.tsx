@@ -37,7 +37,46 @@ interface MessageContentProps {
     videoUrl?: string | null;
 }
 
-export default function MessageContent({
+import React, { useMemo, useState, useRef, useCallback, memo } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, Linking, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
+import { useRouter } from 'expo-router';
+import MessageStatus from './MessageStatus';
+import VoiceMessagePlayer from './VoiceMessagePlayer';
+import StatusMentionCard from './StatusMentionCard';
+
+interface MessageContentProps {
+    message: any;
+    isCurrentUser: boolean;
+    formatTime: (ts: string) => string;
+    handleLongPress: (e: any) => void;
+    onImagePress?: (uri: string, isVideo?: boolean) => void;
+    imageUrl: string | null;
+    localImageUrl: string | null;
+    imageLoading: boolean;
+    uploadProgress?: number;
+    isVoiceMessage: boolean;
+    voiceUri: string | null;
+    localVoiceUrl: string | null;
+    textContent: string;
+    isContactMessage: boolean;
+    contactName: string;
+    contactPhone: string;
+    isLocationMessage: boolean;
+    locationCoords: string;
+    locationAddress: string;
+    isDocumentMessage: boolean;
+    documentName: string;
+    documentSize: string;
+    documentUrl: string | null;
+    hasImage: boolean;
+    isVideoMessage?: boolean;
+    videoUrl?: string | null;
+}
+
+const MessageContent = memo(({
     message, isCurrentUser, formatTime, handleLongPress, onImagePress,
     imageUrl, localImageUrl, imageLoading, uploadProgress,
     isVoiceMessage, voiceUri, localVoiceUrl, textContent,
@@ -45,7 +84,7 @@ export default function MessageContent({
     isLocationMessage, locationCoords, locationAddress,
     isDocumentMessage, documentName, documentSize, documentUrl,
     hasImage, isVideoMessage, videoUrl
-}: MessageContentProps) {
+}: MessageContentProps) => {
     const router = useRouter();
     const [videoPlaying, setVideoPlaying] = useState(false);
     const videoRef = useRef<Video>(null);
@@ -62,63 +101,92 @@ export default function MessageContent({
         return null;
     }, [message.message, message.message_type]);
 
+    const handleImageContentPress = useCallback(() => {
+        onImagePress?.((localImageUrl || imageUrl) as string);
+    }, [onImagePress, localImageUrl, imageUrl]);
+
+    const handleVideoContentPress = useCallback(() => {
+        onImagePress?.(videoUrl as string, true);
+    }, [onImagePress, videoUrl]);
+
+    const handleContactPress = useCallback(() => {
+        Linking.openURL(`tel:${contactPhone}`);
+    }, [contactPhone]);
+
+    const handleLocationPress = useCallback(() => {
+        Linking.openURL(`https://maps.google.com/?q=${locationCoords}`);
+    }, [locationCoords]);
+
+    const handleDocumentPress = useCallback(() => {
+        if (documentUrl) Linking.openURL(documentUrl);
+    }, [documentUrl]);
+
+    const renderLedger = () => {
+        try {
+            const data = ledgerData;
+            if (!data) return <Text style={styles.errorText}>Error parsing ledger</Text>;
+            const isDeneHain = data.type === 'gave' ? !isCurrentUser : isCurrentUser;
+            const themeColor = isDeneHain ? '#EF4444' : '#F68537';
+            const label = isDeneHain ? 'Dene Hain' : 'Lene Hain';
+            return (
+                <>
+                    <View style={[styles.ledgerHeader, { borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }]}>
+                        <View style={[styles.ledgerIconContainer, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}10` }]}>
+                            <Ionicons name="receipt" size={20} color={isCurrentUser ? 'white' : themeColor} />
+                        </View>
+                        <View style={styles.flex1}>
+                            <Text style={[styles.ledgerTitle, { color: isCurrentUser ? 'white' : '#1F2937' }]}>Hisab-Kitab</Text>
+                        </View>
+                    </View>
+                    <View>
+                        <Text style={[styles.ledgerAmount, { color: isCurrentUser ? 'white' : themeColor }]}>₹{data.amount}</Text>
+                        <Text style={[styles.ledgerDesc, { color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#64748B' }]}>{data.description}</Text>
+                        <View style={[
+                            styles.ledgerBadge,
+                            { 
+                                backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}20`,
+                                borderWidth: isCurrentUser ? 0 : 1, 
+                                borderColor: `${themeColor}40` 
+                            }
+                        ]}>
+                            <Text style={[styles.ledgerBadgeText, { color: isCurrentUser ? 'white' : themeColor }]}>{label}</Text>
+                        </View>
+                    </View>
+                </>
+            );
+        } catch (e) { return <Text style={styles.errorText}>Error</Text>; }
+    };
+
     return (
         <>
             {/* Ledger Entry UI */}
             {message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:') && (
-                <View style={{ padding: 12, width: 220 }}>
-                    {(() => {
-                        try {
-                            const data = ledgerData;
-                            if (!data) return <Text style={{ color: 'red' }}>Error parsing ledger</Text>;
-                            const isDeneHain = data.type === 'gave' ? !isCurrentUser : isCurrentUser;
-                            const themeColor = isDeneHain ? '#EF4444' : '#F68537';
-                            const label = isDeneHain ? 'Dene Hain' : 'Lene Hain';
-                            return (
-                                <>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
-                                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}10`, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                            <Ionicons name="receipt" size={20} color={isCurrentUser ? 'white' : themeColor} />
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }}>Hisab-Kitab</Text>
-                                        </View>
-                                    </View>
-                                    <View>
-                                        <Text style={{ fontSize: 24, fontWeight: '900', color: isCurrentUser ? 'white' : themeColor }}>₹{data.amount}</Text>
-                                        <Text style={{ fontSize: 14, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#64748B', marginTop: 4 }}>{data.description}</Text>
-                                        <View style={{ marginTop: 10, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}20`, alignSelf: 'flex-start', borderWidth: isCurrentUser ? 0 : 1, borderColor: `${themeColor}40` }}>
-                                            <Text style={{ fontSize: 11, fontWeight: '900', color: isCurrentUser ? 'white' : themeColor, textTransform: 'uppercase' }}>{label}</Text>
-                                        </View>
-                                    </View>
-                                </>
-                            );
-                        } catch (e) { return <Text style={{ color: 'red' }}>Error</Text>; }
-                    })()}
+                <View style={styles.ledgerContainer}>
+                    {renderLedger()}
                 </View>
             )}
 
             {/* Image Content */}
             {imageUrl && (
-                <TouchableOpacity onPress={() => onImagePress?.((localImageUrl || imageUrl) as string)} onLongPress={handleLongPress} delayLongPress={200}>
-                    <View style={{ width: 256, height: 256, borderRadius: 12, overflow: 'hidden', backgroundColor: '#374151' }}>
+                <TouchableOpacity onPress={handleImageContentPress} onLongPress={handleLongPress} delayLongPress={200}>
+                    <View style={styles.mediaContainer}>
                         <Image 
                             source={{ uri: (localImageUrl || imageUrl)?.trim() || '' }} 
                             placeholder={localImageUrl ? { uri: localImageUrl.trim() } : null}
-                            style={{ width: 256, height: 256 }} 
+                            style={styles.mediaImage} 
                             contentFit="cover" 
                             transition={300}
                         />
                         {imageLoading && uploadProgress === undefined && (
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' }}>
+                            <View style={styles.mediaLoadingOverlay}>
                                 <ActivityIndicator size="small" color="#F68537" />
                             </View>
                         )}
                         {uploadProgress !== undefined && uploadProgress < 100 && (
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
-                                <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                                    <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${uploadProgress}%`, backgroundColor: '#F68537' }} />
-                                    <Text style={{ color: 'white', fontSize: 14, fontWeight: '900', letterSpacing: -0.5 }}>{uploadProgress}%</Text>
+                            <View style={styles.uploadOverlay}>
+                                <View style={styles.uploadCircle}>
+                                    <View style={[styles.uploadProgressFill, { height: `${uploadProgress}%` }]} />
+                                    <Text style={styles.uploadProgressText}>{uploadProgress}%</Text>
                                 </View>
                             </View>
                         )}
@@ -133,29 +201,29 @@ export default function MessageContent({
 
             {/* Video Message Content */}
             {isVideoMessage && videoUrl && (
-                <TouchableOpacity onPress={() => onImagePress?.(videoUrl as string, true)} onLongPress={handleLongPress} delayLongPress={200}>
-                    <View style={{ width: 256, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', position: 'relative' }}>
+                <TouchableOpacity onPress={handleVideoContentPress} onLongPress={handleLongPress} delayLongPress={200}>
+                    <View style={styles.videoContainer}>
                         <Video
                             ref={videoRef}
                             source={{ uri: videoUrl }}
-                            style={{ width: 256, height: 200 }}
+                            style={styles.videoPlayer}
                             useNativeControls={false}
                             resizeMode={ResizeMode.COVER}
                             shouldPlay={false}
                         />
                         {/* Play Icon Overlay */}
                         {uploadProgress === undefined && (
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' }}>
-                                <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Ionicons name="play" size={28} color="white" style={{ marginLeft: 4 }} />
+                            <View style={styles.playIconOverlay}>
+                                <View style={styles.playIconCircle}>
+                                    <Ionicons name="play" size={28} color="white" style={styles.playIcon} />
                                 </View>
                             </View>
                         )}
                         {uploadProgress !== undefined && uploadProgress < 100 && (
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
-                                <View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                                    <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${uploadProgress}%`, backgroundColor: '#F68537' }} />
-                                    <Text style={{ color: 'white', fontSize: 14, fontWeight: '900' }}>{uploadProgress}%</Text>
+                            <View style={styles.uploadOverlayHeavy}>
+                                <View style={styles.uploadCircle}>
+                                    <View style={[styles.uploadProgressFill, { height: `${uploadProgress}%` }]} />
+                                    <Text style={styles.uploadProgressTextHeavy}>{uploadProgress}%</Text>
                                 </View>
                             </View>
                         )}
@@ -165,15 +233,15 @@ export default function MessageContent({
 
             {/* Call Log Content */}
             {isCallLog && (
-                <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 180 }}>
-                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={styles.callLogContainer}>
+                    <View style={[styles.callLogIcon, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(246, 133, 55, 0.1)' }]}>
                         <Ionicons name={callDetails.type === 'video' ? "videocam" : "call"} size={20} color={isCurrentUser ? 'white' : '#F68537'} />
                     </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }}>
+                    <View style={styles.flex1}>
+                        <Text style={[styles.callLogTitle, { color: isCurrentUser ? 'white' : '#1F2937' }]}>
                             {callDetails.status === 'missed' ? 'Missed Call' : callDetails.type === 'video' ? 'Video Call' : 'Audio Call'}
                         </Text>
-                        <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280', marginTop: 2 }}>
+                        <Text style={[styles.callLogSub, { color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }]}>
                             {callDetails.status === 'completed' ? (callDetails.duration > 0 ? `Duration: ${Math.floor(callDetails.duration / 60)}m ${callDetails.duration % 60}s` : 'Call Ended') : 'No answer'}
                         </Text>
                     </View>
@@ -182,54 +250,54 @@ export default function MessageContent({
 
             {/* Contact Card */}
             {isContactMessage && (
-                <View style={{ padding: 12, width: 220 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
-                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <View style={styles.contactContainer}>
+                    <View style={[styles.cardHeader, { borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }]}>
+                        <View style={[styles.cardIcon, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#F3F4F6' }]}>
                             <Ionicons name="person" size={20} color={isCurrentUser ? 'white' : '#9CA3AF'} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={1}>{contactName}</Text>
-                            <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }}>Contact</Text>
+                        <View style={styles.flex1}>
+                            <Text style={[styles.cardTitle, { color: isCurrentUser ? 'white' : '#1F2937' }]} numberOfLines={1}>{contactName}</Text>
+                            <Text style={[styles.cardSub, { color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }]}>Contact</Text>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={() => Linking.openURL(`tel:${contactPhone}`)} style={{ alignItems: 'center', paddingVertical: 4 }}>
-                        <Text style={{ color: isCurrentUser ? 'white' : '#F68537', fontWeight: 'bold', fontSize: 14 }}>Call {contactPhone}</Text>
+                    <TouchableOpacity onPress={handleContactPress} style={styles.cardActionBtn}>
+                        <Text style={[styles.cardActionText, { color: isCurrentUser ? 'white' : '#F68537' }]}>Call {contactPhone}</Text>
                     </TouchableOpacity>
                 </View>
             )}
 
             {/* Location Card */}
             {isLocationMessage && (
-                <View style={{ padding: 12, width: 220 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
-                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(16, 185, 129, 0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <View style={styles.contactContainer}>
+                    <View style={[styles.cardHeader, { borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }]}>
+                        <View style={[styles.cardIcon, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(16, 185, 129, 0.1)' }]}>
                             <Ionicons name="location" size={20} color={isCurrentUser ? 'white' : '#10B981'} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={1}>Location</Text>
-                            <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }} numberOfLines={2}>{locationAddress}</Text>
+                        <View style={styles.flex1}>
+                            <Text style={[styles.cardTitle, { color: isCurrentUser ? 'white' : '#1F2937' }]} numberOfLines={1}>Location</Text>
+                            <Text style={[styles.cardSub, { color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }]} numberOfLines={2}>{locationAddress}</Text>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={() => Linking.openURL(`https://maps.google.com/?q=${locationCoords}`)} style={{ alignItems: 'center', paddingVertical: 4 }}>
-                        <Text style={{ color: isCurrentUser ? 'white' : '#10B981', fontWeight: 'bold', fontSize: 14 }}>View on Map</Text>
+                    <TouchableOpacity onPress={handleLocationPress} style={styles.cardActionBtn}>
+                        <Text style={[styles.cardActionText, { color: isCurrentUser ? 'white' : '#10B981' }]}>View on Map</Text>
                     </TouchableOpacity>
                 </View>
             )}
 
             {/* Document Card */}
             {isDocumentMessage && (
-                <View style={{ padding: 12, width: 240 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }}>
-                        <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(124, 58, 237, 0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <View style={styles.docContainer}>
+                    <View style={[styles.cardHeader, { borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }]}>
+                        <View style={[styles.docIcon, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(124, 58, 237, 0.1)' }]}>
                             <Ionicons name="document-text" size={24} color={isCurrentUser ? 'white' : '#7C3AED'} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: isCurrentUser ? 'white' : '#1F2937' }} numberOfLines={2}>{documentName}</Text>
-                            {documentSize ? <Text style={{ fontSize: 12, color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280', marginTop: 2 }}>{documentSize}</Text> : null}
+                        <View style={styles.flex1}>
+                            <Text style={[styles.docTitle, { color: isCurrentUser ? 'white' : '#1F2937' }]} numberOfLines={2}>{documentName}</Text>
+                            {documentSize ? <Text style={[styles.docSub, { color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#6B7280' }]}>{documentSize}</Text> : null}
                         </View>
                     </View>
-                    <TouchableOpacity onPress={() => { if (documentUrl) Linking.openURL(documentUrl); }} disabled={!documentUrl || message.status === 'sending'} style={{ alignItems: 'center', paddingVertical: 4 }}>
-                        <Text style={{ color: isCurrentUser ? 'white' : '#7C3AED', fontWeight: 'bold', fontSize: 14 }}>{message.status === 'sending' ? 'Uploading...' : 'Open Document'}</Text>
+                    <TouchableOpacity onPress={handleDocumentPress} disabled={!documentUrl || message.status === 'sending'} style={styles.cardActionBtn}>
+                        <Text style={[styles.cardActionText, { color: isCurrentUser ? 'white' : '#7C3AED' }]}>{message.status === 'sending' ? 'Uploading...' : 'Open Document'}</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -244,18 +312,262 @@ export default function MessageContent({
                 />
             )}
 
-            <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+            <View style={styles.footerContainer}>
                 {textContent && textContent.trim() !== '' && !isStatusMention && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && message.message_type !== 'ledger' && (
-                    <Text style={{ fontSize: 15, lineHeight: 22, color: isCurrentUser ? 'white' : '#1F2937', fontStyle: textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED' ? 'italic' : 'normal', opacity: textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED' ? 0.7 : 1 }}>
+                    <Text style={[
+                        styles.msgText,
+                        { color: isCurrentUser ? 'white' : '#1F2937' },
+                        (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED') && styles.msgTextItalic
+                    ]}>
                         {textContent.trim().startsWith('{"iv":') ? 'Decrypting...' : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
                     </Text>
                 )}
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
-                    <Text style={{ fontSize: 10, color: isCurrentUser ? 'rgba(255, 255, 255, 0.7)' : '#9CA3AF' }}>{formatTime(message.created_at)}</Text>
+                <View style={styles.timeContainer}>
+                    <Text style={[styles.timeText, { color: isCurrentUser ? 'rgba(255, 255, 255, 0.7)' : '#9CA3AF' }]}>{formatTime(message.created_at)}</Text>
                     {isCurrentUser && <MessageStatus status={message.status || 'sent'} />}
                 </View>
             </View>
         </>
     );
-}
+});
+
+const styles = StyleSheet.create({
+    errorText: {
+        color: 'red'
+    },
+    ledgerContainer: {
+        padding: 12,
+        width: 220
+    },
+    ledgerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        paddingBottom: 12,
+        borderBottomWidth: 1
+    },
+    ledgerIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12
+    },
+    flex1: {
+        flex: 1
+    },
+    ledgerTitle: {
+        fontSize: 16,
+        fontWeight: 'bold'
+    },
+    ledgerAmount: {
+        fontSize: 24,
+        fontWeight: '900'
+    },
+    ledgerDesc: {
+        fontSize: 14,
+        marginTop: 4
+    },
+    ledgerBadge: {
+        marginTop: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 10,
+        alignSelf: 'flex-start'
+    },
+    ledgerBadgeText: {
+        fontSize: 11,
+        fontWeight: '900',
+        textTransform: 'uppercase'
+    },
+    mediaContainer: {
+        width: 256,
+        height: 256,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#374151'
+    },
+    mediaImage: {
+        width: 256,
+        height: 256
+    },
+    mediaLoadingOverlay: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: '#374151',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    uploadOverlay: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12
+    },
+    uploadOverlayHeavy: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12
+    },
+    uploadCircle: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        borderWidth: 3,
+        borderColor: 'rgba(255,255,255,0.3)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+    },
+    uploadProgressFill: {
+        position: 'absolute',
+        bottom: 0, left: 0, right: 0,
+        backgroundColor: '#F68537'
+    },
+    uploadProgressText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '900',
+        letterSpacing: -0.5
+    },
+    uploadProgressTextHeavy: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '900'
+    },
+    videoContainer: {
+        width: 256,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#000',
+        position: 'relative'
+    },
+    videoPlayer: {
+        width: 256,
+        height: 200
+    },
+    playIconOverlay: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0,0,0,0.3)'
+    },
+    playIconCircle: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    playIcon: {
+        marginLeft: 4
+    },
+    callLogContainer: {
+        padding: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        minWidth: 180
+    },
+    callLogIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    callLogTitle: {
+        fontSize: 14,
+        fontWeight: 'bold'
+    },
+    callLogSub: {
+        fontSize: 12,
+        marginTop: 2
+    },
+    contactContainer: {
+        padding: 12,
+        width: 220
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        paddingBottom: 12,
+        borderBottomWidth: 1
+    },
+    cardIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12
+    },
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: 'bold'
+    },
+    cardSub: {
+        fontSize: 12
+    },
+    cardActionBtn: {
+        alignItems: 'center',
+        paddingVertical: 4
+    },
+    cardActionText: {
+        fontWeight: 'bold',
+        fontSize: 14
+    },
+    docContainer: {
+        padding: 12,
+        width: 240
+    },
+    docIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12
+    },
+    docTitle: {
+        fontSize: 15,
+        fontWeight: 'bold'
+    },
+    docSub: {
+        fontSize: 12,
+        marginTop: 2
+    },
+    footerContainer: {
+        paddingHorizontal: 12,
+        paddingVertical: 8
+    },
+    msgText: {
+        fontSize: 15,
+        lineHeight: 22
+    },
+    msgTextItalic: {
+        fontStyle: 'italic',
+        opacity: 0.7
+    },
+    timeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        marginTop: 4
+    },
+    timeText: {
+        fontSize: 10
+    }
+});
+
+export default MessageContent;

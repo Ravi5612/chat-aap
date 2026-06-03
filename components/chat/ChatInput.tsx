@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useRef, useState, useCallback, memo, useEffect } from 'react';
+import { StyleSheet, TextInput, TouchableOpacity, View, Text } from 'react-native';
 import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ReplyPreview from './ReplyPreview';
@@ -19,7 +19,9 @@ import {
     ExpoSpeechRecognitionModule,
     useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
-import { Text } from 'react-native';
+
+// Stable no-op to avoid inline arrow function allocation
+const NOOP = () => {};
 
 interface ChatInputProps {
     onSendMessage: (text: string, scheduledAt?: Date) => void;
@@ -36,11 +38,11 @@ interface ChatInputProps {
     onDraftChange?: (text: string) => void;
 }
 
-export default function ChatInput({
+const ChatInput = memo(({
     onSendMessage, onTyping, disabled = false,
     replyingTo, onCancelReply, editingMessage, onCancelEdit, onSaveEdit,
     isMember = true, isKeyboardOpen = false, initialMessage = '', onDraftChange
-}: ChatInputProps) {
+}: ChatInputProps) => {
     const [message, setMessage] = useState(initialMessage);
     const [selectedMedia, setSelectedMedia] = useState<{ uri: string, type: 'image' | 'video' } | null>(null);
     const [isRecording, setIsRecording] = useState(false);
@@ -49,7 +51,7 @@ export default function ChatInput({
     const [cameraModalVisible, setCameraModalVisible] = useState(false);
     const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
     const [isVoiceTyping, setIsVoiceTyping] = useState(false);
-    const [voiceLang, setVoiceLang] = useState('hi-IN'); // Default to Hindi
+    const [voiceLang, setVoiceLang] = useState('hi-IN');
 
     const insets = useSafeAreaInsets();
     const hasMeasured = insets.top > 0 || insets.bottom > 0;
@@ -61,12 +63,15 @@ export default function ChatInput({
     const lastSentTimeRef = useRef(0);
     const lastTypingSentRef = useRef(0);
 
-    const { handlePickImage, handleLaunchCamera: originalHandleLaunchCamera } = useMediaPicker((uri) => uri ? setSelectedMedia({ uri, type: 'image' }) : setSelectedMedia(null));
-    const handleLaunchCamera = () => setCameraModalVisible(true);
+    const onMediaPicked = useCallback((uri: string | null) => {
+        setSelectedMedia(uri ? { uri, type: 'image' } : null);
+    }, []);
+
+    const { handlePickImage } = useMediaPicker(onMediaPicked);
     const { handleLocation } = useLocationPicker(onSendMessage);
     const { handleDocument } = useDocumentPicker(onSendMessage);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (editingMessage) {
             setMessage(editingMessage.message);
             inputRef.current?.focus();
@@ -75,51 +80,36 @@ export default function ChatInput({
         }
     }, [editingMessage, replyingTo]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (initialMessage) setMessage(initialMessage);
     }, [initialMessage]);
 
     useSpeechRecognitionEvent('start', () => setIsVoiceTyping(true));
-    useSpeechRecognitionEvent('end', () => setIsVoiceTyping(false));
+    useSpeechRecognitionEvent('end',   () => setIsVoiceTyping(false));
     useSpeechRecognitionEvent('error', (event) => {
         console.log('Voice Error:', event.error, event.message);
         setIsVoiceTyping(false);
     });
     useSpeechRecognitionEvent('result', (event) => {
-        if (event.results && event.results.length > 0) {
+        if (event.results?.length > 0) {
             const transcript = event.results[0]?.transcript;
-            if (transcript) {
-                setMessage(prev => prev + (prev.length > 0 ? " " : "") + transcript);
-            }
+            if (transcript) setMessage(prev => prev + (prev.length > 0 ? ' ' : '') + transcript);
         }
     });
 
-    const startVoiceTyping = async () => {
+    const startVoiceTyping = useCallback(async () => {
         try {
             const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-            if (!result.granted) {
-                console.warn('Voice permission not granted');
-                return;
-            }
-            ExpoSpeechRecognitionModule.start({
-                lang: voiceLang,
-                interimResults: true,
-                continuous: false,
-            });
-        } catch (e) {
-            console.error(e);
-        }
-    };
+            if (!result.granted) { console.warn('Voice permission not granted'); return; }
+            ExpoSpeechRecognitionModule.start({ lang: voiceLang, interimResults: true, continuous: false });
+        } catch (e) { console.error(e); }
+    }, [voiceLang]);
 
-    const stopVoiceTyping = () => {
-        try {
-            ExpoSpeechRecognitionModule.stop();
-        } catch (e) {
-            console.error(e);
-        }
-    };
+    const stopVoiceTyping = useCallback(() => {
+        try { ExpoSpeechRecognitionModule.stop(); } catch (e) { console.error(e); }
+    }, []);
 
-    const handleSubmit = (scheduledDate?: Date) => {
+    const handleSubmit = useCallback((scheduledDate?: Date) => {
         if (!message.trim() && !selectedMedia) {
             if (Date.now() - lastSentTimeRef.current < 500) return;
             setIsRecording(true);
@@ -144,9 +134,9 @@ export default function ChatInput({
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             onTyping(false);
         }
-    };
+    }, [message, selectedMedia, editingMessage, onSaveEdit, onSendMessage, onDraftChange, onTyping]);
 
-    const handleChangeText = (text: string) => {
+    const handleChangeText = useCallback((text: string) => {
         setMessage(text);
         if (onDraftChange) {
             if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
@@ -164,57 +154,76 @@ export default function ChatInput({
                 lastTypingSentRef.current = 0;
             }, 2000);
         }
-    };
+    }, [onDraftChange, onTyping]);
+
+    // Stable callbacks for children — prevent re-renders of memoized child components
+    const openCamera         = useCallback(() => setCameraModalVisible(true), []);
+    const openContacts       = useCallback(() => setContactModalVisible(true), []);
+    const openSchedule       = useCallback(() => setScheduleModalVisible(true), []);
+    const closeCamera        = useCallback(() => setCameraModalVisible(false), []);
+    const closeContacts      = useCallback(() => setContactModalVisible(false), []);
+    const closeSchedule      = useCallback(() => setScheduleModalVisible(false), []);
+    const stopRecording      = useCallback(() => setIsRecording(false), []);
+    const removeMedia        = useCallback(() => setSelectedMedia(null), []);
+    const toggleLang         = useCallback(() => setVoiceLang(p => p === 'hi-IN' ? 'en-US' : 'hi-IN'), []);
+    const toggleEmoji        = useCallback(() => {
+        if (emojiModalVisible) { setEmojiModalVisible(false); inputRef.current?.focus(); }
+        else { inputRef.current?.blur(); setEmojiModalVisible(true); }
+    }, [emojiModalVisible]);
+    const closeEmoji         = useCallback(() => { setEmojiModalVisible(false); inputRef.current?.focus(); }, []);
+    const appendEmoji        = useCallback((emoji: string) => setMessage(prev => prev + emoji), []);
+    const onRecordingComplete = useCallback((uri: string) => { onSendMessage(`[Voice Message] ${uri}`); setIsRecording(false); }, [onSendMessage]);
+    const onContactSelected  = useCallback((name: string, phone: string) => onSendMessage(`[Contact] ${name} | ${phone}`), [onSendMessage]);
+    const onCameraCapture    = useCallback((media: any) => setSelectedMedia(media), []);
+    const onScheduleSubmit   = useCallback((date: Date) => handleSubmit(date), [handleSubmit]);
+    const handleSendPress    = useCallback(() => handleSubmit(), [handleSubmit]);
+    const handleLongPress    = useCallback(() => { if (!message.trim() && !selectedMedia) startVoiceTyping(); }, [message, selectedMedia, startVoiceTyping]);
+    const handlePressOut     = useCallback(() => { if (isVoiceTyping) stopVoiceTyping(); }, [isVoiceTyping, stopVoiceTyping]);
 
     const bottomPadding = isKeyboardOpen ? 5 : (safeBottom > 0 ? safeBottom : 12);
+    const hasContent = !!(message.trim() || selectedMedia);
+    const sendIcon = editingMessage ? 'checkmark' : (hasContent ? 'send' : 'mic');
 
     return (
-        <View style={{ backgroundColor: 'transparent', borderTopWidth: 0, paddingBottom: bottomPadding, position: 'relative' }}>
+        <View style={[styles.wrapper, { paddingBottom: bottomPadding }]}>
             {!isMember && <NonMemberOverlay />}
 
-            <View style={{ opacity: isMember ? 1 : 0.5, pointerEvents: isMember ? 'auto' : 'none' }}>
+            <View style={[styles.innerWrapper, !isMember && styles.disabled]}>
                 {isRecording && (
                     <AudioRecorder
-                        onRecordingComplete={(uri) => { onSendMessage(`[Voice Message] ${uri}`); setIsRecording(false); }}
-                        onCancel={() => setIsRecording(false)}
+                        onRecordingComplete={onRecordingComplete}
+                        onCancel={stopRecording}
                     />
                 )}
 
-                <ReplyPreview replyingTo={replyingTo} onCancel={onCancelReply || (() => {})} />
+                <ReplyPreview replyingTo={replyingTo} onCancel={onCancelReply ?? NOOP} />
 
                 {editingMessage && (
                     <EditingBanner editingMessage={editingMessage} onCancelEdit={onCancelEdit} />
                 )}
 
                 {selectedMedia && !isRecording && (
-                    <SelectedImagePreview imageUri={selectedMedia.uri} onRemove={() => setSelectedMedia(null)} isVideo={selectedMedia.type === 'video'} />
+                    <SelectedImagePreview
+                        imageUri={selectedMedia.uri}
+                        onRemove={removeMedia}
+                        isVideo={selectedMedia.type === 'video'}
+                    />
                 )}
 
-                <View style={[styles.inputRow, { opacity: isRecording ? 0 : 1 }]}>
+                <View style={[styles.inputRow, isRecording && styles.hidden]}>
                     <View style={styles.inputBubble}>
-                        <TouchableOpacity 
-                            onPress={() => setVoiceLang(prev => prev === 'hi-IN' ? 'en-US' : 'hi-IN')}
-                            style={{ padding: 8, paddingRight: 4 }}
-                        >
-                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#F68537' }}>
-                                {voiceLang === 'hi-IN' ? 'HI' : 'EN'}
-                            </Text>
+                        <TouchableOpacity onPress={toggleLang} style={styles.langBtn}>
+                            <Text style={styles.langText}>{voiceLang === 'hi-IN' ? 'HI' : 'EN'}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => {
-                                if (emojiModalVisible) { setEmojiModalVisible(false); inputRef.current?.focus(); }
-                                else { inputRef.current?.blur(); setEmojiModalVisible(true); }
-                            }}
-                            style={{ padding: 8 }}
-                        >
-                            <Ionicons name="happy-outline" size={26} color={emojiModalVisible ? "#F68537" : "#6B7280"} />
+                        <TouchableOpacity onPress={toggleEmoji} style={styles.iconBtn}>
+                            <Ionicons name="happy-outline" size={26} color={emojiModalVisible ? '#F68537' : '#6B7280'} />
                         </TouchableOpacity>
 
                         <TextInput
                             ref={inputRef}
                             style={styles.textInput}
-                            placeholder={isVoiceTyping ? "Listening..." : (editingMessage ? "Edit message..." : "Message")}
-                            placeholderTextColor={isVoiceTyping ? "#F68537" : "#94A3B8"}
+                            placeholder={isVoiceTyping ? 'Listening...' : (editingMessage ? 'Edit message...' : 'Message')}
+                            placeholderTextColor={isVoiceTyping ? '#F68537' : '#94A3B8'}
                             value={message}
                             onChangeText={handleChangeText}
                             multiline
@@ -224,40 +233,32 @@ export default function ChatInput({
 
                         <AttachmentMenu
                             onImage={handlePickImage}
-                            onCamera={handleLaunchCamera}
+                            onCamera={openCamera}
                             onLocation={handleLocation}
-                            onContact={() => setContactModalVisible(true)}
+                            onContact={openContacts}
                             onDocument={handleDocument}
-                            onSchedule={() => setScheduleModalVisible(true)}
+                            onSchedule={openSchedule}
                         />
 
-                        {!message.trim() && !selectedMedia && (
-                            <TouchableOpacity onPress={handleLaunchCamera} style={{ padding: 8 }}>
+                        {!hasContent && (
+                            <TouchableOpacity onPress={openCamera} style={styles.iconBtn}>
                                 <Ionicons name="camera" size={26} color="#6B7280" />
                             </TouchableOpacity>
                         )}
                     </View>
 
-                    <TouchableOpacity 
-                        onPress={() => handleSubmit()} 
-                        onLongPress={() => {
-                            if (!message.trim() && !selectedMedia) {
-                                startVoiceTyping();
-                            }
-                        }}
-                        onPressOut={() => {
-                            if (isVoiceTyping) {
-                                stopVoiceTyping();
-                            }
-                        }}
-                        disabled={disabled} 
-                        style={[styles.sendBtn, isVoiceTyping && { backgroundColor: '#EF4444' }]}
+                    <TouchableOpacity
+                        onPress={handleSendPress}
+                        onLongPress={handleLongPress}
+                        onPressOut={handlePressOut}
+                        disabled={disabled}
+                        style={[styles.sendBtn, isVoiceTyping && styles.sendBtnRecording]}
                     >
                         <Ionicons
-                            name={editingMessage ? "checkmark" : (message.trim() || selectedMedia ? "send" : "mic")}
+                            name={sendIcon}
                             size={24}
                             color="white"
-                            style={{ marginLeft: (message.trim() || selectedMedia) ? 3 : 0 }}
+                            style={hasContent ? styles.sendIconOffset : undefined}
                         />
                     </TouchableOpacity>
                 </View>
@@ -265,35 +266,42 @@ export default function ChatInput({
                 {emojiModalVisible && (
                     <EmojiPickerModal
                         visible={emojiModalVisible}
-                        onClose={() => { setEmojiModalVisible(false); inputRef.current?.focus(); }}
-                        onSelect={(emoji) => setMessage(prev => prev + emoji)}
+                        onClose={closeEmoji}
+                        onSelect={appendEmoji}
                         isInline={true}
                     />
                 )}
 
                 <ContactPickerModal
                     visible={contactModalVisible}
-                    onClose={() => setContactModalVisible(false)}
-                    onSelectContact={(name, phone) => onSendMessage(`[Contact] ${name} | ${phone}`)}
+                    onClose={closeContacts}
+                    onSelectContact={onContactSelected}
                 />
 
                 <CustomCameraModal
                     visible={cameraModalVisible}
-                    onClose={() => setCameraModalVisible(false)}
-                    onCapture={(media) => setSelectedMedia(media)}
+                    onClose={closeCamera}
+                    onCapture={onCameraCapture}
                 />
 
                 <ScheduleMessageModal
                     visible={scheduleModalVisible}
-                    onClose={() => setScheduleModalVisible(false)}
-                    onSchedule={(date) => handleSubmit(date)}
+                    onClose={closeSchedule}
+                    onSchedule={onScheduleSubmit}
                 />
             </View>
         </View>
     );
-}
+});
+
+export default ChatInput;
+
 
 const styles = StyleSheet.create({
+    wrapper: { backgroundColor: 'transparent', borderTopWidth: 0, position: 'relative' },
+    innerWrapper: { opacity: 1 },
+    disabled: { opacity: 0.5 },
+    hidden: { opacity: 0 },
     inputRow: {
         flexDirection: 'row', alignItems: 'flex-end',
         gap: 6, paddingHorizontal: 8, paddingVertical: 10,
@@ -308,6 +316,9 @@ const styles = StyleSheet.create({
         flex: 1, fontSize: 16, paddingVertical: 10,
         paddingHorizontal: 4, color: '#1F2937', maxHeight: 120,
     },
+    langBtn: { padding: 8, paddingRight: 4 },
+    langText: { fontSize: 12, fontWeight: 'bold', color: '#F68537' },
+    iconBtn: { padding: 8 },
     sendBtn: {
         height: 48, width: 48, borderRadius: 24,
         alignItems: 'center', justifyContent: 'center',
@@ -315,4 +326,7 @@ const styles = StyleSheet.create({
         shadowColor: '#F68537', shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.4, shadowRadius: 3,
     },
+    sendBtnRecording: { backgroundColor: '#EF4444' },
+    sendIconOffset: { marginLeft: 3 },
 });
+

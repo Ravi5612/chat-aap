@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView } from 'react-native';
 import { CameraView, CameraType, FlashMode } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ export interface CustomCameraModalProps {
     onCapture: (media: { uri: string; type: 'image' | 'video' }) => void;
 }
 
-export default function CustomCameraModal({ visible, onClose, onCapture }: CustomCameraModalProps) {
+const CustomCameraModal = memo(({ visible, onClose, onCapture }: CustomCameraModalProps) => {
     const [facing, setFacing] = useState<CameraType>('back');
     const [flash, setFlash] = useState<FlashMode>('off');
     const [isRecording, setIsRecording] = useState(false);
@@ -33,21 +33,16 @@ export default function CustomCameraModal({ visible, onClose, onCapture }: Custo
         };
     }, [isRecording]);
 
-    const formatTime = (seconds: number) => {
+    const formatTime = useCallback((seconds: number) => {
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    };
+    }, []);
 
-    const toggleFacing = () => setFacing(current => (current === 'back' ? 'front' : 'back'));
-    const toggleFlash = () => setFlash(current => (current === 'off' ? 'on' : 'off'));
+    const toggleFacing = useCallback(() => setFacing(current => (current === 'back' ? 'front' : 'back')), []);
+    const toggleFlash = useCallback(() => setFlash(current => (current === 'off' ? 'on' : 'off')), []);
 
-    const handlePressIn = async () => {
-        // Prepare for potential long press (video)
-        // Wait a tiny bit to distinguish between tap and hold
-    };
-
-    const handleLongPress = async () => {
+    const handleLongPress = useCallback(async () => {
         if (!cameraRef.current) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setIsRecording(true);
@@ -61,16 +56,16 @@ export default function CustomCameraModal({ visible, onClose, onCapture }: Custo
             console.error('Record error:', error);
         }
         setIsRecording(false);
-    };
+    }, [onCapture, onClose]);
 
-    const handlePressOut = async () => {
+    const handlePressOut = useCallback(async () => {
         if (isRecording && cameraRef.current) {
             cameraRef.current.stopRecording();
             setIsRecording(false);
         }
-    };
+    }, [isRecording]);
 
-    const handlePress = async () => {
+    const handlePress = useCallback(async () => {
         if (isRecording) return; // Ignore single tap if already recording
         if (!cameraRef.current) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -83,7 +78,7 @@ export default function CustomCameraModal({ visible, onClose, onCapture }: Custo
         } catch (error) {
             console.error('Take picture error:', error);
         }
-    };
+    }, [isRecording, onCapture, onClose]);
 
     if (!visible) return null;
 
@@ -138,7 +133,9 @@ export default function CustomCameraModal({ visible, onClose, onCapture }: Custo
             </View>
         </Modal>
     );
-}
+});
+
+export default CustomCameraModal;
 
 const styles = StyleSheet.create({
     container: {

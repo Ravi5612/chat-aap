@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ const getAvatarUri = (friend: any) =>
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`;
 
 // Placeholder shown when no remote video stream yet
-export function CallPlaceholder({ friend, callState, remoteUids }: { friend: any; callState: string; remoteUids: number[] }) {
+export const CallPlaceholder = memo(({ friend, callState, remoteUids }: { friend: any; callState: string; remoteUids: number[] }) => {
     const statusText =
         callState === 'outgoing' ? 'Calling...' :
         callState === 'ringing' ? 'Ringing...' :
@@ -19,52 +19,52 @@ export function CallPlaceholder({ friend, callState, remoteUids }: { friend: any
     return (
         <View style={styles.placeholderContainer}>
             <View style={styles.avatarContainer}>
-                <Image source={{ uri: getAvatarUri(friend) }} style={styles.fullImage} />
+                <Image source={getAvatarUri(friend)} style={styles.fullImage} />
             </View>
             <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
             <Text style={styles.callStatus}>{statusText}</Text>
         </View>
     );
-}
+});
 
-export function CallEndedOverlay({ friend, endReason, onRetry, onGoToChat }: {
+export const CallEndedOverlay = memo(({ friend, endReason, onRetry, onGoToChat }: {
     friend: any; endReason?: string; onRetry: () => void; onGoToChat: () => void;
-}) {
+}) => {
     return (
         <View style={[StyleSheet.absoluteFillObject, styles.endedOverlay]}>
             <View style={styles.placeholderContainer}>
-                <View style={[styles.avatarContainer, { borderColor: '#EF4444' }]}>
-                    <Image source={{ uri: getAvatarUri(friend) }} style={styles.fullImage} />
+                <View style={styles.avatarContainerEnded}>
+                    <Image source={getAvatarUri(friend)} style={styles.fullImage} />
                 </View>
                 <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
-                <Text style={[styles.callStatus, { color: '#EF4444', marginTop: 12 }]}>
+                <Text style={styles.endedStatus}>
                     {endReason || 'Call Ended'}
                 </Text>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 40, position: 'absolute', bottom: 80, width: '100%', justifyContent: 'center' }}>
-                <TouchableOpacity style={{ alignItems: 'center' }} onPress={onRetry}>
-                    <View style={[styles.actionBtn, { backgroundColor: '#F68537', width: 64, height: 64, borderRadius: 32 }]}>
+            <View style={styles.endedActions}>
+                <TouchableOpacity style={styles.actionItem} onPress={onRetry}>
+                    <View style={styles.actionBtnLarge}>
                         <Ionicons name="call" size={32} color="white" />
                     </View>
-                    <Text style={[styles.actionLabel, { marginTop: 8 }]}>Call Again</Text>
+                    <Text style={styles.actionLabel}>Call Again</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ alignItems: 'center' }} onPress={onGoToChat}>
-                    <View style={[styles.actionBtn, { backgroundColor: '#F68537', width: 64, height: 64, borderRadius: 32 }]}>
+                <TouchableOpacity style={styles.actionItem} onPress={onGoToChat}>
+                    <View style={styles.actionBtnLarge}>
                         <Ionicons name="chatbubble" size={32} color="white" />
                     </View>
-                    <Text style={[styles.actionLabel, { marginTop: 8 }]}>Message</Text>
+                    <Text style={styles.actionLabel}>Message</Text>
                 </TouchableOpacity>
             </View>
         </View>
     );
-}
+});
 
 // Remote video area (group grid or single)
-export function RemoteVideoArea({ remoteUids, friend, callState, isGroup, isEngineReady, channelId }: {
+export const RemoteVideoArea = memo(({ remoteUids, friend, callState, isGroup, isEngineReady, channelId }: {
     remoteUids: number[]; friend: any; callState: string; isGroup: boolean;
     isEngineReady: boolean; channelId: string;
-}) {
+}) => {
     if (remoteUids.length === 0) {
         return <CallPlaceholder friend={friend} callState={callState} remoteUids={remoteUids} />;
     }
@@ -84,16 +84,16 @@ export function RemoteVideoArea({ remoteUids, friend, callState, isGroup, isEngi
     const remoteUid = remoteUids[0];
     return isEngineReady
         ? <AgoraVideoView uid={remoteUid} style={styles.fullVideo} channelId={channelId} />
-        : <View style={[styles.fullVideo, { backgroundColor: '#111827' }]} />;
-}
+        : <View style={styles.darkFullVideo} />;
+});
 
 // Bottom controls bar
-export function CallControls({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: {
+export const CallControls = memo(({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: {
     callState: string; callType: string;
     isMuted: boolean; isVideoOff: boolean; isSpeakerphone: boolean;
     onMute: () => void; onVideo: () => void; onSpeaker: () => void;
     onSwitchCamera: () => void; onAccept: () => void; onEnd: () => void;
-}) {
+}) => {
     return (
         <View style={styles.controlsWrapper}>
             <View style={styles.controlsContainer}>
@@ -108,7 +108,7 @@ export function CallControls({ callState, callType, isMuted, isVideoOff, isSpeak
                 )}
 
                 {callType === 'audio' && (
-                    <TouchableOpacity onPress={onSpeaker} style={[styles.controlButton, !isSpeakerphone && { backgroundColor: '#4B5563' }]}>
+                    <TouchableOpacity onPress={onSpeaker} style={[styles.controlButton, !isSpeakerphone && styles.dimButton]}>
                         <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={22} color="white" />
                     </TouchableOpacity>
                 )}
@@ -131,7 +131,8 @@ export function CallControls({ callState, callType, isMuted, isVideoOff, isSpeak
             </View>
         </View>
     );
-}
+});
+
 
 const styles = StyleSheet.create({
     placeholderContainer: { alignItems: 'center' },
@@ -140,13 +141,23 @@ const styles = StyleSheet.create({
         borderColor: '#F68537', overflow: 'hidden', marginBottom: 16,
         backgroundColor: '#1F2937', alignItems: 'center', justifyContent: 'center',
     },
+    avatarContainerEnded: {
+        width: 128, height: 128, borderRadius: 64, borderWidth: 4,
+        borderColor: '#EF4444', overflow: 'hidden', marginBottom: 16,
+        backgroundColor: '#1F2937', alignItems: 'center', justifyContent: 'center',
+    },
     fullImage: { width: '100%', height: '100%' },
     friendName: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 8 },
     callStatus: { color: '#F68537', fontSize: 16, fontWeight: '600' },
+    endedStatus: { color: '#EF4444', fontSize: 16, fontWeight: '600', marginTop: 12 },
     endedOverlay: { backgroundColor: '#111827', zIndex: 1000, justifyContent: 'center', alignItems: 'center' },
+    endedActions: { flexDirection: 'row', gap: 40, position: 'absolute', bottom: 80, width: '100%', justifyContent: 'center' },
+    actionItem: { alignItems: 'center' },
     actionBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#4B5563', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    actionBtnLarge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#F68537', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
     actionLabel: { color: 'white', fontSize: 13 },
     fullVideo: { width: '100%', height: '100%' },
+    darkFullVideo: { width: '100%', height: '100%', backgroundColor: '#111827' },
     groupVideoGrid: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', height: '100%', padding: 2 },
     gridVideoItem: { width: '50%', height: '50%', padding: 2 },
     gridVideo: { width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#1F2937' },
@@ -160,5 +171,7 @@ const styles = StyleSheet.create({
     controlButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
     largeButton: { width: 60, height: 60, borderRadius: 30 },
     dangerButton: { backgroundColor: '#EF4444' },
+    dimButton: { backgroundColor: '#4B5563' },
     successButton: { backgroundColor: '#10B981' },
 });
+

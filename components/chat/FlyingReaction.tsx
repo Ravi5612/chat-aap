@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, memo } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, {
     useSharedValue,
@@ -15,7 +15,7 @@ interface FlyingReactionProps {
     onComplete?: () => void;
 }
 
-export default function FlyingReaction({ emoji, onComplete }: FlyingReactionProps) {
+const FlyingReaction = memo(({ emoji, onComplete }: FlyingReactionProps) => {
     const translateY = useSharedValue(0);
     const translateX = useSharedValue(0);
     const opacity = useSharedValue(0);
@@ -61,7 +61,8 @@ export default function FlyingReaction({ emoji, onComplete }: FlyingReactionProp
             withTiming(10, { duration: 400 }),
             withTiming(0, { duration: 400 })
         );
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Only run once on mount
 
     const animatedStyle = useAnimatedStyle(() => {
         return {
@@ -80,7 +81,9 @@ export default function FlyingReaction({ emoji, onComplete }: FlyingReactionProp
             <Animated.Text style={styles.text}>{emoji}</Animated.Text>
         </Animated.View>
     );
-}
+});
+
+export default FlyingReaction;
 
 const styles = StyleSheet.create({
     container: {

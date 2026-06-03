@@ -128,7 +128,20 @@ export default function SearchPeopleScreen() {
                     status: 'pending'
                 }]);
 
-            if (error) throw error;
+            if (error) {
+                // Revert optimistic update
+                setResults(prev => prev.map(p => 
+                    p.id === receiverId ? { ...p, requestStatus: null } : p
+                ));
+                
+                if (error.code === '23503') { // Foreign key constraint violation
+                    // Remove from search results
+                    setResults(prev => prev.filter(p => p.id !== receiverId));
+                    throw new Error("This user no longer exists or their account was deleted.");
+                }
+                
+                throw error;
+            }
 
             const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', currentUser.id).single();
 

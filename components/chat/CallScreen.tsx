@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleSheet, Dimensions } from 'react-native';
+import React, { useState, useCallback, useMemo, memo } from 'react';
+import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -16,7 +16,8 @@ const formatDuration = (seconds: number) => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-const CallControls = ({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: any) => {
+// Memoized so re-renders from timer/state don't recreate controls
+const CallControls = memo(({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: any) => {
     if (callState === 'incoming') {
         return (
             <View style={styles.controlsContainer}>
@@ -29,7 +30,7 @@ const CallControls = ({ callState, callType, isMuted, isVideoOff, isSpeakerphone
             </View>
         );
     }
-    
+
     return (
         <View style={styles.controlsContainer}>
             {callType === 'video' && (
@@ -53,7 +54,7 @@ const CallControls = ({ callState, callType, isMuted, isVideoOff, isSpeakerphone
             </TouchableOpacity>
         </View>
     );
-};
+});
 
 
 interface CallScreenProps {
@@ -78,15 +79,6 @@ export default function CallScreen({
     const { width, height } = useWindowDimensions();
     const [isSwapped, setIsSwapped] = useState(false);
     const [showControls, setShowControls] = useState(true);
-    const startTimeRef = useRef<number | null>(null); // NEW: To track when the call actually started
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
-    const lastCallInfo = useRef({
-        state: callState,
-        friend: friend,
-        type: callType,
-        isGroup: isGroup
-    });
-    const hasLogged = useRef(false);
 
     // Draggable PIP
     const translateX = useSharedValue(0);
@@ -94,7 +86,8 @@ export default function CallScreen({
     const offsetX = useSharedValue(0);
     const offsetY = useSharedValue(0);
 
-    const panGesture = Gesture.Pan()
+    // Memoize gesture so it's not recreated every render
+    const panGesture = useMemo(() => Gesture.Pan()
         .onUpdate((event) => {
             translateX.value = offsetX.value + event.translationX;
             translateY.value = offsetY.value + event.translationY;
@@ -102,7 +95,8 @@ export default function CallScreen({
         .onEnd(() => {
             offsetX.value = translateX.value;
             offsetY.value = translateY.value;
-        });
+        }),
+    [translateX, translateY, offsetX, offsetY]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
@@ -110,36 +104,6 @@ export default function CallScreen({
             { translateY: withSpring(translateY.value, { damping: 15 }) },
         ],
     }));
-
-    const renderRemoteVideos = () => {
-        if (remoteUids.length === 0) {
-            return (
-                <View style={styles.placeholderContainer}>
-                    <View style={styles.avatarContainer}>
-                        <Image source={{ uri: friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537` }} style={styles.fullImage} />
-                    </View>
-                    <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
-                    <Text style={styles.callStatus}>
-                        {callState === 'outgoing' ? 'Calling...' : callState === 'ringing' ? 'Ringing...' : callState === 'incoming' ? 'Incoming Call...' : `On Call (${remoteUids.length} joined)`}
-                    </Text>
-                </View>
-            );
-        }
-        if (isGroup) {
-            return (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '100%', height: '100%', padding: 2 }}>
-                    {remoteUids.map((uid) => (
-                        <View key={uid} style={{ width: '50%', height: '50%', padding: 2 }}>
-                            {isEngineReady && <AgoraVideoView uid={uid} style={{ width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#1F2937' }} channelId={channelId} />}
-                        </View>
-                    ))}
-                </View>
-            );
-        }
-        return isEngineReady
-            ? <AgoraVideoView uid={remoteUids[0]} style={{ width: '100%', height: '100%' }} channelId={channelId} />
-            : <View style={{ width: '100%', height: '100%', backgroundColor: '#111827' }} />;
-    };
 
     // Agora RTC
     const { joined, remoteUids, connectionStatus, isMuted, isVideoOff, isSpeakerphone,
@@ -151,6 +115,44 @@ export default function CallScreen({
     const { callDuration, acceptCall, endCall, goToChat, retryCall } = useCallActions(
         callState, callType, friend, currentUser, isGroup, endReason, onAcceptCall, onEndCall, onRetry
     );
+
+    // Memoized — only re-renders when remoteUids/callState/friend changes
+    const RemoteVideoArea = useCallback(() => {
+        if (remoteUids.length === 0) {
+            const avatarUri = friend?.avatar_url || friend?.img
+                || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`;
+            const statusText = callState === 'outgoing' ? 'Calling...'
+                : callState === 'ringing' ? 'Ringing...'
+                : callState === 'incoming' ? 'Incoming Call...'
+                : `On Call (${remoteUids.length} joined)`;
+            return (
+                <View style={styles.placeholderContainer}>
+                    <View style={styles.avatarContainer}>
+                        <Image source={avatarUri} style={styles.fullImage} />
+                    </View>
+                    <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
+                    <Text style={styles.callStatus}>{statusText}</Text>
+                </View>
+            );
+        }
+        if (isGroup) {
+            return (
+                <View style={styles.groupVideoGrid}>
+                    {remoteUids.map((uid) => (
+                        <View key={uid} style={styles.groupVideoCell}>
+                            {isEngineReady && <AgoraVideoView uid={uid} style={styles.groupVideoInner} channelId={channelId} />}
+                        </View>
+                    ))}
+                </View>
+            );
+        }
+        return isEngineReady
+            ? <AgoraVideoView uid={remoteUids[0]} style={styles.fullSize} channelId={channelId} />
+            : <View style={styles.darkFullSize} />;
+    }, [remoteUids, callState, friend, isGroup, isEngineReady, channelId]);
+
+    const toggleSwap = useCallback(() => { if (!isGroup) setIsSwapped(p => !p); }, [isGroup]);
+    const toggleControls = useCallback(() => setShowControls(p => !p), []);
 
     if (!visible) return null;
 
@@ -167,7 +169,6 @@ export default function CallScreen({
         >
             <View style={styles.container}>
                 {/* Minimize Button */}
-
                 {callState !== 'ended' && onMinimize && showControls && (
                     <TouchableOpacity style={styles.minimizeButton} onPress={onMinimize}>
                         <Ionicons name="chevron-down" size={32} color="white" />
@@ -175,20 +176,20 @@ export default function CallScreen({
                 )}
 
                 {/* Main Video Area */}
-                <TouchableWithoutFeedback onPress={() => setShowControls(p => !p)}>
+                <TouchableWithoutFeedback onPress={toggleControls}>
                     <View style={styles.mainVideoContainer}>
                         {callType === 'video' ? (
                             <>
                                 {isSwapped && isEngineReady
                                     ? <AgoraVideoView uid={0} style={{ width, height }} channelId={channelId} />
-                                    : renderRemoteVideos()
+                                    : <RemoteVideoArea />
                                 }
                                 {!isGroup && remoteUids.length > 0 && (
                                     <>
                                         {remoteVideoMuted && (
                                             <View style={styles.videoOffOverlay}>
                                                 <Ionicons name="videocam-off" size={64} color="white" />
-                                                <Text style={{ color: 'white', marginTop: 12 }}>{friend?.name} has turned off camera</Text>
+                                                <Text style={styles.remoteOffText}>{friend?.name} has turned off camera</Text>
                                             </View>
                                         )}
                                         {remoteAudioMuted && (
@@ -201,7 +202,7 @@ export default function CallScreen({
                                 )}
                             </>
                         ) : (
-                            renderRemoteVideos()
+                            <RemoteVideoArea />
                         )}
                     </View>
                 </TouchableWithoutFeedback>
@@ -215,7 +216,7 @@ export default function CallScreen({
                 {callType === 'video' && (callState === 'active' || callState === 'outgoing') && isEngineReady && (
                     <GestureDetector gesture={panGesture}>
                         <Animated.View style={[styles.pipContainer, animatedStyle]}>
-                            <TouchableOpacity activeOpacity={0.8} onPress={() => !isGroup && setIsSwapped(p => !p)} style={{ flex: 1 }}>
+                            <TouchableOpacity activeOpacity={0.8} onPress={toggleSwap} style={styles.flex1}>
                                 <AgoraVideoView
                                     uid={isSwapped ? (remoteUids[0] || 0) : 0}
                                     style={styles.pipVideo}
@@ -269,10 +270,12 @@ export default function CallScreen({
     );
 }
 
-const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#111827' },
+    flex1: { flex: 1 },
+    fullSize: { width: '100%', height: '100%' },
+    darkFullSize: { width: '100%', height: '100%', backgroundColor: '#111827' },
     minimizeButton: {
         position: 'absolute', top: 50, left: 20, zIndex: 100,
         width: 44, height: 44, borderRadius: 22,
@@ -286,6 +289,7 @@ const styles = StyleSheet.create({
         position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
         alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(31,41,55,0.8)',
     },
+    remoteOffText: { color: 'white', marginTop: 12 },
     remoteStatusBadge: {
         position: 'absolute', top: 120, alignSelf: 'center',
         backgroundColor: 'rgba(0,0,0,0.5)', flexDirection: 'row', alignItems: 'center',
@@ -302,6 +306,9 @@ const styles = StyleSheet.create({
     fullImage: { width: '100%', height: '100%' },
     friendName: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 8 },
     callStatus: { color: '#F68537', fontSize: 16, fontWeight: '600' },
+    groupVideoGrid: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', height: '100%', padding: 2 },
+    groupVideoCell: { width: '50%', height: '50%', padding: 2 },
+    groupVideoInner: { width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#1F2937' },
     pipContainer: {
         position: 'absolute', top: 60, right: 20, width: 100, height: 150,
         borderRadius: 16, overflow: 'hidden', borderWidth: 2,
@@ -319,37 +326,22 @@ const styles = StyleSheet.create({
     statusIndicator: { position: 'absolute', top: 60, right: 24 },
     statusText: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
     controlsWrapper: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        paddingBottom: 48,
-        paddingTop: 24,
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        paddingBottom: 48, paddingTop: 24,
         backgroundColor: '#F68537',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        zIndex: 60,
+        borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 60,
     },
     controlsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 20,
-        paddingHorizontal: 24,
+        flexDirection: 'row', justifyContent: 'center',
+        alignItems: 'center', gap: 20, paddingHorizontal: 24,
     },
     controlButton: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: 60, height: 60, borderRadius: 30,
         backgroundColor: 'rgba(255,255,255,0.2)',
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'center', justifyContent: 'center',
     },
-    largeButton: {
-        width: 68,
-        height: 68,
-        borderRadius: 34,
-    },
+    largeButton: { width: 68, height: 68, borderRadius: 34 },
     dangerButton: { backgroundColor: '#EF4444' },
     successButton: { backgroundColor: '#22C55E' },
 });
+

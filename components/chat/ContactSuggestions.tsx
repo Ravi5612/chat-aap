@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, LayoutAnimation, Platform, UIManager, ScrollView } from 'react-native';
+import React, { useCallback, memo } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Image } from 'expo-image';
 import { useContactSuggestions } from '@/hooks/useContactSuggestions';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,56 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-function ContactSuggestionsInner() {
+// Extracted to prevent re-rendering all rows and blinking images
+const ContactRow = memo(({ user, sendRequest, cancelRequest }: { user: any, sendRequest: (id: string) => void, cancelRequest: (id: string) => void }) => {
+    const handleCancel = useCallback(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        cancelRequest(user.id);
+    }, [user.id, cancelRequest]);
+
+    const handleAdd = useCallback(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        sendRequest(user.id);
+    }, [user.id, sendRequest]);
+
+    return (
+        <View style={styles.userRow}>
+            {user.avatar_url ? (
+                <Image 
+                    source={user.avatar_url} 
+                    style={styles.avatar}
+                />
+            ) : (
+                <View style={styles.initialsAvatar}>
+                    <Text style={styles.initialsText}>
+                        {user.username?.substring(0, 2).toUpperCase() || 'UN'}
+                    </Text>
+                </View>
+            )}
+
+            <View style={styles.userInfo}>
+                <View style={styles.userDetails}>
+                    <Text style={styles.userName}>{user.username}</Text>
+                    <Text style={styles.userSubtitle} numberOfLines={1}>
+                        From your contacts
+                    </Text>
+                </View>
+
+                {user.requestStatus === 'pending' ? (
+                    <TouchableOpacity onPress={handleCancel} style={[styles.pendingBadge, styles.opacity80]}>
+                        <Text style={styles.pendingText}>Pending</Text>
+                    </TouchableOpacity>
+                ) : (
+                    <TouchableOpacity onPress={handleAdd} style={styles.addButton}>
+                        <Text style={styles.addButtonText}>Add</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        </View>
+    );
+});
+
+const ContactSuggestionsInner = memo(() => {
     const { suggestions, loading, permissionGranted, loadSuggestions, sendRequest, cancelRequest } = useContactSuggestions();
 
     if (permissionGranted === false) {
@@ -48,7 +97,7 @@ function ContactSuggestionsInner() {
 
     if (loading && suggestions.length === 0) {
         return (
-            <View style={{ padding: 16 }}>
+            <View style={styles.loadingContainer}>
                 <ActivityIndicator color="#F68537" />
             </View>
         );
@@ -59,61 +108,18 @@ function ContactSuggestionsInner() {
             <View style={styles.listWrapper}>
                 <View style={styles.listView}>
                     {suggestions.map((user) => (
-                        <View 
+                        <ContactRow 
                             key={user.id} 
-                            style={styles.userRow}
-                        >
-                            {user.avatar_url ? (
-                                <Image 
-                                    source={user.avatar_url} 
-                                    style={styles.avatar}
-                                    transition={200}
-                                />
-                            ) : (
-                                <View style={styles.initialsAvatar}>
-                                    <Text style={styles.initialsText}>
-                                        {user.username?.substring(0, 2).toUpperCase() || 'UN'}
-                                    </Text>
-                                </View>
-                            )}
-
-                            <View style={styles.userInfo}>
-                                <View style={styles.userDetails}>
-                                    <Text style={styles.userName}>{user.username}</Text>
-                                    <Text style={styles.userSubtitle} numberOfLines={1}>
-                                        From your contacts
-                                    </Text>
-                                </View>
-
-                                {user.requestStatus === 'pending' ? (
-                                    <TouchableOpacity 
-                                        onPress={() => {
-                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                            cancelRequest(user.id);
-                                        }}
-                                        style={[styles.pendingBadge, { opacity: 0.8 }]}
-                                    >
-                                        <Text style={styles.pendingText}>Pending</Text>
-                                    </TouchableOpacity>
-                                ) : (
-                                    <TouchableOpacity 
-                                        onPress={() => {
-                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                            sendRequest(user.id);
-                                        }}
-                                        style={styles.addButton}
-                                    >
-                                        <Text style={styles.addButtonText}>Add</Text>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        </View>
+                            user={user} 
+                            sendRequest={sendRequest} 
+                            cancelRequest={cancelRequest} 
+                        />
                     ))}
                 </View>
             </View>
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -269,6 +275,12 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 19,
         paddingHorizontal: 10,
+    },
+    opacity80: {
+        opacity: 0.8,
+    },
+    loadingContainer: {
+        padding: 16,
     }
 });
 

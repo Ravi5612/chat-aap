@@ -126,6 +126,7 @@ export default function CallsScreen() {
                     selectedCount={selectedIds.size}
                     onCancelSelection={cancelSelection}
                     onDeletePress={() => setIsDeleteModalVisible(true)}
+                    onNewCallPress={() => router.push('/search')}
                 />
 
                 {loading && !refreshing && logs.length === 0 ? (

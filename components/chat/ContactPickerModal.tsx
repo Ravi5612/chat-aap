@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Contacts from 'expo-contacts';
@@ -9,7 +9,29 @@ interface ContactPickerModalProps {
     onSelectContact: (name: string, phoneNumber: string) => void;
 }
 
-export default function ContactPickerModal({ visible, onClose, onSelectContact }: ContactPickerModalProps) {
+// ─── Memoized Contact Item Sub-component ─────────────────────────────────────
+const ContactItem = memo(({ item, onSelect }: { item: Contacts.Contact, onSelect: (contact: Contacts.Contact) => void }) => {
+    const initial = item.name ? item.name.charAt(0).toUpperCase() : '?';
+    const phone = item.phoneNumbers?.[0]?.number || 'No number';
+    
+    return (
+        <TouchableOpacity 
+            style={styles.contactItem}
+            onPress={() => onSelect(item)}
+        >
+            <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initial}</Text>
+            </View>
+            <View style={styles.contactInfo}>
+                <Text style={styles.contactName}>{item.name}</Text>
+                <Text style={styles.contactPhone}>{phone}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+        </TouchableOpacity>
+    );
+});
+
+const ContactPickerModal = memo(({ visible, onClose, onSelectContact }: ContactPickerModalProps) => {
     const [contacts, setContacts] = useState<Contacts.Contact[]>([]);
     const [filteredContacts, setFilteredContacts] = useState<Contacts.Contact[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -50,7 +72,7 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
         }
     };
 
-    const handleSearch = (text: string) => {
+    const handleSearch = useCallback((text: string) => {
         setSearchQuery(text);
         if (text.trim() === '') {
             setFilteredContacts(contacts);
@@ -62,37 +84,31 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
             );
             setFilteredContacts(filtered);
         }
-    };
+    }, [contacts]);
 
-    const handleSelect = (contact: Contacts.Contact) => {
+    const handleSelect = useCallback((contact: Contacts.Contact) => {
         const name = contact.name || 'Unknown';
         const phone = contact.phoneNumbers?.[0]?.number || '';
         if (phone) {
             onSelectContact(name, phone);
             onClose();
         }
-    };
+    }, [onSelectContact, onClose]);
 
-    const renderItem = ({ item }: { item: Contacts.Contact }) => {
-        const initial = item.name ? item.name.charAt(0).toUpperCase() : '?';
-        const phone = item.phoneNumbers?.[0]?.number || 'No number';
-        
-        return (
-            <TouchableOpacity 
-                style={styles.contactItem}
-                onPress={() => handleSelect(item)}
-            >
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{initial}</Text>
-                </View>
-                <View style={styles.contactInfo}>
-                    <Text style={styles.contactName}>{item.name}</Text>
-                    <Text style={styles.contactPhone}>{phone}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-        );
-    };
+    const clearSearch = useCallback(() => {
+        handleSearch('');
+    }, [handleSearch]);
+
+    const renderItem = useCallback(({ item }: { item: Contacts.Contact }) => (
+        <ContactItem item={item} onSelect={handleSelect} />
+    ), [handleSelect]);
+
+    const renderEmptyComponent = useCallback(() => (
+        <View style={styles.centerContainer}>
+            <Ionicons name="people-outline" size={48} color="#CBD5E1" />
+            <Text style={styles.emptyText}>No contacts found</Text>
+        </View>
+    ), []);
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -102,7 +118,7 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
                         <Ionicons name="close" size={24} color="#1F2937" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Select Contact</Text>
-                    <View style={{ width: 40 }} />
+                    <View style={styles.headerSpacer} />
                 </View>
 
                 <View style={styles.searchContainer}>
@@ -115,7 +131,7 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
                         placeholderTextColor="#9CA3AF"
                     />
                     {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => handleSearch('')}>
+                        <TouchableOpacity onPress={clearSearch}>
                             <Ionicons name="close-circle" size={20} color="#9CA3AF" />
                         </TouchableOpacity>
                     )}
@@ -142,18 +158,15 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
                         initialNumToRender={20}
                         maxToRenderPerBatch={20}
                         contentContainerStyle={styles.listContainer}
-                        ListEmptyComponent={
-                            <View style={styles.centerContainer}>
-                                <Ionicons name="people-outline" size={48} color="#CBD5E1" />
-                                <Text style={styles.emptyText}>No contacts found</Text>
-                            </View>
-                        }
+                        ListEmptyComponent={renderEmptyComponent}
                     />
                 )}
             </SafeAreaView>
         </Modal>
     );
-}
+});
+
+export default ContactPickerModal;
 
 const styles = StyleSheet.create({
     container: {
@@ -176,6 +189,9 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#1F2937',
+    },
+    headerSpacer: {
+        width: 40,
     },
     searchContainer: {
         flexDirection: 'row',

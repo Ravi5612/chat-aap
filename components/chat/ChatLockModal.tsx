@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -8,6 +8,74 @@ const CHAT_LOCK_KEY = 'chat_lock_password';
 const CHAT_LOCK_QUESTION_KEY = 'chat_lock_question';
 const CHAT_LOCK_ANSWER_KEY = 'chat_lock_answer';
 
+// ─── Sub-components (memoized) ────────────────────────────────────────────────
+
+const SetupForm = memo(({ password, confirmPassword, question, answer, onPassword, onConfirm, onQuestion, onAnswer, onSubmit }: any) => (
+    <View style={styles.form}>
+        <Text style={styles.title}>Set Chat Lock</Text>
+        <Text style={styles.subtitle}>Enter a password to protect your locked chats</Text>
+
+        <TextInput style={styles.input} placeholder="New Password" secureTextEntry keyboardType="number-pad" value={password} onChangeText={onPassword} />
+        <TextInput style={styles.input} placeholder="Confirm Password" secureTextEntry keyboardType="number-pad" value={confirmPassword} onChangeText={onConfirm} />
+
+        <View style={styles.divider} />
+        <Text style={styles.subtitle}>Recovery: Set a security question</Text>
+        <TextInput style={styles.input} placeholder="e.g., What is your pet's name?" value={question} onChangeText={onQuestion} />
+        <TextInput style={styles.input} placeholder="Your Answer" value={answer} onChangeText={onAnswer} />
+
+        <TouchableOpacity style={styles.primaryBtn} onPress={onSubmit}>
+            <Text style={styles.primaryBtnText}>Save Settings</Text>
+        </TouchableOpacity>
+    </View>
+));
+
+const VerifyForm = memo(({ password, onPassword, onVerify, onForgot }: any) => (
+    <View style={styles.form}>
+        <MaterialCommunityIcons name="lock-outline" size={64} color="#F68537" style={styles.lockIcon} />
+        <Text style={styles.title}>Chat Locked</Text>
+        <Text style={styles.subtitle}>Enter your password to unlock this chat</Text>
+
+        <TextInput
+            style={styles.pinInput}
+            placeholder="****"
+            secureTextEntry
+            keyboardType="number-pad"
+            autoFocus
+            value={password}
+            onChangeText={onPassword}
+        />
+
+        <TouchableOpacity style={styles.primaryBtn} onPress={onVerify}>
+            <Text style={styles.primaryBtnText}>Unlock</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.textBtn} onPress={onForgot}>
+            <Text style={styles.textBtnText}>Forgot Password?</Text>
+        </TouchableOpacity>
+    </View>
+));
+
+const RecoverForm = memo(({ storedQuestion, answer, onAnswer, onRecover, onBack }: any) => (
+    <View style={styles.form}>
+        <Text style={styles.title}>Recover Password</Text>
+        <Text style={styles.subtitle}>Answer your security question</Text>
+
+        <View style={styles.questionBox}>
+            <Text style={styles.questionText}>{storedQuestion || 'No question set'}</Text>
+        </View>
+
+        <TextInput style={styles.input} placeholder="Your Answer" value={answer} onChangeText={onAnswer} />
+
+        <TouchableOpacity style={styles.primaryBtn} onPress={onRecover}>
+            <Text style={styles.primaryBtnText}>Verify Answer</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.textBtn} onPress={onBack}>
+            <Text style={styles.textBtnText}>Back to Login</Text>
+        </TouchableOpacity>
+    </View>
+));
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 interface ChatLockModalProps {
     visible: boolean;
     onClose: () => void;
@@ -15,7 +83,7 @@ interface ChatLockModalProps {
     mode: 'verify' | 'setup' | 'recover';
 }
 
-export default function ChatLockModal({ visible, onClose, onSuccess, mode: initialMode }: ChatLockModalProps) {
+const ChatLockModal = memo(({ visible, onClose, onSuccess, mode: initialMode }: ChatLockModalProps) => {
     const [mode, setMode] = useState(initialMode);
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,173 +105,89 @@ export default function ChatLockModal({ visible, onClose, onSuccess, mode: initi
         if (q) setStoredQuestion(q);
     };
 
-    const handleSetup = async () => {
-        if (password.length < 4) {
-            Alert.alert("Error", "Password must be at least 4 digits");
-            return;
-        }
-        if (password !== confirmPassword) {
-            Alert.alert("Error", "Passwords do not match");
-            return;
-        }
-        if (!question || !answer) {
-            Alert.alert("Error", "Please set a security question and answer");
-            return;
-        }
-
+    const handleSetup = useCallback(async () => {
+        if (password.length < 4) { Alert.alert('Error', 'Password must be at least 4 digits'); return; }
+        if (password !== confirmPassword) { Alert.alert('Error', 'Passwords do not match'); return; }
+        if (!question || !answer) { Alert.alert('Error', 'Please set a security question and answer'); return; }
         try {
             await SecureStore.setItemAsync(CHAT_LOCK_KEY, password);
             await SecureStore.setItemAsync(CHAT_LOCK_QUESTION_KEY, question);
             await SecureStore.setItemAsync(CHAT_LOCK_ANSWER_KEY, answer.toLowerCase().trim());
-            
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert("Success", "Chat Lock set up successfully!");
+            Alert.alert('Success', 'Chat Lock set up successfully!');
             onSuccess();
-        } catch (e) {
-            Alert.alert("Error", "Failed to save lock settings");
-        }
-    };
+        } catch (e) { Alert.alert('Error', 'Failed to save lock settings'); }
+    }, [password, confirmPassword, question, answer, onSuccess]);
 
-    const handleVerify = async () => {
+    const handleVerify = useCallback(async () => {
         const storedPassword = await SecureStore.getItemAsync(CHAT_LOCK_KEY);
         if (password === storedPassword) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             onSuccess();
         } else {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert("Incorrect Password", "Please try again.");
+            Alert.alert('Incorrect Password', 'Please try again.');
             setPassword('');
         }
-    };
+    }, [password, onSuccess]);
 
-    const handleRecover = async () => {
+    const handleRecover = useCallback(async () => {
         const storedAnswer = await SecureStore.getItemAsync(CHAT_LOCK_ANSWER_KEY);
         if (answer.toLowerCase().trim() === storedAnswer) {
-            setMode('setup');
-            setAnswer('');
-            setPassword('');
-            Alert.alert("Verified", "You can now set a new password.");
+            setMode('setup'); setAnswer(''); setPassword('');
+            Alert.alert('Verified', 'You can now set a new password.');
         } else {
-            Alert.alert("Incorrect Answer", "Recovery failed.");
+            Alert.alert('Incorrect Answer', 'Recovery failed.');
         }
-    };
+    }, [answer]);
 
-    const renderSetup = () => (
-        <View style={styles.form}>
-            <Text style={styles.title}>Set Chat Lock</Text>
-            <Text style={styles.subtitle}>Enter a password to protect your locked chats</Text>
-            
-            <TextInput
-                style={styles.input}
-                placeholder="New Password"
-                secureTextEntry
-                keyboardType="number-pad"
-                value={password}
-                onChangeText={setPassword}
-            />
-            <TextInput
-                style={styles.input}
-                placeholder="Confirm Password"
-                secureTextEntry
-                keyboardType="number-pad"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-            />
+    const goToRecover = useCallback(() => setMode('recover'), []);
+    const goToVerify  = useCallback(() => setMode('verify'),  []);
 
-            <View style={styles.divider} />
-            <Text style={styles.subtitle}>Recovery: Set a security question</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="e.g., What is your pet's name?"
-                value={question}
-                onChangeText={setQuestion}
-            />
-            <TextInput
-                style={styles.input}
-                placeholder="Your Answer"
-                value={answer}
-                onChangeText={setAnswer}
-            />
-
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleSetup}>
-                <Text style={styles.primaryBtnText}>Save Settings</Text>
-            </TouchableOpacity>
-        </View>
-    );
-
-    const renderVerify = () => (
-        <View style={styles.form}>
-            <MaterialCommunityIcons name="lock-outline" size={64} color="#F68537" style={{ alignSelf: 'center', marginBottom: 20 }} />
-            <Text style={styles.title}>Chat Locked</Text>
-            <Text style={styles.subtitle}>Enter your password to unlock this chat</Text>
-            
-            <TextInput
-                style={[styles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 10 }]}
-                placeholder="****"
-                secureTextEntry
-                keyboardType="number-pad"
-                autoFocus
-                value={password}
-                onChangeText={(text) => {
-                    setPassword(text);
-                    if (text.length === 4) {
-                        // Optional auto-submit
-                    }
-                }}
-            />
-
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleVerify}>
-                <Text style={styles.primaryBtnText}>Unlock</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.textBtn} onPress={() => setMode('recover')}>
-                <Text style={styles.textBtnText}>Forgot Password?</Text>
-            </TouchableOpacity>
-        </View>
-    );
-
-    const renderRecover = () => (
-        <View style={styles.form}>
-            <Text style={styles.title}>Recover Password</Text>
-            <Text style={styles.subtitle}>Answer your security question</Text>
-            
-            <View style={styles.questionBox}>
-                <Text style={styles.questionText}>{storedQuestion || "No question set"}</Text>
-            </View>
-
-            <TextInput
-                style={styles.input}
-                placeholder="Your Answer"
-                value={answer}
-                onChangeText={setAnswer}
-            />
-
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleRecover}>
-                <Text style={styles.primaryBtnText}>Verify Answer</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.textBtn} onPress={() => setMode('verify')}>
-                <Text style={styles.textBtnText}>Back to Login</Text>
-            </TouchableOpacity>
-        </View>
-    );
+    const kbBehavior = Platform.OS === 'ios' ? 'padding' : 'height';
 
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
+            <KeyboardAvoidingView behavior={kbBehavior} style={styles.overlay}>
                 <View style={styles.container}>
                     <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
                         <Ionicons name="close" size={24} color="#6B7280" />
                     </TouchableOpacity>
 
-                    {mode === 'setup' && renderSetup()}
-                    {mode === 'verify' && renderVerify()}
-                    {mode === 'recover' && renderRecover()}
+                    {mode === 'setup' && (
+                        <SetupForm
+                            password={password} confirmPassword={confirmPassword}
+                            question={question} answer={answer}
+                            onPassword={setPassword} onConfirm={setConfirmPassword}
+                            onQuestion={setQuestion} onAnswer={setAnswer}
+                            onSubmit={handleSetup}
+                        />
+                    )}
+                    {mode === 'verify' && (
+                        <VerifyForm
+                            password={password}
+                            onPassword={setPassword}
+                            onVerify={handleVerify}
+                            onForgot={goToRecover}
+                        />
+                    )}
+                    {mode === 'recover' && (
+                        <RecoverForm
+                            storedQuestion={storedQuestion}
+                            answer={answer}
+                            onAnswer={setAnswer}
+                            onRecover={handleRecover}
+                            onBack={goToVerify}
+                        />
+                    )}
                 </View>
             </KeyboardAvoidingView>
         </Modal>
     );
-}
+});
+
+export default ChatLockModal;
+
 
 const styles = StyleSheet.create({
     overlay: {
@@ -281,5 +265,10 @@ const styles = StyleSheet.create({
         color: '#C2410C',
         fontWeight: '600',
         textAlign: 'center',
-    }
+    },
+    lockIcon: { alignSelf: 'center', marginBottom: 20 },
+    pinInput: {
+        backgroundColor: '#F3F4F6', borderRadius: 16, padding: 16,
+        fontSize: 24, color: '#1F2937', textAlign: 'center', letterSpacing: 10,
+    },
 });

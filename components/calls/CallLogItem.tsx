@@ -91,7 +91,7 @@ const CallLogItem = memo(function CallLogItem({
             <View style={styles.avatarContainer}>
                 {displayImg ? (
                     <Image
-                        source={{ uri: displayImg }}
+                        source={displayImg}
                         style={styles.avatarImage}
                     />
                 ) : (

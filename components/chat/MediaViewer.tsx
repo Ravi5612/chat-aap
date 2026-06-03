@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { View, Modal, TouchableOpacity, SafeAreaView, StyleSheet, Dimensions, Platform, Alert, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
+import { Video, ResizeMode } from 'expo-av';
 
 interface MediaViewerProps {
     visible: boolean;
@@ -14,14 +15,12 @@ interface MediaViewerProps {
     allowDownload?: boolean; // Default true for chat images
 }
 
-import { Video, ResizeMode } from 'expo-av';
-
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get('window');
 
-export default function MediaViewer({ visible, onClose, imageUri, isVideo = false, allowDownload = true }: MediaViewerProps) {
+const MediaViewer = memo(({ visible, onClose, imageUri, isVideo = false, allowDownload = true }: MediaViewerProps) => {
     const [downloading, setDownloading] = useState(false);
 
-    const handleDownload = async () => {
+    const handleDownload = useCallback(async () => {
         if (!imageUri) return;
         
         try {
@@ -94,8 +93,7 @@ export default function MediaViewer({ visible, onClose, imageUri, isVideo = fals
         } finally {
             setDownloading(false);
         }
-    };
-
+    }, [imageUri]);
 
     if (!visible) return null;
 
@@ -110,7 +108,7 @@ export default function MediaViewer({ visible, onClose, imageUri, isVideo = fals
                 {Platform.OS === 'ios' ? (
                     <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
                 ) : (
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.95)' }]} />
+                    <View style={[StyleSheet.absoluteFill, styles.androidBackground]} />
                 )}
 
                 <SafeAreaView style={styles.safeArea}>
@@ -118,7 +116,7 @@ export default function MediaViewer({ visible, onClose, imageUri, isVideo = fals
                         {allowDownload && (
                             <TouchableOpacity
                                 onPress={handleDownload}
-                                style={[styles.actionButton, { marginRight: 15 }]}
+                                style={[styles.actionButton, styles.downloadButton]}
                                 activeOpacity={0.7}
                                 disabled={downloading}
                             >
@@ -161,7 +159,9 @@ export default function MediaViewer({ visible, onClose, imageUri, isVideo = fals
             </View>
         </Modal>
     );
-}
+});
+
+export default MediaViewer;
 
 const styles = StyleSheet.create({
     container: {
@@ -198,5 +198,11 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         flex: 1,
+    },
+    androidBackground: {
+        backgroundColor: 'rgba(0,0,0,0.95)'
+    },
+    downloadButton: {
+        marginRight: 15
     }
 });

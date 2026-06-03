@@ -211,10 +211,17 @@ export const useContactSuggestions = () => {
 
             if (requestError) {
                 if (__DEV__) console.error("Friend request insert error:", requestError);
-                // Revert on error
+                // Revert optimistic update
                 setSuggestions(prev => prev.map(p => 
                     p.id === receiverId ? { ...p, requestStatus: null } : p
                 ));
+
+                if (requestError.code === '23503') { // Foreign key constraint violation
+                    // This means the receiver_id does not exist in the profiles table anymore
+                    setSuggestions(prev => prev.filter(p => p.id !== receiverId));
+                    throw new Error("This user no longer exists or their account was deleted.");
+                }
+
                 throw new Error(requestError.message);
             }
 

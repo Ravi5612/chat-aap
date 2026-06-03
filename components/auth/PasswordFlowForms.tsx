@@ -10,7 +10,7 @@ interface OtpVerifyFormProps {
     onCancel: () => void;
 }
 
-export function OtpVerifyForm({ loading, otp, setOtp, onVerify, onCancel }: OtpVerifyFormProps) {
+export const OtpVerifyForm = React.memo(function OtpVerifyForm({ loading, otp, setOtp, onVerify, onCancel }: OtpVerifyFormProps) {
     return (
         <View style={styles.centered}>
             <MaterialCommunityIcons name="email-check-outline" size={64} color="#F68537" style={{ marginBottom: 20 }} />
@@ -44,7 +44,7 @@ export function OtpVerifyForm({ loading, otp, setOtp, onVerify, onCancel }: OtpV
             </TouchableOpacity>
         </View>
     );
-}
+});
 
 interface ResetPasswordFormProps {
     loading: boolean;
@@ -53,7 +53,7 @@ interface ResetPasswordFormProps {
     onSubmit: () => void;
 }
 
-export function ResetPasswordForm({
+export const ResetPasswordForm = React.memo(function ResetPasswordForm({
     loading, newPassword, setNewPassword, confirmPassword, setConfirmPassword, onSubmit
 }: ResetPasswordFormProps) {
     return (
@@ -97,7 +97,7 @@ export function ResetPasswordForm({
             </TouchableOpacity>
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     centered: { alignItems: 'center', paddingVertical: 20 },

@@ -17,7 +17,7 @@ interface AuthFormFieldsProps {
     onForgotPassword: () => void;
 }
 
-export default function AuthFormFields({
+const AuthFormFields = ({
     isSignUp,
     isForgotPassword,
     loading,
@@ -29,9 +29,7 @@ export default function AuthFormFields({
     showPassword, setShowPassword,
     resetEmail, setResetEmail,
     onForgotPassword,
-}: AuthFormFieldsProps) {
-
-    const inputStyle = styles.input;
+}: AuthFormFieldsProps) => {
 
     if (isForgotPassword) {
         return (
@@ -184,3 +182,5 @@ const styles = StyleSheet.create({
         padding: 4,
     }
 });
+
+export default React.memo(AuthFormFields);

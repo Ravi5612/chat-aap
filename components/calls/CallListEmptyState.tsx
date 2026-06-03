@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function CallListEmptyState() {
+const CallListEmptyState = React.memo(() => {
     return (
         <View style={styles.container}>
             <View style={styles.iconContainer}>
@@ -14,7 +14,9 @@ export default function CallListEmptyState() {
             </Text>
         </View>
     );
-}
+});
+
+export default CallListEmptyState;
 
 const styles = StyleSheet.create({
     container: {

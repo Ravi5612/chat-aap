@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDbStore } from '@/store/useDbStore';
@@ -14,14 +14,47 @@ interface LedgerModalProps {
     friendName: string;
 }
 
-export default function LedgerModal({ visible, onClose, friendId, friendName }: LedgerModalProps) {
+// ─── Memoized Expense Item ───────────────────────────────────────────────────
+const ExpenseItem = memo(({ item, onDelete }: { item: any, onDelete: (id: number) => void }) => {
+    const isGave = item.type === 'gave';
+    
+    const handleDelete = useCallback(() => {
+        onDelete(item.id);
+    }, [item.id, onDelete]);
+
+    return (
+        <View style={styles.expenseItem}>
+            <View style={[styles.iconContainer, isGave ? styles.bgGave : styles.bgTook]}>
+                <Ionicons
+                    name={isGave ? 'arrow-up-outline' : 'arrow-down-outline'}
+                    size={18}
+                    color={isGave ? '#10B981' : '#EF4444'}
+                />
+            </View>
+            <View style={styles.expenseInfo}>
+                <Text style={styles.expenseDesc}>
+                    {item.description || (isGave ? 'Paisa Diya' : 'Paisa Liya')}
+                </Text>
+                <Text style={styles.expenseDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
+            </View>
+            <Text style={[styles.expenseAmount, isGave ? styles.textGave : styles.textTook]}>
+                {isGave ? '+' : '-'} ₹{item.amount}
+            </Text>
+            <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
+                <Ionicons name="trash-outline" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+        </View>
+    );
+});
+
+const LedgerModal = memo(({ visible, onClose, friendId, friendName }: LedgerModalProps) => {
     const [expenses, setExpenses] = useState<any[]>([]);
     const [balance, setBalance] = useState(0);
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
     const [type, setType] = useState<'gave' | 'took'>('gave');
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             const { db } = useDbStore.getState();
             if (db && friendId) {
@@ -60,13 +93,13 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
         } catch (e) {
             console.warn('[LEDGER] Load/Sync failed:', e);
         }
-    };
+    }, [friendId]);
 
     useEffect(() => {
         if (visible) loadData();
-    }, [visible, friendId]);
+    }, [visible, loadData]);
 
-    const handleAdd = async () => {
+    const handleAdd = useCallback(async () => {
         if (!amount || isNaN(Number(amount))) {
             Alert.alert('Error', 'Please enter a valid amount');
             return;
@@ -104,9 +137,9 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
             console.error('[LEDGER] Add error:', e);
             Alert.alert('Error', 'Entry add nahi ho payi. Dobara koshish karein.');
         }
-    };
+    }, [amount, description, type, friendId, loadData]);
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = useCallback(async (id: number) => {
         try {
             const { db } = useDbStore.getState();
             if (db) {
@@ -116,14 +149,30 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
         } catch (e) {
             console.warn('[LEDGER] Delete failed:', e);
         }
-    };
+    }, [loadData]);
+
+    const setTypeGave = useCallback(() => setType('gave'), []);
+    const setTypeTook = useCallback(() => setType('took'), []);
+
+    const renderItem = useCallback(({ item }: { item: any }) => (
+        <ExpenseItem item={item} onDelete={handleDelete} />
+    ), [handleDelete]);
+
+    const renderEmpty = useCallback(() => (
+        <View style={styles.emptyState}>
+            <Ionicons name="receipt-outline" size={48} color="#E2E8F0" />
+            <Text style={styles.emptyText}>No entries yet</Text>
+        </View>
+    ), []);
+
+    const isBalancePositive = balance >= 0;
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
-            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <View style={styles.modalOverlay}>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    style={{ flex: 1, justifyContent: 'flex-end' }}
+                    style={styles.keyboardView}
                 >
                     <View style={styles.container}>
                         {/* Header */}
@@ -138,9 +187,9 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
                         </View>
 
                         {/* Balance Summary */}
-                        <View style={[styles.balanceCard, { backgroundColor: balance >= 0 ? '#ECFDF5' : '#FEF2F2' }]}>
-                            <Text style={styles.balanceLabel}>{balance >= 0 ? 'Lene Hain' : 'Dene Hain'}</Text>
-                            <Text style={[styles.balanceAmount, { color: balance >= 0 ? '#10B981' : '#EF4444' }]}>
+                        <View style={[styles.balanceCard, isBalancePositive ? styles.bgGaveLight : styles.bgTookLight]}>
+                            <Text style={styles.balanceLabel}>{isBalancePositive ? 'Lene Hain' : 'Dene Hain'}</Text>
+                            <Text style={[styles.balanceAmount, isBalancePositive ? styles.textGave : styles.textTook]}>
                                 ₹{Math.abs(balance)}
                             </Text>
                         </View>
@@ -149,16 +198,16 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
                         <View style={styles.form}>
                             <View style={styles.typeSelector}>
                                 <TouchableOpacity
-                                    onPress={() => setType('gave')}
-                                    style={[styles.typeBtn, type === 'gave' && { backgroundColor: '#F68537' }]}
+                                    onPress={setTypeGave}
+                                    style={[styles.typeBtn, type === 'gave' && styles.typeBtnGaveActive]}
                                 >
-                                    <Text style={[styles.typeText, type === 'gave' && { color: 'white' }]}>Lene Hain</Text>
+                                    <Text style={[styles.typeText, type === 'gave' && styles.typeTextActive]}>Lene Hain</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    onPress={() => setType('took')}
-                                    style={[styles.typeBtn, type === 'took' && { backgroundColor: '#EF4444' }]}
+                                    onPress={setTypeTook}
+                                    style={[styles.typeBtn, type === 'took' && styles.typeBtnTookActive]}
                                 >
-                                    <Text style={[styles.typeText, type === 'took' && { color: 'white' }]}>Dene Hain</Text>
+                                    <Text style={[styles.typeText, type === 'took' && styles.typeTextActive]}>Dene Hain</Text>
                                 </TouchableOpacity>
                             </View>
 
@@ -187,43 +236,18 @@ export default function LedgerModal({ visible, onClose, friendId, friendName }: 
                         <FlatList
                             data={expenses}
                             keyExtractor={(item) => item.id.toString()}
-                            contentContainerStyle={{ paddingBottom: 40 }}
-                            ListEmptyComponent={() => (
-                                <View style={styles.emptyState}>
-                                    <Ionicons name="receipt-outline" size={48} color="#E2E8F0" />
-                                    <Text style={styles.emptyText}>No entries yet</Text>
-                                </View>
-                            )}
-                            renderItem={({ item }) => (
-                                <View style={styles.expenseItem}>
-                                    <View style={[styles.iconContainer, { backgroundColor: item.type === 'gave' ? '#D1FAE5' : '#FEE2E2' }]}>
-                                        <Ionicons
-                                            name={item.type === 'gave' ? 'arrow-up-outline' : 'arrow-down-outline'}
-                                            size={18}
-                                            color={item.type === 'gave' ? '#10B981' : '#EF4444'}
-                                        />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.expenseDesc}>
-                                            {item.description || (item.type === 'gave' ? 'Paisa Diya' : 'Paisa Liya')}
-                                        </Text>
-                                        <Text style={styles.expenseDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
-                                    </View>
-                                    <Text style={[styles.expenseAmount, { color: item.type === 'gave' ? '#10B981' : '#EF4444' }]}>
-                                        {item.type === 'gave' ? '+' : '-'} ₹{item.amount}
-                                    </Text>
-                                    <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ marginLeft: 12 }}>
-                                        <Ionicons name="trash-outline" size={18} color="#94A3B8" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
+                            contentContainerStyle={styles.listContent}
+                            ListEmptyComponent={renderEmpty}
+                            renderItem={renderItem}
                         />
                     </View>
                 </KeyboardAvoidingView>
             </View>
         </Modal>
     );
-}
+});
+
+export default LedgerModal;
 
 const styles = StyleSheet.create({
     container: {
@@ -395,4 +419,49 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
+    modalOverlay: {
+        flex: 1, 
+        backgroundColor: 'rgba(0,0,0,0.5)'
+    },
+    keyboardView: {
+        flex: 1, 
+        justifyContent: 'flex-end'
+    },
+    bgGaveLight: {
+        backgroundColor: '#ECFDF5'
+    },
+    bgTookLight: {
+        backgroundColor: '#FEF2F2'
+    },
+    textGave: {
+        color: '#10B981'
+    },
+    textTook: {
+        color: '#EF4444'
+    },
+    typeBtnGaveActive: {
+        backgroundColor: '#F68537'
+    },
+    typeBtnTookActive: {
+        backgroundColor: '#EF4444'
+    },
+    typeTextActive: {
+        color: 'white'
+    },
+    listContent: {
+        paddingBottom: 40
+    },
+    bgGave: {
+        backgroundColor: '#D1FAE5'
+    },
+    bgTook: {
+        backgroundColor: '#FEE2E2'
+    },
+    expenseInfo: {
+        flex: 1, 
+        marginLeft: 12
+    },
+    deleteBtn: {
+        marginLeft: 12
+    }
 });

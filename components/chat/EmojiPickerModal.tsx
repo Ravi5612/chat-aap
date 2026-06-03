@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import {
     View,
     Text,
@@ -25,6 +25,8 @@ const EMOJI_CATEGORIES = [
     { title: 'Food', data: ['🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌽', '🥕', '🧄', '🧅', '🍄', '🥜', '🌰', '🍞', '🥐', '🥖', '🥨', '🥯', '🥞', '🧇', '🧀', '🍖', '🍗', '🥩', '🥓', '🍔', '🍟', '🍕', '🌭', '🥪', '🌮', '🌯', '🥙', '🧆', '🥚', '🍳', '🥘', '🍲', '🥣', '🥗', '🍿', '🧈', '🧂', '🥫', '🍱', '🍘', '🍙', '🍚', '🍛', '🍜', '🍝', '🍠', '🍢', '🍣', '🍤', '🍥', '🥮', '🍡', '🥟', '🥠', '🥡', '🍦', '🍧', '🍨', '🍩', '🍪', '🎂', '🍰', '🧁', '🥧', '🍫', '🍬', '🍭', '🍮', '🍯', '🍼', '🥛', '☕', '🍵', '🧉', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🍾', '🧊', '🥤'] },
 ];
 
+const ALL_EMOJIS_FLAT = EMOJI_CATEGORIES.reduce((acc, cat) => [...acc, ...cat.data], [] as string[]);
+
 interface EmojiPickerModalProps {
     visible: boolean;
     onClose: () => void;
@@ -32,16 +34,36 @@ interface EmojiPickerModalProps {
     isInline?: boolean;
 }
 
-export default function EmojiPickerModal({ visible, onClose, onSelect, isInline = false }: EmojiPickerModalProps) {
+// ─── Memoized Emoji Item ───────────────────────────────────────────────────────
+const EmojiItem = memo(({ item, onSelect }: { item: string, onSelect: (emoji: string) => void }) => {
+    const handlePress = useCallback(() => {
+        onSelect(item);
+    }, [item, onSelect]);
+
+    return (
+        <TouchableOpacity style={styles.emojiItem} onPress={handlePress}>
+            <Text style={styles.emojiText}>{item}</Text>
+        </TouchableOpacity>
+    );
+});
+
+const EmojiPickerModal = memo(({ visible, onClose, onSelect, isInline = false }: EmojiPickerModalProps) => {
     const [searchQuery, setSearchQuery] = useState('');
 
     const allEmojis = useMemo(() => {
-        const flattened = EMOJI_CATEGORIES.reduce((acc, cat) => [...acc, ...cat.data], [] as string[]);
-        if (!searchQuery.trim()) return flattened;
-        return flattened;
+        // NOTE: The previous code returned the un-filtered array even when searched.
+        // Emojis cannot be filtered by string character directly without a name mapping.
+        // Returning the flat list as before.
+        return ALL_EMOJIS_FLAT;
     }, [searchQuery]);
 
-    const renderContent = () => (
+    const renderItem = useCallback(({ item }: { item: string }) => (
+        <EmojiItem item={item} onSelect={onSelect} />
+    ), [onSelect]);
+
+    const keyExtractor = useCallback((item: string, index: number) => `${item}-${index}`, []);
+
+    const content = (
         <View style={isInline ? styles.inlineContent : styles.content}>
             {!isInline && <View style={styles.handle} />}
 
@@ -67,20 +89,14 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, isInline 
 
             <FlatList
                 data={allEmojis}
-                keyExtractor={(item, index) => `${item}-${index}`}
+                keyExtractor={keyExtractor}
                 numColumns={8}
-                renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={styles.emojiItem}
-                        onPress={() => {
-                            onSelect(item);
-                        }}
-                    >
-                        <Text style={styles.emojiText}>{item}</Text>
-                    </TouchableOpacity>
-                )}
+                renderItem={renderItem}
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
+                initialNumToRender={40}
+                maxToRenderPerBatch={40}
+                windowSize={5}
             />
 
             {!isInline && <SafeAreaView edges={['bottom']} />}
@@ -88,7 +104,7 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, isInline 
     );
 
     if (isInline) {
-        return renderContent();
+        return content;
     }
 
     return (
@@ -102,11 +118,13 @@ export default function EmojiPickerModal({ visible, onClose, onSelect, isInline 
                 <TouchableWithoutFeedback onPress={onClose}>
                     <View style={styles.backdrop} />
                 </TouchableWithoutFeedback>
-                {renderContent()}
+                {content}
             </View>
         </Modal>
     );
-}
+});
+
+export default EmojiPickerModal;
 
 const styles = StyleSheet.create({
     overlay: {
