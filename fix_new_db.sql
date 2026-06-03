@@ -362,6 +362,15 @@ CREATE TRIGGER on_auth_user_created
 -- Reload schema cache
 NOTIFY pgrst, 'reload schema';
 
+-- Update statuses table with new Hybrid E2EE keys and media fields
+ALTER TABLE public.statuses
+ADD COLUMN IF NOT EXISTS encrypted_keys JSONB,
+ADD COLUMN IF NOT EXISTS mentioned_user_ids UUID[] DEFAULT '{}',
+ADD COLUMN IF NOT EXISTS audio_url TEXT,
+ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+
+-- Reload schema cache again
+NOTIFY pgrst, 'reload schema';
 -- Add new privacy columns without dropping tables
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS dp_privacy text DEFAULT 'everyone';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS dp_selected_friends uuid[] DEFAULT '{}';

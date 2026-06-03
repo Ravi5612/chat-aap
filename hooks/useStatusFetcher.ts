@@ -20,6 +20,7 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
             }
 
             try {
+                // Own Active Statuses (Memory Cache)
                 if (currentUser && userId === currentUser.id) {
                     const localActive = useFriendsStore.getState().myStatuses?.active || [];
                     if (localActive.length > 0) {
@@ -36,49 +37,41 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                     }
                 }
 
-                const nowIso = new Date().toISOString();
-                let query = supabase
-                    .from('statuses')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .or('is_deleted.is.null,is_deleted.eq.false');
+                // Helper to process and decrypt raw status data
+                const processStatuses = async (rawStatuses: any[], isLocal: boolean) => {
+                    if (!rawStatuses || rawStatuses.length === 0) return [];
+                    
+                    let accessibleStatuses = rawStatuses;
+                    if (!isLocal && currentUser) {
+                        accessibleStatuses = accessibleStatuses.filter((s: any) => {
+                            if (s.user_id === currentUser.id) return true;
+                            if (s.privacy_type === 'all' || !s.privacy_type) return true;
+                            if (s.privacy_type === 'selected') {
+                                let v_ids = s.viewer_ids;
+                                let m_ids = s.mentioned_user_ids;
+                                if (typeof v_ids === 'string') { try { v_ids = JSON.parse(v_ids); } catch(e){} }
+                                if (typeof m_ids === 'string') { try { m_ids = JSON.parse(m_ids); } catch(e){} }
+                                const isViewer = v_ids?.includes(currentUser.id);
+                                const isMentioned = m_ids?.includes(currentUser.id);
+                                if (isViewer || isMentioned) return true;
+                            }
+                            return false;
+                        });
+                    }
 
-                if (isArchive === 'true') {
-                    const sevenDaysAgo = new Date();
-                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-                    query = query.gt('created_at', sevenDaysAgo.toISOString());
-                } else {
-                    query = query.gt('expires_at', nowIso);
-                }
-
-                const { data: statusData } = await query.order('created_at', { ascending: true });
-                let accessibleStatuses = statusData || [];
-
-                if (accessibleStatuses.length > 0 && currentUser) {
-                    accessibleStatuses = accessibleStatuses.filter((s: any) => {
-                        if (s.user_id === currentUser.id) return true;
-                        if (s.privacy_type === 'all' || !s.privacy_type) return true;
-                        if (s.privacy_type === 'selected') {
-                            const isViewer = s.viewer_ids?.includes(currentUser.id);
-                            const isMentioned = s.mentioned_user_ids?.includes(currentUser.id);
-                            if (isViewer || isMentioned) return true;
-                        }
-                        return false;
-                    });
-                }
-
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('username, avatar_url, public_key')
-                    .eq('id', userId)
-                    .single();
-
-                if (accessibleStatuses.length > 0) {
+                    // Get Profile
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('username, avatar_url, public_key')
+                        .eq('id', userId)
+                        .single();
 
                     let allMentionedIds: string[] = [];
                     accessibleStatuses.forEach((s: any) => {
-                        if (s.mentioned_user_ids && Array.isArray(s.mentioned_user_ids)) {
-                            allMentionedIds.push(...s.mentioned_user_ids);
+                        let m_ids = s.mentioned_user_ids;
+                        if (typeof m_ids === 'string') { try { m_ids = JSON.parse(m_ids); } catch(e){} }
+                        if (m_ids && Array.isArray(m_ids)) {
+                            allMentionedIds.push(...m_ids);
                         }
                     });
                     allMentionedIds = [...new Set(allMentionedIds)];
@@ -93,16 +86,15 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
 
                     const enrichedData = await Promise.all(accessibleStatuses.map(async (s) => {
                         let statusKey = null;
+                        let encKeys = s.encrypted_keys;
+                        if (typeof encKeys === 'string') { try { encKeys = JSON.parse(encKeys); } catch(e){} }
 
-                        // Hybrid E2EE Status Master Key Extraction
-                        if (s.encrypted_keys && currentUser?.id) {
-                            const encryptedMasterKey = s.encrypted_keys[currentUser.id];
+                        if (encKeys && currentUser?.id) {
+                            const encryptedMasterKey = encKeys[currentUser.id];
                             if (encryptedMasterKey && profile?.public_key) {
                                 statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key, currentUser.id);
                             }
                         }
-
-                        // Fallback for old deterministic statuses
                         if (!statusKey) {
                             statusKey = await getChatKey(userId, userId);
                         }
@@ -123,7 +115,9 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                             }
                         }
 
-                        const mentionedProfiles = (s.mentioned_user_ids || []).map((id: string) => mentionedProfilesMap[id]).filter(Boolean);
+                        let m_ids = s.mentioned_user_ids;
+                        if (typeof m_ids === 'string') { try { m_ids = JSON.parse(m_ids); } catch(e){} }
+                        const mentionedProfiles = (m_ids || []).map((id: string) => mentionedProfilesMap[id]).filter(Boolean);
 
                         return {
                             ...s,
@@ -142,23 +136,98 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
                         filteredData = enrichedData.filter(s => {
                             const sDate = new Date(s.created_at);
                             const diffDays = Math.floor((nowRef.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
-
                             let dKey = '';
                             if (diffDays === 0) dKey = 'Today';
                             else if (diffDays === 1) dKey = 'Yesterday';
                             else dKey = sDate.toLocaleDateString('en-US', { weekday: 'long' });
-
                             return dKey === date;
                         });
                     }
-                    setStatuses(filteredData);
-                } else {
-                    setStatuses([]);
+                    return filteredData.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                };
+
+                // --- 1. LOCAL SQLITE CACHE FIRST ---
+                try {
+                    const { useDbStore } = await import('@/store/useDbStore');
+                    const { getLocalStatuses } = await import('@/lib/localDb');
+                    const { db } = useDbStore.getState();
+                    
+                    if (db) {
+                        const localStatuses = await getLocalStatuses(db);
+                        if (localStatuses && localStatuses.length > 0) {
+                            const userLocalStatuses = localStatuses.filter((s: any) => 
+                                s.user_id === userId && (s.is_deleted === 0 || s.is_deleted === false || s.is_deleted === '0')
+                            );
+                            
+                            if (userLocalStatuses.length > 0) {
+                                const processedLocal = await processStatuses(userLocalStatuses, true);
+                                if (processedLocal.length > 0) {
+                                    setStatuses(processedLocal);
+                                    setLoading(false); // INSTANT RENDER OFFLINE
+                                }
+                            }
+                        }
+                    }
+                } catch (localError) {
+                    console.error('[STATUS] Local Cache Read Error:', localError);
                 }
+
+                // --- 2. BACKGROUND SUPABASE SYNC ---
+                const nowIso = new Date().toISOString();
+                let query = supabase
+                    .from('statuses')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .or('is_deleted.is.null,is_deleted.eq.false');
+
+                if (isArchive === 'true') {
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    query = query.gt('created_at', sevenDaysAgo.toISOString());
+                } else {
+                    query = query.gt('expires_at', nowIso);
+                }
+
+                query.order('created_at', { ascending: true }).then(async ({ data: statusData, error }) => {
+                    if (error) {
+                        console.error('[STATUS] Supabase Sync Error:', error);
+                        setLoading(false);
+                        return;
+                    }
+
+                    if (statusData && statusData.length > 0) {
+                        const processedRemote = await processStatuses(statusData, false);
+                        
+                        // Update UI seamlessly
+                        setStatuses(prev => {
+                            // Only update if there's a difference to avoid flicker
+                            if (prev.length === processedRemote.length) {
+                                const isSame = prev.every((p, i) => p.id === processedRemote[i].id);
+                                if (isSame) return prev;
+                            }
+                            return processedRemote;
+                        });
+
+                        // Save to Local DB for next time
+                        try {
+                            const { useDbStore } = await import('@/store/useDbStore');
+                            const { saveLocalStatus } = await import('@/lib/localDb');
+                            const { db } = useDbStore.getState();
+                            if (db) {
+                                for (const s of statusData) {
+                                    await saveLocalStatus(db, s);
+                                }
+                            }
+                        } catch(e) {}
+                    } else {
+                        setStatuses([]);
+                    }
+                    setLoading(false);
+                });
+
             } catch (error) {
-                console.error('Status Fetch Error:', error);
+                console.error('Status Fetch Master Error:', error);
                 setStatuses([]);
-            } finally {
                 setLoading(false);
             }
         };

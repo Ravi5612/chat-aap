@@ -1,4 +1,4 @@
-import { View, FlatList, Text, RefreshControl, Alert, Keyboard, TouchableOpacity } from 'react-native';
+import { View, FlatList, Text, RefreshControl, Alert, Keyboard, TouchableOpacity, Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -14,6 +14,7 @@ import { useReceivedRequests } from '@/hooks/useReceivedRequests';
 import { useSentRequests } from '@/hooks/useSentRequests';
 import * as Haptics from 'expo-haptics';
 import ChatLockModal from '@/components/chat/ChatLockModal';
+import { Ionicons } from '@expo/vector-icons';
 
 // Extracted UI Components
 import HomeHeader from '@/components/home/HomeHeader';
@@ -49,6 +50,10 @@ function HomeScreen() {
     const [showNearbySuggestions, setShowNearbySuggestions] = useState(true);
     const [suggestionTab, setSuggestionTab] = useState<'contacts' | 'nearby'>('contacts');
     const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
+
+    const toggleSuggestionsExpanded = useCallback(() => {
+        setSuggestionsExpanded(prev => !prev);
+    }, []);
 
     const {
         lockModalVisible,
@@ -127,6 +132,16 @@ function HomeScreen() {
     const pendingSentCount = useMemo(() => sentRequests.filter(r => r.status === 'pending').length, [sentRequests]);
     const pendingReceivedCount = useMemo(() => receivedRequests.filter(r => r.status === 'pending').length, [receivedRequests]);
 
+    const handleShareApp = useCallback(async () => {
+        try {
+            await Share.share({
+                message: 'Hey! Join me on ChatWarriors, a super fast and secure chat app! 🚀 Download it here: https://dummy-link.com/download',
+            });
+        } catch (error: any) {
+            console.error('Error sharing app:', error);
+        }
+    }, []);
+
     const handleImageClick = useCallback((friend: any) => {
         setSelectedImageForZoom(friend.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend.name)}&backgroundColor=F68537`);
     }, []);
@@ -142,9 +157,7 @@ function HomeScreen() {
         />
     ), [handleSelectFriend, handleLongPress, handleViewUserStatus, handleImageClick]);
 
-    if (loading && combinedItems.length === 0) {
-        return <HomeSkeleton />;
-    }
+    // Removed full screen HomeSkeleton to prevent HomeSuggestions from flashing
 
     return (
         <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
@@ -185,18 +198,53 @@ function HomeScreen() {
                                     suggestionTab={suggestionTab}
                                     suggestionsExpanded={suggestionsExpanded}
                                     onSetSuggestionTab={setSuggestionTab}
-                                    onToggleExpanded={() => setSuggestionsExpanded(prev => !prev)}
+                                    onToggleExpanded={toggleSuggestionsExpanded}
                                 />
                             )}
                         </View>
                     }
                     renderItem={renderItem}
                     ListEmptyComponent={
-                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 80 }}>
-                            <Text style={{ color: '#9CA3AF', textAlign: 'center' }}>
-                                {activeTab === 'all' ? 'No chats found. Start a conversation with a friend!' : `No ${activeTab} found.`}
-                            </Text>
-                        </View>
+                        loading ? (
+                            <View style={{ marginTop: 20 }}>
+                                <HomeSkeleton />
+                            </View>
+                        ) : (
+                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 40 }}>
+                                {searchQuery ? (
+                                    <>
+                                        <Ionicons name="search-outline" size={60} color="#D1D5DB" style={{ marginBottom: 16 }} />
+                                        <Text style={{ color: '#6B7280', textAlign: 'center', fontSize: 16, fontWeight: '600' }}>
+                                            No chats found
+                                        </Text>
+                                        <Text style={{ color: '#9CA3AF', textAlign: 'center', fontSize: 14, marginTop: 8 }}>
+                                            Try searching with a different name.
+                                        </Text>
+                                    </>
+                                ) : (
+                                    <View style={{ alignItems: 'center', backgroundColor: '#FFFFFF', padding: 24, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2, width: '100%' }}>
+                                        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                                            <Ionicons name="chatbubbles-outline" size={40} color="#F68537" />
+                                        </View>
+                                        <Text style={{ color: '#1F2937', textAlign: 'center', fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>
+                                            It's quiet here...
+                                        </Text>
+                                        <Text style={{ color: '#6B7280', textAlign: 'center', fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+                                            You don't have any friends on ChatWarriors yet. Invite your friends to start chatting!
+                                        </Text>
+                                        <TouchableOpacity 
+                                            onPress={handleShareApp}
+                                            style={{ backgroundColor: '#F68537', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center' }}
+                                        >
+                                            <Ionicons name="share-social" size={20} color="white" style={{ marginRight: 8 }} />
+                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 15 }}>
+                                                Invite Friends
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        )
                     }
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />}
                     initialNumToRender={15}

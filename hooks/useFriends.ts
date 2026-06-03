@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -56,5 +56,11 @@ export const useFriends = () => {
         };
     }, [currentUser?.id]);
 
-    return { friends, groups, combinedItems, myStatuses, statusInfo, loading, error, loadFriends: () => currentUser && loadFriends(currentUser.id) };
+    const loadFriendsWrapper = useCallback((force = false) => {
+        if (currentUser) {
+            loadFriends(currentUser.id, force);
+        }
+    }, [currentUser, loadFriends]);
+
+    return { friends, groups, combinedItems, myStatuses, statusInfo, loading, error, loadFriends: loadFriendsWrapper };
 };

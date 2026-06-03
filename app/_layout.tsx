@@ -20,7 +20,6 @@ import * as NativeSplashScreen from 'expo-splash-screen';
 NativeSplashScreen.preventAutoHideAsync().catch(() => {});
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useDbStore } from '@/store/useDbStore';
-import { SplashScreen } from '@/components/SplashScreen';
 import { BackgroundServices } from '@/components/BackgroundServices';
 import { CallOverlay } from '@/components/CallOverlay';
 import * as Updates from 'expo-updates';
@@ -104,49 +103,82 @@ export default function RootLayout() {
           try {
             const cachedSession = JSON.parse(cachedSessionStr);
             useAuthStore.setState({ session: cachedSession, user: cachedSession.user });
+
+            // --- EAGER LOCAL HYDRATION START ---
+            const { db } = useDbStore.getState();
+            if (db) {
+                const { getLocalConversations } = require('@/lib/localDb');
+                const localConv = await getLocalConversations(db);
+                if (localConv && localConv.length > 0) {
+                    const filteredLocalConv = localConv.filter((c: any) => c.id !== cachedSession.user.id);
+                    useFriendsStore.setState({ 
+                        combinedItems: filteredLocalConv,
+                        friends: filteredLocalConv.filter((c: any) => c.isFriend),
+                        groups: filteredLocalConv.filter((c: any) => c.isGroup),
+                        lockedChatIds: filteredLocalConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
+                        loading: false
+                    });
+                }
+            }
+            // --- EAGER LOCAL HYDRATION END ---
+
             // Pre-load profile & blocked users from cache
             await useAuthStore.getState().syncProfile();
-            await useFriendsStore.getState().fetchBlockedUsers(cachedSession.user.id);
+            useFriendsStore.getState().fetchBlockedUsers(cachedSession.user.id); // background
             didFetchCache = true;
+            
+            // FAST BOOT: Hide Splash Screen immediately!
+            setInitializing(false);
           } catch (e) {
             console.warn('Error parsing cached session:', e);
           }
         }
 
-        const { data: { session: liveSession } } = await supabase.auth.getSession();
-        setSession(liveSession);
-        
-        if (liveSession) {
-          const currentUserId = liveSession.user.id;
-          
-          // Security Check: If a different user logged in without proper logout, wipe the database
-          if (lastUserId && lastUserId !== currentUserId) {
-              const { db } = useDbStore.getState();
-              if (db) {
-                  const { clearAllLocalData } = require('@/lib/localDb');
-                  await clearAllLocalData(db);
-                  console.log('[SECURITY] Wiped local database due to user account switch');
-              }
-          }
-          await SecureStore.setItemAsync('last_user_id', currentUserId);
-
-          if (!didFetchCache || !cachedSessionStr || JSON.parse(cachedSessionStr).user.id !== currentUserId) {
-             await useAuthStore.getState().syncProfile();
-             await useFriendsStore.getState().fetchBlockedUsers(currentUserId);
-          }
+        // Run the slow network checks in the background (Non-blocking)
+        (async () => {
           try {
-             const publicKeyBase64 = await initializeX25519Keys(liveSession.user.id);
-             await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', liveSession.user.id);
-          } catch(e) { 
-             console.warn('E2EE Init Error:', e); 
-             useAuthStore.getState().signOut();
-             Alert.alert("Security Check", "Please log in again with your password to restore your End-to-End Encryption keys.");
+            const { data: { session: liveSession } } = await supabase.auth.getSession();
+            setSession(liveSession);
+            
+            if (liveSession) {
+              const currentUserId = liveSession.user.id;
+              
+              // Security Check: If a different user logged in without proper logout, wipe the database
+              if (lastUserId && lastUserId !== currentUserId) {
+                  const { db } = useDbStore.getState();
+                  if (db) {
+                      const { clearAllLocalData } = require('@/lib/localDb');
+                      await clearAllLocalData(db);
+                      console.log('[SECURITY] Wiped local database due to user account switch');
+                  }
+              }
+              await SecureStore.setItemAsync('last_user_id', currentUserId);
+
+              if (!didFetchCache || !cachedSessionStr || JSON.parse(cachedSessionStr).user.id !== currentUserId) {
+                 await useAuthStore.getState().syncProfile();
+                 useFriendsStore.getState().fetchBlockedUsers(currentUserId); // background
+              }
+              try {
+                 const publicKeyBase64 = await initializeX25519Keys(liveSession.user.id);
+                 await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', liveSession.user.id);
+              } catch(e) { 
+                 console.warn('E2EE Init Error:', e); 
+                 useAuthStore.getState().signOut();
+                 Alert.alert("Security Check", "Please log in again with your password to restore your End-to-End Encryption keys.");
+              }
+            }
+          } catch (error) {
+            console.error('Background session check failed:', error);
           }
-        }
+        })();
+
       } catch (error) {
         console.error('Error getting session:', error);
       } finally {
-        setInitializing(false);
+        // If we didn't use cache, hide splash screen after network completes or fails
+        if (!didFetchCache) {
+            setInitializing(false);
+        }
       }
     };
 
@@ -185,24 +217,18 @@ export default function RootLayout() {
     if (initializing || !isMounted || !rootNavigationState?.key) return;
 
     const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup') || (segments as string[]).includes('forgot-password') || (segments as string[]).includes('reset-password');
-    const isRoot = (segments as string[]).length === 0;
-
     const isSetupProfile = (segments as string[]).includes('setup-profile');
 
     if (session) {
       const profile = useAuthStore.getState().profile;
 
-      // Profile abhi load nahi hua — wait karo, redirect mat karo
-      if (!profile) return;
+      if (inAuthGroup) {
+        router.replace('/(tabs)');
+      }
 
-      const hasUsername = profile?.username;
-
-      if (inAuthGroup || isRoot) {
-        if (hasUsername) {
-          router.replace('/(tabs)');
-        } else {
+      // If profile is loaded and they don't have a username, force them to setup-profile
+      if (profile && !profile.username && !isSetupProfile && !inAuthGroup) {
           router.replace('/setup-profile');
-        }
       }
     } else if (!inAuthGroup) {
       router.replace('/login');
@@ -221,7 +247,7 @@ export default function RootLayout() {
   }, [initializing]);
 
   if (initializing) {
-    return <SplashScreen onAnimationFinish={() => {}} />;
+    return null;
   }
 
   return (

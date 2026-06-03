@@ -65,8 +65,9 @@ function ContactSuggestionsInner() {
                         >
                             {user.avatar_url ? (
                                 <Image 
-                                    source={{ uri: user.avatar_url }} 
+                                    source={user.avatar_url} 
                                     style={styles.avatar}
+                                    transition={200}
                                 />
                             ) : (
                                 <View style={styles.initialsAvatar}>

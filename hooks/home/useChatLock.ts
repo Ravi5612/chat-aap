@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -11,27 +11,27 @@ export const useChatLock = () => {
     const [lockModalTask, setLockModalTask] = useState<'open' | 'unlock'>('open');
     const [pendingLockedFriend, setPendingLockedFriend] = useState<any>(null);
 
-    const requireLockSetup = (friend: any) => {
+    const requireLockSetup = useCallback((friend: any) => {
         setPendingLockedFriend(friend);
         setLockModalMode('setup');
         setLockModalVisible(true);
-    };
+    }, []);
 
-    const requireLockVerify = (friend: any) => {
+    const requireLockVerify = useCallback((friend: any) => {
         setPendingLockedFriend(friend);
         setLockModalMode('verify');
         setLockModalTask('unlock');
         setLockModalVisible(true);
-    };
+    }, []);
 
-    const openLockedChat = (friend: any) => {
+    const openLockedChat = useCallback((friend: any) => {
         setPendingLockedFriend(friend);
         setLockModalMode('verify');
         setLockModalTask('open');
         setLockModalVisible(true);
-    };
+    }, []);
 
-    const handleLockModalSuccess = async () => {
+    const handleLockModalSuccess = useCallback(async () => {
         setLockModalVisible(false);
         if (lockModalMode === 'setup' && pendingLockedFriend) {
             const { lockChat } = useFriendsStore.getState();
@@ -53,7 +53,7 @@ export const useChatLock = () => {
             }
         }
         setPendingLockedFriend(null);
-    };
+    }, [lockModalMode, pendingLockedFriend, lockModalTask, router]);
 
     return {
         lockModalVisible,

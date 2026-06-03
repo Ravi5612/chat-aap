@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -14,7 +15,7 @@ interface UseHomeMenuActionsProps {
 export const useHomeMenuActions = ({ currentUser, onRequireLockSetup, onRequireLockVerify }: UseHomeMenuActionsProps) => {
     const router = useRouter();
 
-    const handleMenuAction = async (action: string, friend: any) => {
+    const handleMenuAction = useCallback(async (action: string, friend: any) => {
         Haptics.selectionAsync();
         
         switch (action) {
@@ -156,7 +157,7 @@ export const useHomeMenuActions = ({ currentUser, onRequireLockSetup, onRequireL
             default:
                 console.log('Action not implemented:', action);
         }
-    };
+    }, [currentUser, router, onRequireLockSetup, onRequireLockVerify]);
 
     return { handleMenuAction };
 };

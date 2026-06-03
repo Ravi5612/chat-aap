@@ -83,20 +83,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (user?.id) {
             // 1. Try loading from Local DB first
             const { db } = useDbStore.getState();
+            let hasLocalProfile = false;
+            
             if (db) {
                 const localProfile = await getLocalProfile(db, user.id);
                 if (localProfile) {
                     console.log('AuthStore: Loaded self-profile from Local DB');
                     set({ profile: localProfile });
+                    hasLocalProfile = true;
                 }
             }
 
-            // 2. Fetch from Supabase
-            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (data) {
-                set({ profile: data });
-                // 3. Save to Local DB
-                if (db) saveLocalProfile(db, data);
+            const fetchNetwork = async () => {
+                try {
+                    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+                    if (data) {
+                        set({ profile: data });
+                        if (db) saveLocalProfile(db, data);
+                    }
+                } catch (e) {
+                    console.warn('Background profile sync error:', e);
+                }
+            };
+
+            if (hasLocalProfile) {
+                // Return immediately, fetch from network in background
+                fetchNetwork();
+            } else {
+                // Need profile for routing, so await network if no local profile
+                await fetchNetwork();
             }
         }
     },

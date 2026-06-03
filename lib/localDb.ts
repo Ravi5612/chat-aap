@@ -54,7 +54,11 @@ export const initDatabase = async () => {
                 media_url TEXT,
                 media_type TEXT,
                 created_at TEXT NOT NULL,
-                expires_at TEXT NOT NULL
+                expires_at TEXT NOT NULL,
+                encrypted_keys TEXT,
+                mentioned_user_ids TEXT,
+                audio_url TEXT,
+                thumbnail_url TEXT
             );
         `);
 
@@ -240,6 +244,28 @@ export const initDatabase = async () => {
         } catch (e) {
             // Column probably already exists, ignore
         }
+
+        // Migration: Ensure new status fields exist
+        try {
+            await db.execAsync(`
+                ALTER TABLE statuses ADD COLUMN encrypted_keys TEXT;
+            `);
+        } catch (e) { }
+        try {
+            await db.execAsync(`
+                ALTER TABLE statuses ADD COLUMN mentioned_user_ids TEXT;
+            `);
+        } catch (e) { }
+        try {
+            await db.execAsync(`
+                ALTER TABLE statuses ADD COLUMN audio_url TEXT;
+            `);
+        } catch (e) { }
+        try {
+            await db.execAsync(`
+                ALTER TABLE statuses ADD COLUMN thumbnail_url TEXT;
+            `);
+        } catch (e) { }
 
         // 14. Expenses Table (Hard Reset to fix schema issues)
         try {
@@ -757,9 +783,21 @@ export const saveLocalStatus = async (db: SQLite.SQLiteDatabase, status: any) =>
         const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
         await db.runAsync(
-            `INSERT OR REPLACE INTO statuses (id, user_id, content, media_url, media_type, created_at, expires_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [status.id, status.user_id, status.content, status.media_url, status.media_type, status.created_at, expiresAt]
+            `INSERT OR REPLACE INTO statuses (id, user_id, content, media_url, media_type, created_at, expires_at, encrypted_keys, mentioned_user_ids, audio_url, thumbnail_url) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                status.id, 
+                status.user_id, 
+                status.content, 
+                status.media_url, 
+                status.media_type, 
+                status.created_at, 
+                expiresAt,
+                status.encrypted_keys ? JSON.stringify(status.encrypted_keys) : null,
+                status.mentioned_user_ids ? JSON.stringify(status.mentioned_user_ids) : null,
+                status.audio_url,
+                status.thumbnail_url
+            ]
         );
     } catch (error) {
         console.error('[ERROR] Failed to save local status:', error);

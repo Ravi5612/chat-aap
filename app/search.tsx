@@ -64,24 +64,31 @@ export default function SearchPeopleScreen() {
 
                 if (error) throw error;
 
-                const profileIds = profiles.map(p => p.id);
+                if (!profiles || profiles.length === 0) {
+                    setResults([]);
+                    return;
+                }
 
-                const { data: friendships } = await supabase
-                    .from('friendships')
-                    .select('user_id, friend_id')
-                    .or(`user_id.eq.${currentUser?.id},friend_id.eq.${currentUser?.id}`);
+                const [
+                    { data: friendships },
+                    { data: sentRequests },
+                    { data: receivedRequests }
+                ] = await Promise.all([
+                    supabase
+                        .from('friendships')
+                        .select('user_id, friend_id')
+                        .or(`user_id.eq.${currentUser?.id},friend_id.eq.${currentUser?.id}`),
+                    supabase
+                        .from('friend_requests')
+                        .select('receiver_id, status')
+                        .eq('sender_id', currentUser?.id),
+                    supabase
+                        .from('friend_requests')
+                        .select('sender_id, status')
+                        .eq('receiver_id', currentUser?.id)
+                ]);
 
                 const friendIds = friendships?.map(f => f.user_id === currentUser?.id ? f.friend_id : f.user_id) || [];
-
-                const { data: sentRequests } = await supabase
-                    .from('friend_requests')
-                    .select('receiver_id, status')
-                    .eq('sender_id', currentUser?.id);
-
-                const { data: receivedRequests } = await supabase
-                    .from('friend_requests')
-                    .select('sender_id, status')
-                    .eq('receiver_id', currentUser?.id);
 
                 const finalResults = profiles.map(p => {
                     const isFriend = friendIds.includes(p.id);

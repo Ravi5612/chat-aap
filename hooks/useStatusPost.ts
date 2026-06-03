@@ -33,7 +33,7 @@ export function useStatusPost(
         setLoading(true);
 
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = useAuthStore.getState().user;
             if (!user) throw new Error('Not logged in');
 
             const tempId = 'temp-' + Date.now();
@@ -134,17 +134,23 @@ export function useStatusPost(
                             if (myEnc) encryptedKeys[user.id] = myEnc;
 
                             if (viewerProfiles && viewerProfiles.length > 0) {
-                                // Encrypt in parallel for speed, but batch if needed. For now, Promise.all is much faster than sequential.
-                                await Promise.all(viewerProfiles.map(async (p: any) => {
-                                    if (p.public_key) {
-                                        try {
-                                            const enc = await encryptKeyWithSharedSecret(statusKey, p.public_key, user.id);
-                                            if (enc) encryptedKeys[p.id] = enc;
-                                        } catch (e) {
-                                            console.warn('Failed to encrypt status key for friend', p.id, e);
+                                // Encrypt in small batches to prevent blocking the JS thread and freezing the app UI
+                                const batchSize = 5;
+                                for (let i = 0; i < viewerProfiles.length; i += batchSize) {
+                                    const batch = viewerProfiles.slice(i, i + batchSize);
+                                    await Promise.all(batch.map(async (p: any) => {
+                                        if (p.public_key) {
+                                            try {
+                                                const enc = await encryptKeyWithSharedSecret(statusKey, p.public_key, user.id);
+                                                if (enc) encryptedKeys[p.id] = enc;
+                                            } catch (e) {
+                                                console.warn('Failed to encrypt status key for friend', p.id, e);
+                                            }
                                         }
-                                    }
-                                }));
+                                    }));
+                                    // Yield event loop to allow React Native UI to render/respond
+                                    await new Promise(resolve => setTimeout(resolve, 50));
+                                }
                             }
                         }
 
@@ -208,7 +214,7 @@ export function useStatusPost(
                         setLoading(false);
                     }
                 })();
-            }, 500);
+            }, 800);
 
         } catch (error: any) {
             console.error('AddStatus Initialization Error:', error);

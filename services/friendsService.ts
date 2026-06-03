@@ -51,24 +51,6 @@ export async function fetchAndFormatFriendsData(
 
     const friendIds = Array.from(friendIdsMap.keys());
     console.log('[DEBUG] friendIds:', friendIds);
-    let friendships: any[] = [];
-    
-    if (friendIds.length > 0) {
-        const { data: friendProfiles, error: fpError } = await supabase
-            .from('profiles')
-            .select('id, username, email, phone, avatar_url, gender, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search, public_key')
-            .in('id', friendIds);
-            
-        console.log('[DEBUG] friendProfiles:', friendProfiles, fpError);
-            
-        if (friendProfiles) {
-            friendships = friendProfiles.map(p => {
-                const f = friendIdsMap.get(p.id);
-                return { ...f, friend: p };
-            });
-        }
-    }
-
     const allRelevantIds = [userId, ...friendIds];
 
     // 3. Statuses and other items
@@ -84,13 +66,39 @@ export async function fetchAndFormatFriendsData(
         .gt('expires_at', nowIso)
         .eq('is_deleted', false);
     
-    const [groupRes, statusRes, viewsRes, unreadRes, recentMsgsRes] = await Promise.all([
+    // 3. Parallelize fetching Profiles, Statuses, Groups, Unread, Recent Messages, and My Profile
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [
+        friendProfilesRes, 
+        groupRes, 
+        statusRes, 
+        viewsRes, 
+        unreadRes, 
+        recentMsgsRes, 
+        myProfileRes, 
+        myAllStatusesRes
+    ] = await Promise.all([
+        friendIds.length > 0 
+            ? supabase.from('profiles').select('id, username, email, phone, avatar_url, gender, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search, public_key').in('id', friendIds)
+            : Promise.resolve({ data: null, error: null }),
         supabase.from('group_members').select('group_id, is_hidden, groups (id, name, avatar_url)').eq('user_id', userId),
         statusQuery,
         supabase.from('status_views').select('status_id').eq('viewer_id', userId),
         supabase.from('messages').select('sender_id, group_id').or(`receiver_id.eq.${userId}, group_id.not.is.null`).eq('is_read', false),
-        supabase.from('messages').select('created_at, sender_id, receiver_id, group_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(200)
+        supabase.from('messages').select('created_at, sender_id, receiver_id, group_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(200),
+        supabase.from('profiles').select('public_key').eq('id', userId).single(),
+        supabase.from('statuses').select('*').eq('user_id', userId).gt('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false })
     ]);
+
+    let friendships: any[] = [];
+    if (friendProfilesRes.data) {
+        friendships = friendProfilesRes.data.map(p => {
+            const f = friendIdsMap.get(p.id);
+            return { ...f, friend: p };
+        });
+    }
 
     let filteredStatuses = statusRes.data || [];
     if (filteredStatuses.length > 0) {
@@ -117,7 +125,7 @@ export async function fetchAndFormatFriendsData(
     });
 
     // Also get current user's profile for my own statuses
-    const { data: myProfile } = await supabase.from('profiles').select('public_key').eq('id', userId).single();
+    const myProfile = myProfileRes.data;
     if (myProfile?.public_key) {
         friendPublicKeys[userId] = myProfile.public_key;
     }
@@ -295,9 +303,7 @@ export async function fetchAndFormatFriendsData(
     });
 
     // My Statuses
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const { data: myAllStatuses } = await supabase.from('statuses').select('*').eq('user_id', userId).gt('created_at', sevenDaysAgo.toISOString()).order('created_at', { ascending: false });
+    const myAllStatuses = myAllStatusesRes.data;
 
     // myProfile is already fetched above!
 
