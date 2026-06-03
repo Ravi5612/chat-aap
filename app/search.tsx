@@ -55,25 +55,18 @@ export default function SearchPeopleScreen() {
             }
 
             try {
-                const { data: profiles, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .or(`username.ilike.%${text}%,email.ilike.%${text}%`)
-                    .neq('id', currentUser?.id)
-                    .limit(20);
-
-                if (error) throw error;
-
-                if (!profiles || profiles.length === 0) {
-                    setResults([]);
-                    return;
-                }
-
                 const [
-                    { data: friendships },
-                    { data: sentRequests },
-                    { data: receivedRequests }
+                    profilesRes,
+                    friendshipsRes,
+                    sentRequestsRes,
+                    receivedRequestsRes
                 ] = await Promise.all([
+                    supabase
+                        .from('profiles')
+                        .select('*')
+                        .or(`username.ilike.%${text}%,email.ilike.%${text}%`)
+                        .neq('id', currentUser?.id)
+                        .limit(20),
                     supabase
                         .from('friendships')
                         .select('user_id, friend_id')
@@ -87,6 +80,18 @@ export default function SearchPeopleScreen() {
                         .select('sender_id, status')
                         .eq('receiver_id', currentUser?.id)
                 ]);
+
+                if (profilesRes.error) throw profilesRes.error;
+
+                const profiles = profilesRes.data;
+                if (!profiles || profiles.length === 0) {
+                    setResults([]);
+                    return;
+                }
+
+                const friendships = friendshipsRes.data;
+                const sentRequests = sentRequestsRes.data;
+                const receivedRequests = receivedRequestsRes.data;
 
                 const friendIds = friendships?.map(f => f.user_id === currentUser?.id ? f.friend_id : f.user_id) || [];
 

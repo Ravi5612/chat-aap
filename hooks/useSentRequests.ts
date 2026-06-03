@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const useSentRequests = () => {
     const [sentRequests, setSentRequests] = useState<any[]>([]);
@@ -43,6 +44,15 @@ export const useSentRequests = () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
+            // Load from cache instantly
+            try {
+                const cached = await AsyncStorage.getItem(`sent_requests_${user.id}`);
+                if (cached) {
+                    setSentRequests(JSON.parse(cached));
+                    setLoading(false);
+                }
+            } catch(e) {}
+
             const { data, error } = await supabase
                 .from('friend_requests')
                 .select(`
@@ -61,6 +71,11 @@ export const useSentRequests = () => {
 
             if (error) throw error;
             setSentRequests(data || []);
+            
+            // Save to cache silently
+            try {
+                await AsyncStorage.setItem(`sent_requests_${user.id}`, JSON.stringify(data || []));
+            } catch(e) {}
         } catch (error) {
             console.error(error);
         } finally {
