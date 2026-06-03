@@ -332,7 +332,7 @@ export async function fetchAndFormatFriendsData(
             }
         }
 
-        return { ...s, content: decryptedContent, media_url: decryptedMediaUrl };
+        return { ...s, content: decryptedContent, media_url: decryptedMediaUrl, statusKey };
     }));
 
     const groupedMyStatus: any = { active: [] };

@@ -123,7 +123,11 @@ export function useStatusPost(
 
                         // Hybrid Encryption: Encrypt the Master Key for all allowed viewers + self
                         const finalViewerIds = privacy === 'selected' ? selectedViewerIds : friendsStore.friends.map((f: any) => f.id);
-                        const { data: viewerProfiles } = await supabase.from('profiles').select('id, public_key').in('id', finalViewerIds);
+                        let viewerProfiles: any[] = [];
+                        if (finalViewerIds.length > 0) {
+                            const { data } = await supabase.from('profiles').select('id, public_key').in('id', finalViewerIds);
+                            viewerProfiles = data || [];
+                        }
                         
                         const encryptedKeys: Record<string, string> = {};
                         

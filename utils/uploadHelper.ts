@@ -74,23 +74,14 @@ export const uploadChatMessageMedia = async (
 
         const uploadUrl = `https://api.cloudinary.com/v1_1/do6lyfmn4/auto/upload`;
 
-        const uploadResult = await FileSystem.uploadAsync(uploadUrl, fileToUpload, {
-            httpMethod: 'POST',
-            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-            fieldName: 'file',
-            mimeType: contentType,
-            parameters: {
-                upload_preset: 'lrkgj8fj'
-            },
-            sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
-        });
-
-        if (uploadResult.status !== 200 && uploadResult.status !== 201) {
-            throw new Error(`Upload failed with status: ${uploadResult.status}`);
-        }
-
-        onProgress?.(100);
-        const cloudData = JSON.parse(uploadResult.body);
+        const cloudData = await uploadWithProgressToCloudinary(
+            fileToUpload,
+            uploadUrl,
+            'lrkgj8fj',
+            onProgress || (() => {}),
+            originalFileName || fileName,
+            contentType
+        );
 
         return {
             url: cloudData.secure_url,

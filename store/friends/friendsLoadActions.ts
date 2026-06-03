@@ -4,6 +4,9 @@ import { useAuthStore } from '../useAuthStore';
 import { useDbStore } from '../useDbStore';
 import { StoreGet, StoreSet } from './friendsTypes';
 
+let loadedForUserId: string | null = null;
+let isFetchingUserId: string | null = null;
+
 export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
     setOnlineUsers: (onlineUsers: Record<string, any>) => {
         set({ onlineUsers });
@@ -29,6 +32,13 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
     loadFriends: async (userId: string, force = false) => {
         if (!userId || userId === 'null') return;
         
+        // Concurrency Lock: Prevent multiple identical queries from exhausting the connection pool
+        if (!force && isFetchingUserId === userId) {
+            return;
+        }
+        
+        isFetchingUserId = userId;
+        
         const { combinedItems: existingItems, onlineUsers } = get();
         const { db } = useDbStore.getState();
 
@@ -53,22 +63,38 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
         }
 
         const currentItems = get().combinedItems;
-        const shouldShowLoading = (currentItems.length === 0 || force);
-        set({ loading: shouldShowLoading, error: null });
+        const isFirstLoad = loadedForUserId !== userId;
+        const shouldShowLoading = isFirstLoad;
+        
+        // Only set loading if it's the first time loading for this user to prevent skeleton flashing
+        if (shouldShowLoading) {
+            set({ loading: true, error: null });
+        }
 
         try {
             const currentUserId = useAuthStore.getState().user?.id;
             const data = await fetchAndFormatFriendsData(userId, existingItems, db, onlineUsers, currentUserId);
             
+            loadedForUserId = userId; // Mark as loaded for this user
+
             // SMART MERGE: Prevent UI flicker if Supabase temporarily returns empty but we have local data
             const finalCombinedItems = (data.combinedItems.length === 0 && currentItems.length > 0)
                 ? currentItems
                 : data.combinedItems;
 
+            // SMART MERGE: Preserve any temporary 'uploading' statuses that haven't hit the DB yet
+            const currentMyStatuses = get().myStatuses || { active: [] };
+            const uploadingStatuses = currentMyStatuses.active?.filter((s: any) => s.isUploading) || [];
+            
+            const finalMyStatuses = {
+                ...data.myStatuses,
+                active: [...uploadingStatuses, ...(data.myStatuses?.active || [])]
+            };
+
             set({
                 friends: data.friends,
                 groups: data.groups,
-                myStatuses: data.myStatuses,
+                myStatuses: finalMyStatuses,
                 statusInfo: data.statusInfo,
                 combinedItems: finalCombinedItems,
                 lockedChatIds: data.lockedChatIds,
@@ -78,6 +104,10 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
         } catch (e: any) {
             console.error('loadFriends ERROR:', e);
             set({ error: e.message, loading: false });
+        } finally {
+            if (isFetchingUserId === userId) {
+                isFetchingUserId = null;
+            }
         }
     }
 });

@@ -1,5 +1,5 @@
-import React, { useRef, memo, useState } from 'react';
-import { View, Text, TouchableOpacity, Animated, Pressable, Alert, ActivityIndicator } from 'react-native';
+import React, { useRef, memo, useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, Animated, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
