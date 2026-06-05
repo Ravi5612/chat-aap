@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { saveLocalConversation } from '@/lib/localDb';
 import { useDbStore } from '../useDbStore';
 import { StoreGet, StoreSet } from './friendsTypes';
-import * as SecureStore from 'expo-secure-store';
+import { AppStorage } from '@/lib/storage';
 
 export const createFriendsVaultActions = (set: StoreSet, get: StoreGet) => ({
     setVaultOpen: (isOpen: boolean) => {
@@ -12,15 +12,15 @@ export const createFriendsVaultActions = (set: StoreSet, get: StoreGet) => ({
     setVaultPasscode: async (passcode: string | null) => {
         set({ vaultPasscode: passcode });
         if (passcode) {
-            await SecureStore.setItemAsync('ninja_vault_passcode', passcode);
+            await AppStorage.setItemAsync('ninja_vault_passcode', passcode);
         } else {
-            await SecureStore.deleteItemAsync('ninja_vault_passcode');
+            await AppStorage.deleteItemAsync('ninja_vault_passcode');
         }
     },
 
     loadVaultPasscode: async () => {
         try {
-            const passcode = await SecureStore.getItemAsync('ninja_vault_passcode');
+            const passcode = await AppStorage.getItemAsync('ninja_vault_passcode');
             set({ vaultPasscode: passcode });
         } catch (e) {
             console.error('Failed to load vault passcode', e);

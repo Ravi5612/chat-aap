@@ -25,10 +25,10 @@ import { CallOverlay } from '@/components/CallOverlay';
 import * as Updates from 'expo-updates';
 import { setupDatabase } from '@/lib/database';
 import { useNearbyNotifications } from '@/hooks/useNearbyNotifications';
-import * as SecureStore from 'expo-secure-store';
 import { ErrorBoundaryProps } from 'expo-router';
 import { TouchableOpacity, Text } from 'react-native';
 import { initializeX25519Keys } from '@/utils/chatCrypto';
+import { AppStorage } from '@/lib/storage';
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
@@ -56,7 +56,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 }
 
 export default function RootLayout() {
-  const { session, initializing, setSession, setInitializing, syncOnlineStatus, profile } = useAuthStore();
+  const { session, initializing, setSession, setInitializing, syncOnlineStatus, profile, isRegistering } = useAuthStore();
   
   // Activate Nearby Tracking & Notifications
   useNearbyNotifications();
@@ -85,9 +85,47 @@ export default function RootLayout() {
   const rootNavigationState = useRootNavigationState();
   const [isMounted, setIsMounted] = useState(false);
 
+  const [bootStatus, setBootStatus] = useState('Starting...');
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  
+  const addLog = (msg: string) => {
+      setDebugLogs(prev => [...prev, `${new Date().toISOString().split('T')[1].split('.')[0]} - ${msg}`]);
+      setBootStatus(msg);
+  };
+
   useEffect(() => {
+    // Hide the native splash screen immediately so we can see the debug logs!
+    NativeSplashScreen.hideAsync().catch(() => {});
+    
     // 1. Setup Auth Listener & Initial Session
     const setupAuth = async () => {
+      const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout>;
+        let isSettled = false;
+        return Promise.race([
+          promise.then(res => {
+              isSettled = true;
+              clearTimeout(timer);
+              return res;
+          }).catch(err => {
+              const wasSettled = isSettled;
+              isSettled = true;
+              clearTimeout(timer);
+              if (wasSettled) return null as any;
+              throw err;
+          }),
+          new Promise<T>((_, reject) => {
+              timer = setTimeout(() => {
+                  if (!isSettled) {
+                      isSettled = true;
+                      addLog(`TIMEOUT: ${label}`);
+                      reject(new Error(`Timeout: ${label}`));
+                  }
+              }, ms);
+          })
+        ]);
+      };
+
       try {
         setupDatabase(); // Initialize SQLite local database
         
@@ -95,9 +133,9 @@ export default function RootLayout() {
         await useDbStore.getState().initialize();
 
         let didFetchCache = false;
+        
         // Check for cached session to render Home instantly
-        const cachedSessionStr = await SecureStore.getItemAsync('supabase_session').catch(() => null);
-        const lastUserId = await SecureStore.getItemAsync('last_user_id').catch(() => null);
+        const cachedSessionStr = await AppStorage.getItemAsync('supabase_session').catch(() => null);
 
         if (cachedSessionStr) {
           try {
@@ -124,61 +162,47 @@ export default function RootLayout() {
 
             // Pre-load profile & blocked users from cache
             await useAuthStore.getState().syncProfile();
-            useFriendsStore.getState().fetchBlockedUsers(cachedSession.user.id); // background
+            await useFriendsStore.getState().fetchBlockedUsers(cachedSession.user.id);
             didFetchCache = true;
-            
-            // FAST BOOT: Hide Splash Screen immediately!
-            setInitializing(false);
-          } catch (e) {
+          } catch (e: any) {
             console.warn('Error parsing cached session:', e);
           }
         }
 
-        // Run the slow network checks in the background (Non-blocking)
-        (async () => {
-          try {
-            const { data: { session: liveSession } } = await supabase.auth.getSession();
-            setSession(liveSession);
-            
-            if (liveSession) {
-              const currentUserId = liveSession.user.id;
-              
-              // Security Check: If a different user logged in without proper logout, wipe the database
-              if (lastUserId && lastUserId !== currentUserId) {
-                  const { db } = useDbStore.getState();
-                  if (db) {
-                      const { clearAllLocalData } = require('@/lib/localDb');
-                      await clearAllLocalData(db);
-                      console.log('[SECURITY] Wiped local database due to user account switch');
-                  }
+        const { data: { session: liveSession } } = await supabase.auth.getSession();
+        setSession(liveSession);
+        
+        if (liveSession) {
+          const currentUserId = liveSession.user.id;
+          const lastUserId = await AppStorage.getItemAsync('last_user_id').catch(() => null);
+          
+          if (lastUserId && lastUserId !== currentUserId) {
+              const { db } = useDbStore.getState();
+              if (db) {
+                  const { clearAllLocalData } = require('@/lib/localDb');
+                  await clearAllLocalData(db);
               }
-              await SecureStore.setItemAsync('last_user_id', currentUserId);
-
-              if (!didFetchCache || !cachedSessionStr || JSON.parse(cachedSessionStr).user.id !== currentUserId) {
-                 await useAuthStore.getState().syncProfile();
-                 useFriendsStore.getState().fetchBlockedUsers(currentUserId); // background
-              }
-              try {
-                 const publicKeyBase64 = await initializeX25519Keys(liveSession.user.id);
-                 await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', liveSession.user.id);
-              } catch(e) { 
-                 console.warn('E2EE Init Error:', e); 
-                 useAuthStore.getState().signOut();
-                 Alert.alert("Security Check", "Please log in again with your password to restore your End-to-End Encryption keys.");
-              }
-            }
-          } catch (error) {
-            console.error('Background session check failed:', error);
           }
-        })();
+          await AppStorage.setItemAsync('last_user_id', currentUserId).catch(()=>null);
 
-      } catch (error) {
+          if (!didFetchCache || !cachedSessionStr || JSON.parse(cachedSessionStr).user.id !== currentUserId) {
+             await useAuthStore.getState().syncProfile();
+             await useFriendsStore.getState().fetchBlockedUsers(currentUserId);
+          }
+          try {
+             const publicKeyBase64 = await initializeX25519Keys(currentUserId);
+             await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', currentUserId);
+          } catch(e) { 
+             console.warn('E2EE Init Error (non-fatal):', e);
+             // Do NOT sign out — user can still use the app
+          }
+        }
+
+      } catch (error: any) {
         console.error('Error getting session:', error);
       } finally {
-        // If we didn't use cache, hide splash screen after network completes or fails
-        if (!didFetchCache) {
-            setInitializing(false);
-        }
+        setInitializing(false);
+        useAuthStore.getState().setInitializing(false);
       }
     };
 
@@ -214,7 +238,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (initializing || !isMounted || !rootNavigationState?.key) return;
+    if (initializing || !isMounted || !rootNavigationState?.key || isRegistering) return;
 
     const inAuthGroup = (segments as string[]).includes('login') || (segments as string[]).includes('signup') || (segments as string[]).includes('forgot-password') || (segments as string[]).includes('reset-password');
     const isSetupProfile = (segments as string[]).includes('setup-profile');
@@ -233,7 +257,7 @@ export default function RootLayout() {
     } else if (!inAuthGroup) {
       router.replace('/login');
     }
-  }, [session, initializing, segments, isMounted, rootNavigationState?.key, profile]);
+  }, [session, initializing, segments, isMounted, rootNavigationState?.key, profile, isRegistering]);
 
 
 
@@ -247,7 +271,18 @@ export default function RootLayout() {
   }, [initializing]);
 
   if (initializing) {
-    return null;
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Text style={{ color: '#F68537', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }}>ChatWarriors</Text>
+        <Text style={{ color: '#FFFFFF', fontSize: 16, textAlign: 'center', marginBottom: 20, fontWeight: 'bold' }}>{bootStatus}</Text>
+        <View style={{ backgroundColor: '#1E293B', padding: 10, borderRadius: 10, width: '100%', maxHeight: '50%' }}>
+            <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 5 }}>Debug Logs:</Text>
+            {debugLogs.map((log, idx) => (
+                <Text key={idx} style={{ color: '#38BDF8', fontSize: 10, fontFamily: 'monospace' }}>{log}</Text>
+            ))}
+        </View>
+      </View>
+    );
   }
 
   return (

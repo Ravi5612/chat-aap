@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import * as SecureStore from 'expo-secure-store';
+import { AppStorage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { useFriendsStore } from '@/store/useFriendsStore';
 
@@ -117,7 +117,7 @@ export const useHomeMenuActions = ({ currentUser, onRequireLockSetup, onRequireL
                 );
                 break;
             case 'lock':
-                const storedPassword = await SecureStore.getItemAsync('chat_lock_password');
+                const storedPassword = await AppStorage.getItemAsync('chat_lock_password');
                 if (!storedPassword) {
                     onRequireLockSetup(friend);
                 } else {

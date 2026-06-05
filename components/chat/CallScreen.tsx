@@ -325,23 +325,16 @@ const styles = StyleSheet.create({
     timerText: { color: 'white', fontSize: 14, fontWeight: '600' },
     statusIndicator: { position: 'absolute', top: 60, right: 24 },
     statusText: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
-    controlsWrapper: {
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        paddingBottom: 48, paddingTop: 24,
-        backgroundColor: '#F68537',
-        borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 60,
-    },
+    controlsWrapper: { position: 'absolute', bottom: 50, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
     controlsContainer: {
-        flexDirection: 'row', justifyContent: 'center',
-        alignItems: 'center', gap: 20, paddingHorizontal: 24,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
+        backgroundColor: '#F68537', paddingHorizontal: 20, paddingVertical: 12,
+        borderRadius: 40, elevation: 8, shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5,
     },
-    controlButton: {
-        width: 60, height: 60, borderRadius: 30,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        alignItems: 'center', justifyContent: 'center',
-    },
-    largeButton: { width: 68, height: 68, borderRadius: 34 },
+    controlButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+    largeButton: { width: 60, height: 60, borderRadius: 30 },
     dangerButton: { backgroundColor: '#EF4444' },
-    successButton: { backgroundColor: '#22C55E' },
+    successButton: { backgroundColor: '#10B981' },
 });
 

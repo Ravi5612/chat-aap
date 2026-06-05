@@ -26,7 +26,7 @@ export async function fetchAndFormatFriendsData(
     // 2. Fetch Blocked Users & Friendships (Without fragile foreign key joins)
     const [blockedRes, friendshipsRes] = await Promise.all([
         supabase.from('blocked_users').select('blocked_id').eq('blocker_id', userId),
-        supabase.from('friendships').select('is_favorite, is_archived, is_locked, is_hidden, disappearing_duration, user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+        supabase.from('friendships').select('is_favorite, is_archived, is_locked, user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`)
     ]);
     if (friendshipsRes.error) console.error('[DEBUG] friendships error:', friendshipsRes.error);
 
@@ -81,9 +81,9 @@ export async function fetchAndFormatFriendsData(
         myAllStatusesRes
     ] = await Promise.all([
         friendIds.length > 0 
-            ? supabase.from('profiles').select('id, username, email, phone, avatar_url, gender, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search, public_key').in('id', friendIds)
+            ? supabase.from('profiles').select('id, username, email, phone, avatar_url, gender, is_online, show_email, show_phone, allow_screenshot, allow_status_download, dp_privacy, dp_selected_friends, hide_dp_in_search').in('id', friendIds)
             : Promise.resolve({ data: null, error: null }),
-        supabase.from('group_members').select('group_id, is_hidden, groups (id, name, avatar_url)').eq('user_id', userId),
+        supabase.from('group_members').select('group_id, is_hidden, groups (id, name, avatar_url)').eq('user_id', userId).then(r => { if (r.error) { console.error('[DEBUG] group_members error:', r.error); return { data: [], error: r.error }; } return r; }),
         statusQuery,
         supabase.from('status_views').select('status_id').eq('viewer_id', userId),
         supabase.from('messages').select('sender_id, group_id').or(`receiver_id.eq.${userId}, group_id.not.is.null`).eq('is_read', false),
@@ -93,6 +93,9 @@ export async function fetchAndFormatFriendsData(
     ]);
 
     let friendships: any[] = [];
+    if (friendProfilesRes.error) {
+        console.error('[DEBUG] friendProfilesRes error:', friendProfilesRes.error);
+    }
     if (friendProfilesRes.data) {
         friendships = friendProfilesRes.data.map(p => {
             const f = friendIdsMap.get(p.id);
@@ -110,7 +113,7 @@ export async function fetchAndFormatFriendsData(
         });
     }
 
-    if (groupRes.error) throw groupRes.error;
+    if (groupRes.error) console.error('[DEBUG] group_members error (non-fatal):', groupRes.error);
 
     // Process Status Info
     const viewedStatusIds = new Set(viewsRes.data?.map(v => v.status_id) || []);
@@ -296,7 +299,7 @@ export async function fetchAndFormatFriendsData(
             isArchived: existingItem?.isArchived || false,
             isLocked: existingItem?.isLocked || false,
             isHidden: m.is_hidden === true || existingItem?.isHidden === true,
-            disappearing_duration: m.groups.disappearing_duration || 0,
+            disappearing_duration: 0,
             lastActivity: lastActivityMap[m.groups.id] || '0',
             statusCount: 0
         };

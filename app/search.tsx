@@ -211,7 +211,7 @@ export default function SearchPeopleScreen() {
                     renderItem={({ item }) => (
                         <View style={{ paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', flexDirection: 'row', alignItems: 'center' }}>
                             <Image
-                                source={{ uri: item.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.username || 'User')}&backgroundColor=F68537` }}
+                                source={item.avatar_url}
                                 style={{ width: 48, height: 48, borderRadius: 24, marginRight: 16 }}
                             />
                             <View style={{ flex: 1 }}>

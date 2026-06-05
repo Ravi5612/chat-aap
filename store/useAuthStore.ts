@@ -4,16 +4,18 @@ import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import { useDbStore } from './useDbStore';
 import { saveLocalProfile, getLocalProfile, updateLocalProfile, getPendingProfileSync, clearAllLocalData } from '@/lib/localDb';
-import * as SecureStore from 'expo-secure-store';
+import { AppStorage } from '@/lib/storage';
 
 interface AuthState {
     session: Session | null;
     user: any | null;
     profile: any | null;
     initializing: boolean;
+    isRegistering: boolean;
     setSession: (session: Session | null) => void;
     setUser: (user: any | null) => void;
     setInitializing: (initializing: boolean) => void;
+    setIsRegistering: (isRegistering: boolean) => void;
     signOut: () => Promise<void>;
     syncOnlineStatus: (isOnline: boolean) => Promise<void>;
     syncProfile: () => Promise<void>;
@@ -26,23 +28,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     profile: null,
     initializing: true,
+    isRegistering: false,
     setSession: (session) => {
         set({ session, user: session?.user || null });
         if (session) {
-            SecureStore.setItemAsync('supabase_session', JSON.stringify(session)).catch(() => {});
+            AppStorage.setItemAsync('supabase_session', JSON.stringify(session)).catch(() => {});
         } else {
-            SecureStore.deleteItemAsync('supabase_session').catch(() => {});
+            AppStorage.deleteItemAsync('supabase_session').catch(() => {});
         }
     },
     setUser: (user) => set({ user }),
     setInitializing: (initializing) => set({ initializing }),
+    setIsRegistering: (isRegistering) => set({ isRegistering }),
     signOut: async () => {
         const { user } = get();
 
-        // 🛑 Clear All Local Stores and Databases
+        // 🛑 Clear All Local Stores and Databases by deleting the files!
         const { db } = useDbStore.getState();
         if (db) {
-            await clearAllLocalData(db);
+            try {
+                // Try gracefully clearing data first
+                await clearAllLocalData(db);
+                db.closeSync();
+                console.log('[AuthStore] Closed DB connection for logout.');
+            } catch(e) {
+                console.warn('[AuthStore] Error closing DB:', e);
+            }
+        }
+
+        try {
+            const FileSystem = require('expo-file-system');
+            const dbPath = `${FileSystem.documentDirectory}SQLite/chatwarriors.db`;
+            const cacheDbPath = `${FileSystem.documentDirectory}SQLite/chatwarriors_cache.db`;
+            await FileSystem.deleteAsync(dbPath, { idempotent: true });
+            await FileSystem.deleteAsync(cacheDbPath, { idempotent: true });
+            console.log('[AuthStore] Wiped physical database files!');
+            useDbStore.setState({ db: null, isInitialized: false });
+        } catch (e) {
+            console.error('[AuthStore] Failed to wipe DB files:', e);
+        }
+
+        try {
+            const { clearAllCache } = require('@/lib/database');
+            clearAllCache();
+        } catch(e) {
+            console.warn('[AuthStore] Failed clearAllCache:', e);
         }
 
         const { useFriendsStore } = require('./useFriendsStore');
@@ -53,8 +83,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         // Step 1: Turant state clear karo aur login pe bhejo — koi wait nahi!
         set({ session: null, user: null, profile: null });
-        SecureStore.deleteItemAsync('supabase_session').catch(() => {});
-        SecureStore.deleteItemAsync('ninja_vault_passcode').catch(() => {}); // clear vault passcode too
+        AppStorage.deleteItemAsync('supabase_session').catch(() => {});
+        AppStorage.deleteItemAsync('ninja_vault_passcode').catch(() => {}); // clear vault passcode too
         router.replace('/login');
 
         // Step 2: Network calls background mein — logout ko block nahi karenge
@@ -62,6 +92,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             if (user?.id) {
                 await supabase.from('profiles').update({ is_online: false }).eq('id', user.id);
             }
+        } catch (error) {
+            console.error("Error updating online status:", error);
+        }
+
+        try {
             await supabase.auth.signOut();
         } catch (error) {
             console.error("Error signing out:", error);

@@ -10,7 +10,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "postinstall": "node -e \"const fs = require('fs'); const path = 'node_modules/react-native-worklets'; if (!fs.existsSync(path)) fs.mkdirSync(path, { recursive: true }); fs.writeFileSync(path + '/plugin.js', 'module.exports = function() { return { name: \\\"fake\\\", visitor: {} }; };');\""
+    "postinstall": "node ./scripts/postinstall.js"
   },
   "dependencies": {
     "@expo/config-plugins": "~9.0.0",

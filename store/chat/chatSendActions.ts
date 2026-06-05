@@ -125,7 +125,7 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             if (error) throw error;
 
             if (!scheduledAt) {
-                const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject };
+                const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject, reply_to_id: replyToId };
                 set((state) => {
                     const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
                     saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
@@ -161,6 +161,17 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
 
         } catch (error: any) {
             console.error("SendMessage Error:", error);
+            
+            // ✅ MARK AS FAILED IN UI INSTEAD OF SPINNING FOREVER
+            set((state) => {
+                const newMessages = state.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m);
+                saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
+                return {
+                    messages: newMessages,
+                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
+                };
+            });
+
             logErrorToDB(error, 'ChatStore: Send Message', currentUser.id, currentUser.username);
         }
     },

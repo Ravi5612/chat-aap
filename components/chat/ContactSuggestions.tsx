@@ -61,7 +61,7 @@ const ContactRow = memo(({ user, sendRequest, cancelRequest }: { user: any, send
 });
 
 const ContactSuggestionsInner = memo(() => {
-    const { suggestions, loading, permissionGranted, loadSuggestions, sendRequest, cancelRequest } = useContactSuggestions();
+    const { suggestions, loading, permissionGranted, loadSuggestions, requestPermission, sendRequest, cancelRequest } = useContactSuggestions();
 
     if (permissionGranted === false) {
         return (
@@ -74,6 +74,18 @@ const ContactSuggestionsInner = memo(() => {
                     <Text style={styles.emptyText}>
                         Aapke doston ko dhoondhne ke liye Contacts permission allow karein.
                     </Text>
+                    <TouchableOpacity 
+                        onPress={requestPermission}
+                        style={{
+                            marginTop: 16,
+                            backgroundColor: '#F68537',
+                            paddingVertical: 10,
+                            paddingHorizontal: 20,
+                            borderRadius: 20,
+                        }}
+                    >
+                        <Text style={{ color: 'white', fontWeight: 'bold' }}>Allow Permission</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         );

@@ -10,7 +10,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import { x25519 } from '@noble/curves/ed25519';
 import * as Crypto from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
+import { AppStorage } from '@/lib/storage';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabase';
 
@@ -40,7 +40,6 @@ const SALT = "supabase-secure-chat-v1";
 const encoder = new TextEncoder();
 
 const keyCache = new Map<string, Uint8Array>();
-const PRIVATE_KEY_STORAGE = 'e2ee_private_key_v1';
 
 export async function deriveKEKFromPassword(password: string, saltStr: string): Promise<Uint8Array> {
     const pwdBytes = encoder.encode(password);
@@ -64,10 +63,10 @@ export async function deriveKEKFromPassword(password: string, saltStr: string): 
  * If no backup exists, generates new key, encrypts it with password KEK, and saves to DB.
  */
 export async function initializeX25519Keys(userId: string, password?: string): Promise<string> {
-    const keyStoragePath = `e2ee_private_key_v1_${userId}`;
+    const keyStoragePath = `private_x25519_${userId}`;
     
-    // 1. Check local SecureStore first (Auto-Login scenario)
-    const existingKey = await SecureStore.getItemAsync(keyStoragePath);
+    // 1. Check local AppStorage first (Auto-Login scenario)
+    const existingKey = await AppStorage.getItemAsync(keyStoragePath);
     if (existingKey) {
         const privateKey = Buffer.from(existingKey, 'base64');
         const publicKey = x25519.getPublicKey(privateKey);
@@ -88,7 +87,7 @@ export async function initializeX25519Keys(userId: string, password?: string): P
                     const privateKey = Buffer.from(decryptedBase64, 'base64');
                     const publicKey = x25519.getPublicKey(privateKey);
                     
-                    await SecureStore.setItemAsync(keyStoragePath, decryptedBase64);
+                    await AppStorage.setItemAsync(keyStoragePath, decryptedBase64);
                     console.log("Crypto: Successfully restored E2EE keys from Cloud Backup!");
                     return Buffer.from(publicKey).toString('base64');
                 } else {
@@ -113,35 +112,56 @@ export async function initializeX25519Keys(userId: string, password?: string): P
         
         if (encryptedPrivateKey) {
             // Save Backup metadata to DB
-            await supabase.from('profiles').update({
+            const { error } = await supabase.from('profiles').update({
                 encrypted_private_key: encryptedPrivateKey,
                 kdf_salt: newSalt,
                 kdf_algorithm: 'scrypt_N16384_r8_p1'
             }).eq('id', userId);
+            
+            if (error) {
+                console.error("Crypto: Failed to save backup to Supabase!", error);
+            } else {
+                console.log("Crypto: Successfully saved Cloud Backup to Supabase!");
+            }
         }
 
-        await SecureStore.setItemAsync(keyStoragePath, privateKeyBase64);
+        await AppStorage.setItemAsync(keyStoragePath, privateKeyBase64);
         return Buffer.from(publicKey).toString('base64');
     }
 
-    // Fallback: No password, and no SecureStore key.
-    throw new Error("Unable to restore encryption keys. Please log out and log back in with your password.");
+    // Fallback: No password, no AppStorage key — generate fresh keys (no cloud backup)
+    // This happens on reinstall / data clear. Old messages won't be decryptable but new ones will work.
+    console.warn('Crypto: No local key found and no password provided. Generating fresh X25519 keys (no cloud backup).');
+    const randomBytes = await Crypto.getRandomBytesAsync(32);
+    const privateKey = new Uint8Array(randomBytes);
+    const publicKey = x25519.getPublicKey(privateKey);
+    const privateKeyBase64 = Buffer.from(privateKey).toString('base64');
+    await AppStorage.setItemAsync(keyStoragePath, privateKeyBase64);
+    return Buffer.from(publicKey).toString('base64');
+}
+
+/**
+ * 🔑 Get local private key
+ */
+export const getLocalPrivateKey = async (userId: string): Promise<Uint8Array | null> => {
+    const keyStoragePath = `private_x25519_${userId}`;
+    const existingKey = await AppStorage.getItemAsync(keyStoragePath);
+    if (!existingKey) return null;
+    return Buffer.from(existingKey, 'base64');
 }
 
 /**
  * 🔑 Get True E2EE Shared Secret using X25519 Diffie-Hellman
  */
 export async function getX25519SharedSecret(friendPublicKeyBase64: string, userId: string): Promise<Uint8Array | null> {
-    const keyStoragePath = `e2ee_private_key_v1_${userId}`;
-    const existingKey = await SecureStore.getItemAsync(keyStoragePath);
-    if (!existingKey) return null;
+    const privateKey = await getLocalPrivateKey(userId);
+    if (!privateKey) return null;
 
     if (keyCache.has(friendPublicKeyBase64)) {
         return keyCache.get(friendPublicKeyBase64)!;
     }
 
     try {
-        const privateKey = Buffer.from(existingKey, 'base64');
         const friendPublicKey = Buffer.from(friendPublicKeyBase64, 'base64');
 
         const sharedSecret = x25519.getSharedSecret(privateKey, friendPublicKey);
@@ -174,6 +194,25 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
         const baseKeyCacheStr = `x25519:${userId}:${friendId}`;
         if (keyCache.has(baseKeyCacheStr)) return keyCache.get(baseKeyCacheStr)!;
 
+        // ✅ If our own private key is missing, auto-generate a fresh one (prevents null chatKey)
+        const ownPrivateKey = await getLocalPrivateKey(userId);
+        if (!ownPrivateKey) {
+            console.warn('Crypto: Own private key missing! Auto-generating fresh key...');
+            try {
+                const randomBytes = await Crypto.getRandomBytesAsync(32);
+                const privateKey = new Uint8Array(randomBytes);
+                const publicKey = x25519.getPublicKey(privateKey);
+                const privateKeyBase64 = Buffer.from(privateKey).toString('base64');
+                const publicKeyBase64 = Buffer.from(publicKey).toString('base64');
+                await AppStorage.setItemAsync(`private_x25519_${userId}`, privateKeyBase64);
+                // Update public key in Supabase
+                await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', userId);
+                console.log('Crypto: Fresh X25519 key pair generated and saved!');
+            } catch (e) {
+                console.error('Crypto: Failed to generate fresh key pair', e);
+            }
+        }
+
         try {
             const { data } = await supabase.from('profiles').select('public_key').eq('id', friendId).single();
             if (data?.public_key) {
@@ -184,12 +223,26 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
                     return key;
                 }
             } else {
-                console.warn(`Friend ${friendId} does not have a public key yet. Falling back to null.`);
+                console.warn(`Friend ${friendId} does not have a public key yet. Using PBKDF2 fallback.`);
             }
         } catch (e) {
             console.warn('Failed to fetch friend public key for E2EE', e);
         }
-        return null;
+
+        // ✅ PBKDF2 Fallback — ensures messages can always be sent/received
+        // Both sides will derive same deterministic key from sorted IDs
+        const sortedIds = [userId, friendId].sort().join(':');
+        const fallbackBase = `p2p_fallback_v1:${sortedIds}`;
+        const fallbackCacheStr = `fallback:${sortedIds}`;
+        if (keyCache.has(fallbackCacheStr)) return keyCache.get(fallbackCacheStr)!;
+        const fallbackKey = await pbkdf2Async(sha256, encoder.encode(fallbackBase), encoder.encode(SALT), {
+            c: 1000,
+            dkLen: 32
+        });
+        const fallbackUint = new Uint8Array(fallbackKey);
+        keyCache.set(fallbackCacheStr, fallbackUint);
+        console.warn(`Crypto: Using PBKDF2 fallback key for ${friendId} (E2EE not available)`);
+        return fallbackUint;
     }
 
     // Fallback for groups
@@ -304,8 +357,9 @@ export async function decryptText(encryptedData: any, cryptoKey: Uint8Array): Pr
 
     } catch (error: any) {
         console.warn("Decryption failed:", error.message);
-        // Fail gracefully - return empty string, don't crash
-        if (typeof encryptedData === 'string' && encryptedData.startsWith('{')) return '';
-        return typeof encryptedData === 'string' ? encryptedData : '';
+        // Fail gracefully - return placeholder, don't crash
+        const errorMsg = '⚠️ Message cannot be decrypted (Keys changed)';
+        if (typeof encryptedData === 'string' && encryptedData.startsWith('{')) return errorMsg;
+        return typeof encryptedData === 'string' ? encryptedData : errorMsg;
     }
 }

@@ -98,18 +98,17 @@ export const useReceivedRequests = () => {
 
             if (updateError) throw updateError;
 
-            const { error: insertError } = await supabase.from('friendships').insert([
-                { user_id: user.id, friend_id: senderId },
-                { user_id: senderId, friend_id: user.id }
-            ]);
-            if (insertError) {
-                console.error("Friendship insert error:", insertError);
-                throw new Error("Failed to add friend: " + insertError.message);
+            const { error: err1 } = await supabase.from('friendships').insert(
+                { user_id: user.id, friend_id: senderId }
+            );
+            if (err1 && err1.code !== '23505') {
+                console.error("Friendship insert error:", err1);
+                throw new Error("Failed to add friend: " + err1.message);
             }
 
             const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single();
 
-            await supabase.from('notifications').insert([
+            const { error: notifErr } = await supabase.from('notifications').insert([
                 {
                     user_id: senderId,
                     sender_id: user.id,
@@ -117,13 +116,14 @@ export const useReceivedRequests = () => {
                     message: `${myProfile?.username || 'Someone'} accepted your friend request! 🤝`,
                     is_read: false
                 }
-            ]).catch(console.error);
+            ]);
+            if (notifErr) console.error(notifErr);
 
             await loadReceivedRequests();
             
             // Instantly update the home page friends list
             const { useFriendsStore } = require('@/store/useFriendsStore');
-            useFriendsStore.getState().loadFriends(user.id);
+            useFriendsStore.getState().loadFriends(user.id, true);
 
             Alert.alert('Success', 'Friend Request Accepted! 🤝');
         } catch (error: any) {

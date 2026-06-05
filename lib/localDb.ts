@@ -312,7 +312,7 @@ export const saveLocalMessage = async (db: SQLite.SQLiteDatabase, msg: any) => {
                 msg.file_name || null,
                 msg.status || 'sent',
                 msg.is_read ? 1 : 0,
-                msg.reply_to_id || null,
+                msg.reply_to_id || msg.reply?.id || null,
                 msg.created_at,
                 JSON.stringify(msg.reactions || {}),
                 msg.message_type || 'text'

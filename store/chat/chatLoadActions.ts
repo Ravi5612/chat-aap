@@ -7,6 +7,7 @@ import { useDbStore } from '../useDbStore';
 import { StoreGet, StoreSet } from './chatTypes';
 import { decryptMessageBatch, filterDeletedMessages } from '@/utils/chatHelpers';
 
+
 export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
     initChat: async (friendId: string, currentUser: any, isGroup: boolean) => {
         if (!currentUser || !friendId) return;
@@ -44,8 +45,26 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
     },
 
     loadMessages: async (friendId: string, currentUser: any, isGroup: boolean) => {
-        const { chatKey, cache, messages } = get();
-        if (!friendId || !currentUser || !chatKey) return;
+        const { chatKey: existingChatKey, cache, messages } = get();
+        if (!friendId || !currentUser) return;
+
+        // If chatKey is missing, try to get it before loading
+        let chatKey = existingChatKey;
+        if (!chatKey) {
+            try {
+                chatKey = await getChatKey(currentUser.id, friendId, isGroup);
+                if (chatKey) {
+                    set((state: any) => ({
+                        chatKey,
+                        cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: state.cache[friendId]?.messages || [], key: chatKey! } }
+                    }));
+                }
+            } catch (e) {
+                console.warn('[ChatStore] Failed to get chatKey in loadMessages:', e);
+            }
+        }
+        if (!chatKey) return; // truly no key available even after retry
+
 
         const PAGE_SIZE = 20;
         let hasLocalMessages = false;
@@ -92,12 +111,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
 
             let query = supabase
                 .from('messages')
-                .select(`
-                    *,
-                    sender:profiles!sender_id(id, username, avatar_url),
-                    reply:reply_to_id(id, message, sender_id, created_at),
-                    status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
-                `);
+                .select('*');
 
             if (isGroup) {
                 query = query.eq('group_id', friendId);
@@ -229,12 +243,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
 
             let query = supabase
                 .from('messages')
-                .select(`
-                    *,
-                    sender:profiles!sender_id(id, username, avatar_url),
-                    reply:reply_to_id(id, message, sender_id, created_at),
-                    status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
-                `);
+                .select('*');
 
             if (isGroup) {
                 query = query.eq('group_id', friendId);

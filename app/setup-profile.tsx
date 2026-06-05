@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import AuthScreen from '@/components/ui/AuthScreen';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function SetupProfilePage() {
     const router = useRouter();
@@ -39,6 +40,10 @@ export default function SetupProfilePage() {
                 .eq('id', user.id);
 
             if (error) throw error;
+
+            useAuthStore.setState((state) => ({
+                profile: { ...state.profile, username: name.trim(), gender: gender }
+            }));
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             router.replace('/(tabs)');

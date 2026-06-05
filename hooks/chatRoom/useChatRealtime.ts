@@ -87,7 +87,7 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                             newMessages[existingIdx] = { ...newMessages[existingIdx], ...finalMsg };
                             return { messages: newMessages };
                         }
-                        return { messages: [...state.messages, finalMsg] };
+                        return { messages: [finalMsg, ...state.messages] };
                     });
 
                     const { db } = useDbStore.getState();

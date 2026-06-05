@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 
-const DB_NAME = 'chatwarriors.db';
+const DB_NAME = 'chatwarriors_cache.db';
 const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
 // 1. Singleton DB instance to prevent opening a new connection on every cache call
@@ -71,4 +71,15 @@ export const getFromCache = (key: string) => {
     if (__DEV__) console.error(`[SQLite Cache] Error reading ${key} from cache:`, error);
   }
   return null;
+};
+
+// Clear all cache (useful for logout)
+export const clearAllCache = () => {
+  try {
+    const db = getDb();
+    db.runSync(`DELETE FROM app_cache`);
+    if (__DEV__) console.log('[SQLite Cache] Successfully cleared all cache for logout');
+  } catch (error) {
+    if (__DEV__) console.error(`[SQLite Cache] Error clearing cache:`, error);
+  }
 };

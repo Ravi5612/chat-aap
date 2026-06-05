@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import { AppStorage } from '@/lib/storage';
 import * as Haptics from 'expo-haptics';
 
 const CHAT_LOCK_KEY = 'chat_lock_password';
@@ -101,8 +101,8 @@ const ChatLockModal = memo(({ visible, onClose, onSuccess, mode: initialMode }: 
     }, [visible, initialMode]);
 
     const loadQuestion = async () => {
-        const q = await SecureStore.getItemAsync(CHAT_LOCK_QUESTION_KEY);
-        if (q) setStoredQuestion(q);
+        const q = await AppStorage.getItemAsync(CHAT_LOCK_QUESTION_KEY);
+        setStoredQuestion(q || 'What is your favorite color?');
     };
 
     const handleSetup = useCallback(async () => {
@@ -110,9 +110,9 @@ const ChatLockModal = memo(({ visible, onClose, onSuccess, mode: initialMode }: 
         if (password !== confirmPassword) { Alert.alert('Error', 'Passwords do not match'); return; }
         if (!question || !answer) { Alert.alert('Error', 'Please set a security question and answer'); return; }
         try {
-            await SecureStore.setItemAsync(CHAT_LOCK_KEY, password);
-            await SecureStore.setItemAsync(CHAT_LOCK_QUESTION_KEY, question);
-            await SecureStore.setItemAsync(CHAT_LOCK_ANSWER_KEY, answer.toLowerCase().trim());
+            await AppStorage.setItemAsync(CHAT_LOCK_KEY, password);
+            await AppStorage.setItemAsync(CHAT_LOCK_QUESTION_KEY, question);
+            await AppStorage.setItemAsync(CHAT_LOCK_ANSWER_KEY, answer.toLowerCase().trim());
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert('Success', 'Chat Lock set up successfully!');
             onSuccess();
@@ -120,7 +120,7 @@ const ChatLockModal = memo(({ visible, onClose, onSuccess, mode: initialMode }: 
     }, [password, confirmPassword, question, answer, onSuccess]);
 
     const handleVerify = useCallback(async () => {
-        const storedPassword = await SecureStore.getItemAsync(CHAT_LOCK_KEY);
+        const storedPassword = await AppStorage.getItemAsync(CHAT_LOCK_KEY);
         if (password === storedPassword) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             onSuccess();
@@ -131,8 +131,9 @@ const ChatLockModal = memo(({ visible, onClose, onSuccess, mode: initialMode }: 
         }
     }, [password, onSuccess]);
 
-    const handleRecover = useCallback(async () => {
-        const storedAnswer = await SecureStore.getItemAsync(CHAT_LOCK_ANSWER_KEY);
+    const handleVerifyForgot = useCallback(async () => {
+        if (!answer) { Alert.alert('Error', 'Please enter your answer'); return; }
+        const storedAnswer = await AppStorage.getItemAsync(CHAT_LOCK_ANSWER_KEY);
         if (answer.toLowerCase().trim() === storedAnswer) {
             setMode('setup'); setAnswer(''); setPassword('');
             Alert.alert('Verified', 'You can now set a new password.');

@@ -38,13 +38,18 @@ export const useMessageList = (messages: any[], currentUser: any) => {
         hideBtn();
     }, [hideBtn]);
 
-    // Date-grouped messages for inverted FlatList
+    // Date-grouped messages for inverted FlatList (DESC order: newest at index 0)
     const groupedMessages = useMemo(() => {
         const items: any[] = [];
-        const sortedMessages = [...messages].reverse();
+        const sortedMessages = [...messages]; // Keep DESC order for inverted list
         sortedMessages.forEach((msg, index) => {
             if (!msg || !msg.created_at) return;
             items.push({ ...msg, type: 'message' });
+            
+            // For DESC order, the next item in the array is OLDER.
+            // We want to show a date separator ABOVE the oldest message of a given day.
+            // In an inverted list, "ABOVE" visually means a HIGHER index in the array.
+            // So we check if the NEXT message (older) has a DIFFERENT date.
             const date = new Date(msg.created_at).toDateString();
             const nextDate = sortedMessages[index + 1]
                 ? new Date(sortedMessages[index + 1].created_at).toDateString() : '';

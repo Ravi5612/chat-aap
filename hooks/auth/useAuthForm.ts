@@ -63,6 +63,7 @@ export const useAuthForm = () => {
         }
 
         setLoading(true);
+        useAuthStore.getState().setIsRegistering(true);
         try {
             const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
 
@@ -70,6 +71,7 @@ export const useAuthForm = () => {
             const { data: existingUser } = await supabase.from('profiles').select('id').eq('phone', formattedPhone).maybeSingle();
             if (existingUser) {
                 Alert.alert('Error', 'An account with this phone number already exists.');
+                useAuthStore.getState().setIsRegistering(false);
                 setLoading(false);
                 return;
             }
@@ -82,16 +84,26 @@ export const useAuthForm = () => {
             if (error) throw error;
 
             if (data.session) {
-                await supabase.from('profiles').update({
-                    phone: formattedPhone,
-                    current_session_id: data.session.user.id
-                }).eq('id', data.session.user.id);
-                
-                try {
-                    const publicKeyBase64 = await initializeX25519Keys(data.session.user.id, password);
-                    await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', data.session.user.id);
-                } catch(e) {
-                    console.warn("E2EE Init Error:", e);
+                // Wait for Supabase trigger to create the profile row
+                let profileExists = false;
+                for (let i = 0; i < 10; i++) {
+                    const { data: p } = await supabase.from('profiles').select('id').eq('id', data.session.user.id).single();
+                    if (p) { profileExists = true; break; }
+                    await new Promise(r => setTimeout(r, 500));
+                }
+
+                if (profileExists) {
+                    await supabase.from('profiles').update({
+                        phone: formattedPhone,
+                        current_session_id: data.session.user.id
+                    }).eq('id', data.session.user.id);
+                    
+                    try {
+                        const publicKeyBase64 = await initializeX25519Keys(data.session.user.id, password);
+                        await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', data.session.user.id);
+                    } catch(e) {
+                        console.warn("E2EE Init Error:", e);
+                    }
                 }
 
                 const { data: profile } = await supabase.from('profiles').select('username').eq('id', data.session.user.id).single();
@@ -108,6 +120,7 @@ export const useAuthForm = () => {
             logErrorToDB(error, 'Auth: Sign Up', undefined, email);
             Alert.alert('Sign Up Failed', error.message);
         } finally {
+            useAuthStore.getState().setIsRegistering(false);
             setLoading(false);
         }
     };
@@ -123,6 +136,7 @@ export const useAuthForm = () => {
         }
 
         setLoading(true);
+        useAuthStore.getState().setIsRegistering(true);
         try {
             let loginEmail = identifier.trim().toLowerCase();
 
@@ -174,6 +188,7 @@ export const useAuthForm = () => {
             logErrorToDB(error, 'Auth: Login', undefined, identifier);
             Alert.alert('Login Failed', error.message);
         } finally {
+            useAuthStore.getState().setIsRegistering(false);
             setLoading(false);
         }
     };

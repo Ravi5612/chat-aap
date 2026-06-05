@@ -292,6 +292,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                         </View>
                     )}
 
+
                     {flyingEmoji && flyingEmoji.messageId === message.id && <FlyingReaction key={flyingEmoji.id} emoji={flyingEmoji.emoji} />}
                 </Animated.View>
             </GestureDetector>

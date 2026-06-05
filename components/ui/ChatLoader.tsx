@@ -1,5 +1,7 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Image, Animated, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, Easing } from 'react-native-reanimated';
+import { Image } from 'expo-image'; // Use expo-image for better performance if needed, or standard Image
 
 interface ChatLoaderProps {
     variant?: 'overlay' | 'inline';
@@ -10,24 +12,35 @@ const { width } = Dimensions.get('window');
 
 export default function ChatLoader({ variant = 'overlay', size = 'large' }: ChatLoaderProps) {
     const isOverlay = variant === 'overlay';
-    const pulseAnim = useRef(new Animated.Value(0.7)).current;
+    const scale = useSharedValue(0.7);
+    const opacity = useSharedValue(0.7);
 
     useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulseAnim, {
-                    toValue: 1,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(pulseAnim, {
-                    toValue: 0.7,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-            ])
-        ).start();
+        // Runs entirely on the UI thread, unaffected by JS thread blocks (like crypto ops)
+        scale.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0.7, { duration: 1000, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1, // Infinite loop
+            true // Reverse
+        );
+        opacity.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0.7, { duration: 1000, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1,
+            true
+        );
     }, []);
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: scale.value }],
+            opacity: opacity.value,
+        };
+    });
 
     const sizeStyles = {
         small: width * 0.3,
@@ -42,21 +55,19 @@ export default function ChatLoader({ variant = 'overlay', size = 'large' }: Chat
             styles.container,
             isOverlay ? styles.overlay : styles.inline
         ]}>
-            <Animated.View style={{
+            <Animated.View style={[{
                 width: imageWidth,
                 aspectRatio: 1,
                 justifyContent: 'center',
                 alignItems: 'center',
-                opacity: pulseAnim,
-                transform: [{ scale: pulseAnim }]
-            }}>
+            }, animatedStyle]}>
                 <Image
                     source={require('@/assets/images/loader-img.png')}
                     style={{
                         width: '100%',
                         height: '100%',
                     }}
-                    resizeMode="contain"
+                    contentFit="contain" // For expo-image, or use resizeMode="contain" for standard Image
                 />
             </Animated.View>
         </View>

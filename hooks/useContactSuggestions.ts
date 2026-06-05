@@ -41,18 +41,11 @@ export const useContactSuggestions = () => {
         }
 
         try {
-            // Fix: Check permissions first to avoid blind prompt triggers every 5 mins
             const { status: existingStatus } = await Contacts.getPermissionsAsync();
-            let finalStatus = existingStatus;
+
+            setPermissionGranted(existingStatus === 'granted');
 
             if (existingStatus !== 'granted') {
-                const { status: requestedStatus } = await Contacts.requestPermissionsAsync();
-                finalStatus = requestedStatus;
-            }
-            
-            setPermissionGranted(finalStatus === 'granted');
-
-            if (finalStatus !== 'granted') {
                 setLoading(false);
                 return;
             }
@@ -284,11 +277,24 @@ export const useContactSuggestions = () => {
         }
     }, [currentUser, currentUserId, suggestions]);
 
+    const requestPermission = useCallback(async () => {
+        try {
+            const { status } = await Contacts.requestPermissionsAsync();
+            setPermissionGranted(status === 'granted');
+            if (status === 'granted') {
+                loadSuggestions(true);
+            }
+        } catch (error) {
+            if (__DEV__) console.error("Error requesting contacts permission:", error);
+        }
+    }, [loadSuggestions]);
+
     return {
         suggestions,
         loading,
         permissionGranted,
         loadSuggestions,
+        requestPermission,
         sendRequest,
         cancelRequest
     };

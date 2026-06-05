@@ -188,12 +188,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 let query = supabase
                     .from('messages')
-                    .select(`
-            *,
-            sender:profiles!sender_id(id, username, avatar_url),
-            reply:reply_to_id(id, message, sender_id, created_at),
-            status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
-          `);
+                    .select('*');
 
                 if (isGroup) {
                     query = query.eq('group_id', friendId);
@@ -267,9 +262,9 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 const activeChatId = get().activeChatId;
                 if (activeChatId === friendId) {
-                    // Deduplicate by ID, preserving temp messages
-                    const pendingMsgs = get().messages.filter(m => String(m.id).startsWith('temp-'));
-                    const combined = [...pendingMsgs, ...finalMessages];
+                    // Deduplicate by ID, merging local state with newly fetched finalMessages
+                    const existingMsgs = get().messages || [];
+                    const combined = [...existingMsgs, ...finalMessages];
                     const uniqueMessages = Array.from(new Map(combined.map(m => [m.id, m])).values());
                     
                     // Sort by created_at DESC so temp messages stay at bottom (index 0 usually, or keep original sort logic)
@@ -376,12 +371,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                 let query = supabase
                     .from('messages')
-                    .select(`
-            *,
-            sender:profiles!sender_id(id, username, avatar_url),
-            reply:reply_to_id(id, message, sender_id, created_at),
-            status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
-          `);
+                    .select('*');
 
                 if (isGroup) {
                     query = query.eq('group_id', friendId);
@@ -510,7 +500,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                         console.log(`[Store] loadMessagesUpToId: Found target message in SQLite. Loaded ${fetchedMsgs.length} messages.`);
                         const combined = [...fetchedMsgs, ...messages];
                         const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
-                        unique.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                        unique.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
                         set({
                             messages: unique,
@@ -529,12 +519,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 console.log(`[Store] loadMessagesUpToId: Target not in SQLite. Fetching from Supabase starting from ${targetCreatedAt}`);
                 let query = supabase
                     .from('messages')
-                    .select(`
-                        *,
-                        sender:profiles!sender_id(id, username, avatar_url),
-                        reply:reply_to_id(id, message, sender_id, created_at),
-                        status_context:status_id(id, user_id, media_type, media_url, content, encrypted_keys)
-                    `);
+                    .select('*');
 
                 if (isGroup) {
                     query = query.eq('group_id', friendId);
@@ -593,7 +578,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
                     const combined = [...filtered, ...messages];
                     const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
-                    unique.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                    unique.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
                     set({
                         messages: unique,
@@ -653,7 +638,7 @@ export const useChatStore = create<ChatState>((set, get) => {
                 file_name: text.startsWith('[Document]') ? text.split(' | ')[1].trim() : null
             };
 
-            const updatedMessages = scheduledAt ? messages : [...messages, tempMsg];
+            const updatedMessages = scheduledAt ? messages : [tempMsg, ...messages];
             if (!scheduledAt) {
                 set((state) => ({
                     messages: updatedMessages,
