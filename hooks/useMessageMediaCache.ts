@@ -47,7 +47,7 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                 } else {
                     try {
                         const filename = (typeof parsedImageUrl === 'string' ? parsedImageUrl.split('/').pop() : null) || 'media.jpg';
-                        const isE2EE = !!imageMediaKey || parsedImageUrl.endsWith('.e2ee.txt');
+                        const isE2EE = !!imageMediaKey || parsedImageUrl.endsWith('.txt');
                         const localFileName = isE2EE ? filename.replace('.txt', '.jpg').replace('.bin', '.jpg') : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
                         
@@ -85,7 +85,7 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                 } else {
                     try {
                         const filename = (typeof parsedVoiceUrl === 'string' ? parsedVoiceUrl.split('/').pop() : null) || 'voice.m4a';
-                        const isE2EE = !!voiceMediaKey || parsedVoiceUrl.endsWith('.e2ee.txt');
+                        const isE2EE = !!voiceMediaKey || parsedVoiceUrl.endsWith('.txt');
                         const localFileName = isE2EE ? filename.replace('.txt', '.m4a').replace('.bin', '.m4a') : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
 
@@ -119,7 +119,7 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                 } else {
                     try {
                         const filename = (typeof parsedDocumentUrl === 'string' ? parsedDocumentUrl.split('/').pop() : null) || 'doc.bin';
-                        const isE2EE = !!documentMediaKey || parsedDocumentUrl.endsWith('.e2ee.txt');
+                        const isE2EE = !!documentMediaKey || parsedDocumentUrl.endsWith('.txt');
                         let ext = 'bin';
                         if (message?.file_name) {
                             const parts = message.file_name.split('.');

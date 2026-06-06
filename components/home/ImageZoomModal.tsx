@@ -9,7 +9,9 @@ interface ImageZoomModalProps {
     onClose: () => void;
 }
 
-export default function ImageZoomModal({ imageUrl, onClose }: ImageZoomModalProps) {
+const IS_ANDROID = Platform.OS === 'android';
+
+export default React.memo(function ImageZoomModal({ imageUrl, onClose }: ImageZoomModalProps) {
     if (!imageUrl) return null;
 
     return (
@@ -25,8 +27,8 @@ export default function ImageZoomModal({ imageUrl, onClose }: ImageZoomModalProp
                 onPress={onClose}
             >
                 {/* BlurView is GPU-heavy on Android — use plain semi-transparent View instead */}
-                {Platform.OS === 'android' ? (
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.78)' }]} />
+                {IS_ANDROID ? (
+                    <View style={styles.androidBlur} />
                 ) : (
                     <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
                 )}
@@ -35,6 +37,7 @@ export default function ImageZoomModal({ imageUrl, onClose }: ImageZoomModalProp
                         source={{ uri: imageUrl }}
                         style={styles.image}
                         contentFit="cover"
+                        cachePolicy="memory-disk"
                     />
                     <TouchableOpacity
                         onPress={onClose}
@@ -46,13 +49,17 @@ export default function ImageZoomModal({ imageUrl, onClose }: ImageZoomModalProp
             </TouchableOpacity>
         </Modal>
     );
-}
+});
 
 const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    androidBlur: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.78)',
     },
     imageContainer: {
         width: '85%',

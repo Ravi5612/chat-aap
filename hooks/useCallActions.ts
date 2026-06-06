@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useCallLogger } from '@/hooks/useCallLogger';
+import { Audio } from 'expo-av';
 
 export const useCallActions = (
     callState: string,
@@ -29,6 +30,61 @@ export const useCallActions = (
             lastCallInfo.current = { state: callState, friend, type: callType, isGroup };
         }
     }, [callState, friend?.id, callType, isGroup]);
+
+    // Handle Ringing Sounds
+    const soundRef = useRef<Audio.Sound | null>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const playSound = async () => {
+            if (soundRef.current) {
+                await soundRef.current.unloadAsync();
+                soundRef.current = null;
+            }
+            try {
+                let source = null;
+                if (callState === 'outgoing' || callState === 'ringing') {
+                    source = require('@/assets/sounds/ringing.mp3');
+                } else if (callState === 'incoming') {
+                    source = require('@/assets/sounds/ringtone.mp3');
+                }
+
+                if (source && isMounted) {
+                    const { sound } = await Audio.Sound.createAsync(source, { isLooping: true });
+                    soundRef.current = sound;
+                    if (isMounted) {
+                        await sound.playAsync();
+                    } else {
+                        await sound.unloadAsync();
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to play call sound', e);
+            }
+        };
+
+        if (callState === 'outgoing' || callState === 'ringing' || callState === 'incoming') {
+            playSound();
+        } else {
+            if (soundRef.current) {
+                soundRef.current.stopAsync().then(() => {
+                    soundRef.current?.unloadAsync();
+                    soundRef.current = null;
+                });
+            }
+        }
+
+        return () => {
+            isMounted = false;
+            if (soundRef.current) {
+                soundRef.current.stopAsync().then(() => {
+                    soundRef.current?.unloadAsync();
+                    soundRef.current = null;
+                });
+            }
+        };
+    }, [callState]);
 
     // Save call log on end
     useEffect(() => {

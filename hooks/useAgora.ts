@@ -137,6 +137,7 @@ export const useAgora = ({
 
             rtcEngine.registerEventHandler(eventHandler);
             rtcEngine.enableAudio();
+            rtcEngine.setEnableSpeakerphone(callTypeRef.current === 'video'); // Audio routing fix
             if (callTypeRef.current === 'video') {
                 rtcEngine.enableVideo();
                 rtcEngine.startPreview();

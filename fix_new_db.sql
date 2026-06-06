@@ -85,7 +85,18 @@ CREATE TABLE public.status (
 );
 
 ALTER TABLE public.status ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.status FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view friends status" ON public.status;
+CREATE POLICY "Users can view friends status" ON public.status FOR SELECT USING (
+  auth.uid() = user_id OR 
+  auth.uid() IN (SELECT friend_id FROM public.friendships WHERE user_id = public.status.user_id) OR
+  auth.uid() IN (SELECT user_id FROM public.friendships WHERE friend_id = public.status.user_id)
+);
+DROP POLICY IF EXISTS "Users can insert own status" ON public.status;
+CREATE POLICY "Users can insert own status" ON public.status FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update own status" ON public.status;
+CREATE POLICY "Users can update own status" ON public.status FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can delete own status" ON public.status;
+CREATE POLICY "Users can delete own status" ON public.status FOR DELETE USING (auth.uid() = user_id);
 
 
 -- Fix for blocked_users table
@@ -100,7 +111,12 @@ CREATE TABLE public.blocked_users (
 );
 
 ALTER TABLE public.blocked_users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.blocked_users FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can see who they blocked" ON public.blocked_users;
+CREATE POLICY "Users can see who they blocked" ON public.blocked_users FOR SELECT USING (auth.uid() = blocker_id OR auth.uid() = blocked_id);
+DROP POLICY IF EXISTS "Users can block others" ON public.blocked_users;
+CREATE POLICY "Users can block others" ON public.blocked_users FOR INSERT WITH CHECK (auth.uid() = blocker_id);
+DROP POLICY IF EXISTS "Users can unblock" ON public.blocked_users;
+CREATE POLICY "Users can unblock" ON public.blocked_users FOR DELETE USING (auth.uid() = blocker_id);
 
 
 -- Fix for groups table
@@ -112,11 +128,21 @@ CREATE TABLE public.groups (
   description text,
   avatar_url text,
   created_by uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+  key_epoch int4 DEFAULT 1,
   created_at timestamptz DEFAULT now()
 );
 
 ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.groups FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Group members can view groups" ON public.groups;
+CREATE POLICY "Group members can view groups" ON public.groups FOR SELECT USING (
+  auth.uid() IN (SELECT user_id FROM public.group_members WHERE group_id = public.groups.id)
+);
+DROP POLICY IF EXISTS "Users can create groups" ON public.groups;
+CREATE POLICY "Users can create groups" ON public.groups FOR INSERT WITH CHECK (auth.uid() = created_by);
+DROP POLICY IF EXISTS "Group admins can update groups" ON public.groups;
+CREATE POLICY "Group admins can update groups" ON public.groups FOR UPDATE USING (
+  auth.uid() IN (SELECT user_id FROM public.group_members WHERE group_id = public.groups.id AND role = 'admin')
+);
 
 
 -- Fix for call_logs table
@@ -134,7 +160,10 @@ CREATE TABLE public.call_logs (
 );
 
 ALTER TABLE public.call_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.call_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can see their call logs" ON public.call_logs;
+CREATE POLICY "Users can see their call logs" ON public.call_logs FOR SELECT USING (auth.uid() = caller_id OR auth.uid() = receiver_id);
+DROP POLICY IF EXISTS "Users can insert call logs" ON public.call_logs;
+CREATE POLICY "Users can insert call logs" ON public.call_logs FOR INSERT WITH CHECK (auth.uid() = caller_id);
 
 
 -- Fix for chat_wallpapers table
@@ -150,7 +179,8 @@ CREATE TABLE public.chat_wallpapers (
 );
 
 ALTER TABLE public.chat_wallpapers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.chat_wallpapers FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can manage own wallpapers" ON public.chat_wallpapers;
+CREATE POLICY "Users can manage own wallpapers" ON public.chat_wallpapers FOR ALL USING (auth.uid() = user_id);
 
 
 -- Fix for conversations table
@@ -164,7 +194,10 @@ CREATE TABLE public.conversations (
 );
 
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.conversations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Conversation members access" ON public.conversations;
+CREATE POLICY "Conversation members access" ON public.conversations FOR ALL USING (
+  auth.uid() IN (SELECT user_id FROM public.conversation_members WHERE conversation_id = id)
+);
 
 
 -- Fix for conversation_members table
@@ -179,7 +212,11 @@ CREATE TABLE public.conversation_members (
 );
 
 ALTER TABLE public.conversation_members ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.conversation_members FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Members access" ON public.conversation_members;
+CREATE POLICY "Members access" ON public.conversation_members FOR ALL USING (
+  auth.uid() = user_id OR
+  auth.uid() IN (SELECT user_id FROM public.conversation_members cm WHERE cm.conversation_id = conversation_id)
+);
 
 
 -- Fix for friend_requests table
@@ -195,7 +232,14 @@ CREATE TABLE public.friend_requests (
 );
 
 ALTER TABLE public.friend_requests ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.friend_requests FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view their friend requests" ON public.friend_requests;
+CREATE POLICY "Users can view their friend requests" ON public.friend_requests FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+DROP POLICY IF EXISTS "Users can send friend requests" ON public.friend_requests;
+CREATE POLICY "Users can send friend requests" ON public.friend_requests FOR INSERT WITH CHECK (auth.uid() = sender_id);
+DROP POLICY IF EXISTS "Users can manage their friend requests" ON public.friend_requests;
+CREATE POLICY "Users can manage their friend requests" ON public.friend_requests FOR UPDATE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+DROP POLICY IF EXISTS "Users can delete their friend requests" ON public.friend_requests;
+CREATE POLICY "Users can delete their friend requests" ON public.friend_requests FOR DELETE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
 
 -- Fix for group_members table
@@ -220,7 +264,24 @@ REFERENCES public.groups (id)
 ON DELETE CASCADE;
 
 ALTER TABLE public.group_members ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.group_members FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Group members can see other members" ON public.group_members;
+CREATE POLICY "Group members can see other members" ON public.group_members FOR SELECT USING (
+  auth.uid() IN (SELECT user_id FROM public.group_members member_check WHERE member_check.group_id = public.group_members.group_id)
+);
+DROP POLICY IF EXISTS "Group admins can insert members" ON public.group_members;
+CREATE POLICY "Group admins can insert members" ON public.group_members FOR INSERT WITH CHECK (
+  auth.uid() = user_id OR 
+  auth.uid() IN (SELECT user_id FROM public.group_members admin_check WHERE admin_check.group_id = group_id AND admin_check.role = 'admin')
+);
+DROP POLICY IF EXISTS "Group admins can update members" ON public.group_members;
+CREATE POLICY "Group admins can update members" ON public.group_members FOR UPDATE USING (
+  auth.uid() IN (SELECT user_id FROM public.group_members admin_check WHERE admin_check.group_id = group_id AND admin_check.role = 'admin')
+);
+DROP POLICY IF EXISTS "Group admins can delete members or members leave" ON public.group_members;
+CREATE POLICY "Group admins can delete members or members leave" ON public.group_members FOR DELETE USING (
+  auth.uid() = user_id OR 
+  auth.uid() IN (SELECT user_id FROM public.group_members admin_check WHERE admin_check.group_id = group_id AND admin_check.role = 'admin')
+);
 
 
 -- Fix for ledger table
@@ -238,7 +299,8 @@ CREATE TABLE public.ledger (
 );
 
 ALTER TABLE public.ledger ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.ledger FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view and manage their ledger" ON public.ledger;
+CREATE POLICY "Users can view and manage their ledger" ON public.ledger FOR ALL USING (auth.uid() = user_id OR auth.uid() = friend_id);
 
 
 -- Fix for messages table
@@ -265,11 +327,43 @@ CREATE TABLE public.messages (
   group_id uuid REFERENCES public.groups(id) ON DELETE CASCADE,
   conversation_id uuid REFERENCES public.conversations(id) ON DELETE CASCADE,
   reply_to_message_id uuid REFERENCES public.messages(id) ON DELETE CASCADE,
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  key_version int4 DEFAULT 1
 );
 
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.messages FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Security Fix: Restrict INSERT to the actual sender
+CREATE POLICY "Users can insert own messages" ON public.messages 
+FOR INSERT 
+WITH CHECK (auth.uid() = sender_id);
+
+-- Security Fix: Restrict SELECT to involved users
+CREATE POLICY "Users can view relevant messages" ON public.messages 
+FOR SELECT 
+USING (
+  auth.uid() = sender_id OR 
+  auth.uid() = receiver_id OR 
+  (group_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.group_members WHERE group_members.group_id = messages.group_id AND group_members.user_id = auth.uid()
+  ))
+);
+
+-- Security Fix: Restrict UPDATE to involved users
+CREATE POLICY "Users can update relevant messages" ON public.messages 
+FOR UPDATE 
+USING (
+  auth.uid() = sender_id OR 
+  auth.uid() = receiver_id OR
+  (group_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.group_members WHERE group_members.group_id = messages.group_id AND group_members.user_id = auth.uid()
+  ))
+);
+
+-- Security Fix: Restrict DELETE to the sender
+CREATE POLICY "Users can delete own messages" ON public.messages 
+FOR DELETE 
+USING (auth.uid() = sender_id);
 
 
 -- Fix for message_reactions table
@@ -284,7 +378,12 @@ CREATE TABLE public.message_reactions (
 );
 
 ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.message_reactions FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view message reactions" ON public.message_reactions;
+CREATE POLICY "Users can view message reactions" ON public.message_reactions FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.messages m WHERE m.id = message_id AND (m.sender_id = auth.uid() OR m.receiver_id = auth.uid() OR (m.group_id IS NOT NULL AND EXISTS (SELECT 1 FROM public.group_members gm WHERE gm.group_id = m.group_id AND gm.user_id = auth.uid()))))
+);
+DROP POLICY IF EXISTS "Users can manage their own reactions" ON public.message_reactions;
+CREATE POLICY "Users can manage their own reactions" ON public.message_reactions FOR ALL USING (auth.uid() = user_id);
 
 
 -- Fix for message_reads table
@@ -298,7 +397,8 @@ CREATE TABLE public.message_reads (
 );
 
 ALTER TABLE public.message_reads ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.message_reads FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can manage their own reads" ON public.message_reads;
+CREATE POLICY "Users can manage their own reads" ON public.message_reads FOR ALL USING (auth.uid() = user_id);
 
 
 -- Fix for notifications table
@@ -315,7 +415,8 @@ CREATE TABLE public.notifications (
 );
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.notifications FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can manage their own notifications" ON public.notifications;
+CREATE POLICY "Users can manage their own notifications" ON public.notifications FOR ALL USING (auth.uid() = user_id);
 
 
 -- Fix for status_views table
@@ -329,7 +430,13 @@ CREATE TABLE public.status_views (
 );
 
 ALTER TABLE public.status_views ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all actions for authenticated users" ON public.status_views FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view status views" ON public.status_views;
+CREATE POLICY "Users can view status views" ON public.status_views FOR SELECT USING (
+  auth.uid() = viewer_id OR
+  EXISTS (SELECT 1 FROM public.status s WHERE s.id = status_id AND s.user_id = auth.uid())
+);
+DROP POLICY IF EXISTS "Users can insert status views" ON public.status_views;
+CREATE POLICY "Users can insert status views" ON public.status_views FOR INSERT WITH CHECK (auth.uid() = viewer_id);
 
 
 -- ==========================================
@@ -450,5 +557,84 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZON
 ALTER TABLE friendships ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE;
 ALTER TABLE group_members ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE;
 
+-- ==========================================
+-- PUSH NOTIFICATION IDEMPOTENCY
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.push_logs (
+  message_id uuid PRIMARY KEY REFERENCES public.messages(id) ON DELETE CASCADE,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  status text DEFAULT 'processing' CHECK (status IN ('processing', 'sent', 'failed', 'permanent_failed')),
+  attempt_count int DEFAULT 1,
+  last_error text
+);
+
+ALTER TABLE public.push_logs ENABLE ROW LEVEL SECURITY;
+-- Secure table to be accessible ONLY via the Service Role (Edge Functions)
+REVOKE ALL ON public.push_logs FROM authenticated;
+REVOKE ALL ON public.push_logs FROM anon;
+
+-- ==========================================
+-- E2EE SENDER KEYS (GROUP ENCRYPTION)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.group_sender_keys (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  group_id uuid REFERENCES public.groups(id) ON DELETE CASCADE,
+  sender_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+  receiver_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+  encrypted_key text NOT NULL,
+  key_version int4 DEFAULT 1,
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(group_id, sender_id, receiver_id, key_version)
+);
+
+ALTER TABLE public.group_sender_keys ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Sender can insert keys for group members" ON public.group_sender_keys 
+FOR INSERT 
+WITH CHECK (
+  auth.uid() = sender_id 
+  AND EXISTS (SELECT 1 FROM public.group_members WHERE group_id = group_sender_keys.group_id AND user_id = auth.uid())
+  AND EXISTS (SELECT 1 FROM public.group_members WHERE group_id = group_sender_keys.group_id AND user_id = receiver_id)
+);
+
+CREATE POLICY "Receiver and Sender can view active keys" ON public.group_sender_keys 
+FOR SELECT 
+USING (
+  (auth.uid() = receiver_id OR auth.uid() = sender_id)
+  AND EXISTS (SELECT 1 FROM public.group_members WHERE group_id = group_sender_keys.group_id AND user_id = auth.uid())
+);
+
+CREATE POLICY "Sender can deactivate old keys" ON public.group_sender_keys 
+FOR UPDATE 
+USING (
+  auth.uid() = sender_id
+  AND EXISTS (SELECT 1 FROM public.group_members WHERE group_id = group_sender_keys.group_id AND user_id = auth.uid())
+);
+
 -- Reload schema cache
 NOTIFY pgrst, 'reload schema';
+
+-- ==========================================
+-- LINKED DEVICES & REMOTE LOGOUT
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.user_devices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    device_id TEXT NOT NULL,
+    device_name TEXT,
+    os_version TEXT,
+    last_location TEXT,
+    last_active TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    UNIQUE(user_id, device_id)
+);
+
+ALTER TABLE public.user_devices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own devices" ON public.user_devices FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own devices" ON public.user_devices FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own devices" ON public.user_devices FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own devices" ON public.user_devices FOR DELETE TO authenticated USING (auth.uid() = user_id);

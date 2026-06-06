@@ -8,12 +8,22 @@ interface ScheduleMessageModalProps {
     onSchedule: (date: Date) => void;
 }
 
-export default function ScheduleMessageModal({ visible, onClose, onSchedule }: ScheduleMessageModalProps) {
-    const [selectedDay, setSelectedDay] = useState(0); // 0 = Today, 1 = Tomorrow
-    const [selectedHour, setSelectedHour] = useState(new Date().getHours() + 1);
-    const [selectedMinute, setSelectedMinute] = useState(0);
+const HOURS_DATA = Array.from({length: 24}, (_, i) => i);
+const MINUTES_DATA = [0, 15, 30, 45];
+const DAYS_DATA = ['Today', 'Tomorrow'];
 
-    const handleSchedule = () => {
+const formatHour = (h: number) => {
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const formatted = h % 12 || 12;
+    return `${formatted} ${ampm}`;
+};
+
+export default React.memo(function ScheduleMessageModal({ visible, onClose, onSchedule }: ScheduleMessageModalProps) {
+    const [selectedDay, setSelectedDay] = React.useState(0); // 0 = Today, 1 = Tomorrow
+    const [selectedHour, setSelectedHour] = React.useState(new Date().getHours() + 1);
+    const [selectedMinute, setSelectedMinute] = React.useState(0);
+
+    const handleSchedule = React.useCallback(() => {
         const d = new Date();
         d.setDate(d.getDate() + selectedDay);
         d.setHours(selectedHour, selectedMinute, 0, 0);
@@ -25,13 +35,29 @@ export default function ScheduleMessageModal({ visible, onClose, onSchedule }: S
         }
         onSchedule(d);
         onClose();
-    };
+    }, [selectedDay, selectedHour, selectedMinute, onSchedule, onClose]);
 
-    const formatHour = (h: number) => {
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const formatted = h % 12 || 12;
-        return `${formatted} ${ampm}`;
-    };
+    const renderHourItem = React.useCallback(({item}: any) => (
+        <TouchableOpacity
+            style={[styles.timeBtn, selectedHour === item && styles.timeBtnActive]}
+            onPress={() => setSelectedHour(item)}
+        >
+            <Text style={[styles.timeText, selectedHour === item && styles.timeTextActive]}>
+                {formatHour(item)}
+            </Text>
+        </TouchableOpacity>
+    ), [selectedHour]);
+
+    const renderMinuteItem = React.useCallback(({item}: any) => (
+        <TouchableOpacity
+            style={[styles.timeBtn, selectedMinute === item && styles.timeBtnActive]}
+            onPress={() => setSelectedMinute(item)}
+        >
+            <Text style={[styles.timeText, selectedMinute === item && styles.timeTextActive]}>
+                {item.toString().padStart(2, '0')}
+            </Text>
+        </TouchableOpacity>
+    ), [selectedMinute]);
 
     return (
         <Modal visible={visible} transparent animationType="fade">
@@ -46,7 +72,7 @@ export default function ScheduleMessageModal({ visible, onClose, onSchedule }: S
 
                     <Text style={styles.subtitle}>Select Day</Text>
                     <View style={styles.row}>
-                        {['Today', 'Tomorrow'].map((day, index) => (
+                        {DAYS_DATA.map((day, index) => (
                             <TouchableOpacity
                                 key={day}
                                 style={[styles.choiceBtn, selectedDay === index && styles.choiceActive]}
@@ -62,18 +88,9 @@ export default function ScheduleMessageModal({ visible, onClose, onSchedule }: S
                         <FlatList
                             horizontal
                             showsHorizontalScrollIndicator={false}
-                            data={Array.from({length: 24}, (_, i) => i)}
+                            data={HOURS_DATA}
                             keyExtractor={item => item.toString()}
-                            renderItem={({item}) => (
-                                <TouchableOpacity
-                                    style={[styles.timeBtn, selectedHour === item && styles.timeBtnActive]}
-                                    onPress={() => setSelectedHour(item)}
-                                >
-                                    <Text style={[styles.timeText, selectedHour === item && styles.timeTextActive]}>
-                                        {formatHour(item)}
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
+                            renderItem={renderHourItem}
                         />
                     </View>
 
@@ -82,18 +99,9 @@ export default function ScheduleMessageModal({ visible, onClose, onSchedule }: S
                         <FlatList
                             horizontal
                             showsHorizontalScrollIndicator={false}
-                            data={[0, 15, 30, 45]}
+                            data={MINUTES_DATA}
                             keyExtractor={item => item.toString()}
-                            renderItem={({item}) => (
-                                <TouchableOpacity
-                                    style={[styles.timeBtn, selectedMinute === item && styles.timeBtnActive]}
-                                    onPress={() => setSelectedMinute(item)}
-                                >
-                                    <Text style={[styles.timeText, selectedMinute === item && styles.timeTextActive]}>
-                                        {item.toString().padStart(2, '0')}
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
+                            renderItem={renderMinuteItem}
                         />
                     </View>
 
@@ -104,7 +112,7 @@ export default function ScheduleMessageModal({ visible, onClose, onSchedule }: S
             </View>
         </Modal>
     );
-}
+});
 
 const styles = StyleSheet.create({
     overlay: {

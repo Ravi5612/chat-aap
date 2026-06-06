@@ -1,11 +1,11 @@
-import React, { useRef, memo, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Animated, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { memo, useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/useAuthStore';
 interface FriendListItemProps {
     friend: any;
     onClick: (friend: any) => void;
@@ -13,24 +13,24 @@ interface FriendListItemProps {
     isOnline?: boolean;
     onViewUserStatus?: (friend: any) => void;
     onImageClick?: (friend: any) => void;
+    currentUserId?: string;
 }
 
-const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick }: FriendListItemProps) {
+const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick, onLongPress, isOnline, onViewUserStatus, onImageClick, currentUserId }: FriendListItemProps) {
     const router = useRouter();
-    const currentUser = useAuthStore(state => state.user);
     const [isSending, setIsSending] = useState(false);
     const [requestSent, setRequestSent] = useState(false);
 
     const handleAddFriend = useCallback(async (e: any) => {
         e.stopPropagation();
-        if (!currentUser || requestSent || isSending) return;
+        if (!currentUserId || requestSent || isSending) return;
         
         setIsSending(true);
         try {
             const { error } = await supabase
                 .from('friend_requests')
                 .insert([{
-                    sender_id: currentUser.id,
+                    sender_id: currentUserId,
                     receiver_id: friend.id,
                     status: 'pending'
                 }]);
@@ -43,11 +43,11 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                 throw error;
             }
 
-            const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', currentUser.id).single();
+            const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', currentUserId).single();
 
             await supabase.from('notifications').insert([{
                 user_id: friend.id,
-                sender_id: currentUser.id,
+                sender_id: currentUserId,
                 type: 'friend_request',
                 message: `${myProfile?.username || 'Someone'} sent you a friend request.`,
                 is_read: false
@@ -60,33 +60,33 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
         } finally {
             setIsSending(false);
         }
-    }, [currentUser, requestSent, isSending, friend.id]);
+    }, [currentUserId, requestSent, isSending, friend.id]);
 
     const hasStatus = friend.statusCount > 0;
     const ringColor = hasStatus
         ? (friend.allStatusesViewed ? '#D1D5DB' : '#10B981')
         : 'transparent';
 
-    // Instant press animation — user immediately sees tap registered
-    const scaleAnim = useRef(new Animated.Value(1)).current;
+    // Instant press animation via Reanimated purely on UI thread
+    const scaleAnim = useSharedValue(1);
 
     const handlePressIn = useCallback(() => {
-        Animated.spring(scaleAnim, {
-            toValue: 0.965,
-            useNativeDriver: true,
-            speed: 60,
-            bounciness: 0,
-        }).start();
+        scaleAnim.value = withSpring(0.965, {
+            damping: 15,
+            stiffness: 300,
+        });
     }, [scaleAnim]);
 
     const handlePressOut = useCallback(() => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            useNativeDriver: true,
-            speed: 25,
-            bounciness: 5,
-        }).start();
+        scaleAnim.value = withSpring(1, {
+            damping: 10,
+            stiffness: 200,
+        });
     }, [scaleAnim]);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scaleAnim.value }],
+    }));
 
     const handleItemPress = useCallback(() => {
         onClick(friend);
@@ -108,7 +108,7 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
     }, [hasStatus, onViewUserStatus, onImageClick, friend]);
 
     return (
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Animated.View style={animatedStyle}>
             <TouchableOpacity
                 onPress={handleItemPress}
                 onLongPress={handleItemLongPress}

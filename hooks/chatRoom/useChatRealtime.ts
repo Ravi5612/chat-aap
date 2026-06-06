@@ -38,46 +38,36 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                 }
                 
                 const currentKey = useChatStore.getState().chatKey;
-                if (!currentKey) {
+                if (!currentKey && !isGroup) {
                     loadMessages(friendId, currentUser, isGroup);
                     return;
                 }
 
                 try {
-                    let decryptedText = newMsg.message;
-                    if (newMsg.message && typeof newMsg.message === 'string' && newMsg.message.trim().startsWith('{')) {
-                        decryptedText = await decryptText(newMsg.message, currentKey);
-                    }
-
-                    let decryptedFileUrl = newMsg.file_url;
-                    if (newMsg.file_url && newMsg.file_url.trim().startsWith('{')) {
-                        decryptedFileUrl = await decryptText(newMsg.file_url, currentKey);
-                    }
-
                     let decryptedReply = null;
                     if (newMsg.reply_to_id) {
                         const { data: replyData } = await supabase
                             .from('messages')
-                            .select('id, message, sender_id, created_at')
+                            .select('id, message, sender_id, created_at, group_id, key_version')
                             .eq('id', newMsg.reply_to_id)
                             .single();
                         
                         if (replyData) {
-                            try {
-                                const replyText = await decryptText(replyData.message, currentKey);
-                                decryptedReply = { ...replyData, message: replyText };
-                            } catch (e) {
-                                decryptedReply = replyData;
-                            }
+                            decryptedReply = replyData;
                         }
                     }
 
+                    // Import decryptMessageBatch dynamically to avoid circular dependencies if any, 
+                    // or just import at the top of the file. Assuming it's imported at the top.
+                    const { decryptMessageBatch } = require('@/utils/chatHelpers');
+                    
+                    const rawMsg = { ...newMsg, reply: decryptedReply };
+                    const [finalDecryptedMsg] = await decryptMessageBatch([rawMsg], currentKey, currentUser.id);
+
                     const finalMsg: any = { 
-                        ...newMsg, 
-                        message: decryptedText,
-                        file_url: decryptedFileUrl,
-                        reply: decryptedReply,
+                        ...finalDecryptedMsg,
                         sender: { id: newMsg.sender_id } 
+
                     };
 
                     useChatStore.setState((state) => {

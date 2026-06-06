@@ -41,22 +41,22 @@ export const useMessageList = (messages: any[], currentUser: any) => {
     // Date-grouped messages for inverted FlatList (DESC order: newest at index 0)
     const groupedMessages = useMemo(() => {
         const items: any[] = [];
-        const sortedMessages = [...messages]; // Keep DESC order for inverted list
-        sortedMessages.forEach((msg, index) => {
-            if (!msg || !msg.created_at) return;
+        let nextDateStr = messages.length > 0 && messages[0]?.created_at ? new Date(messages[0].created_at).toDateString() : '';
+        
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+            if (!msg || !msg.created_at) continue;
+            
             items.push({ ...msg, type: 'message' });
             
-            // For DESC order, the next item in the array is OLDER.
-            // We want to show a date separator ABOVE the oldest message of a given day.
-            // In an inverted list, "ABOVE" visually means a HIGHER index in the array.
-            // So we check if the NEXT message (older) has a DIFFERENT date.
-            const date = new Date(msg.created_at).toDateString();
-            const nextDate = sortedMessages[index + 1]
-                ? new Date(sortedMessages[index + 1].created_at).toDateString() : '';
-            if (date !== nextDate) {
-                items.push({ id: `date-${date}`, type: 'date', date });
+            const currentDateStr = nextDateStr;
+            const nextMsg = messages[i + 1];
+            nextDateStr = nextMsg && nextMsg.created_at ? new Date(nextMsg.created_at).toDateString() : '';
+            
+            if (currentDateStr !== nextDateStr) {
+                items.push({ id: `date-${currentDateStr}`, type: 'date', date: currentDateStr });
             }
-        });
+        }
         return items;
     }, [messages]);
 
@@ -86,12 +86,20 @@ export const useMessageList = (messages: any[], currentUser: any) => {
                 const latest = useChatStore.getState().messages;
                 const sorted = [...latest].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                 const rebuilt: any[] = [];
-                sorted.forEach((msg, idx) => {
+                let nextDateFallback = sorted.length > 0 && sorted[0]?.created_at ? new Date(sorted[0].created_at).toDateString() : '';
+                
+                for (let idx = 0; idx < sorted.length; idx++) {
+                    const msg = sorted[idx];
                     rebuilt.push(msg);
-                    const date = new Date(msg.created_at).toDateString();
-                    const nextDate = sorted[idx + 1] ? new Date(sorted[idx + 1].created_at).toDateString() : '';
-                    if (date !== nextDate) rebuilt.push({ id: `date-${date}`, type: 'date', date });
-                });
+                    
+                    const currentDateStr = nextDateFallback;
+                    const nextMsg = sorted[idx + 1];
+                    nextDateFallback = nextMsg && nextMsg.created_at ? new Date(nextMsg.created_at).toDateString() : '';
+                    
+                    if (currentDateStr !== nextDateFallback) {
+                        rebuilt.push({ id: `date-${currentDateStr}`, type: 'date', date: currentDateStr });
+                    }
+                }
                 const newIndex = rebuilt.findIndex(m => m.id === replyMsg.id);
                 if (newIndex !== -1) {
                     flatListRef.current?.scrollToIndex({ index: newIndex, animated: true, viewPosition: 0.5 });

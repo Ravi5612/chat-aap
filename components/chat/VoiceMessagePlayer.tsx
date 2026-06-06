@@ -8,12 +8,35 @@ interface VoiceMessagePlayerProps {
     isCurrentUser: boolean;
 }
 
-export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessagePlayerProps) {
+// Symmetrical, premium voice note soundwave levels
+const WAVE_HEIGHTS = [4, 8, 14, 20, 16, 10, 14, 22, 28, 20, 12, 18, 24, 18, 12, 8, 14, 20, 16, 10, 6, 4];
+
+const formatTime = (millis: number) => {
+    const totalSeconds = millis / 1000;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+export default React.memo(function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessagePlayerProps) {
     const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [position, setPosition] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+
+    const onPlaybackStatusUpdate = React.useCallback((status: any) => {
+        if (status.isLoaded) {
+            setDuration(status.durationMillis || 0);
+            setPosition(status.positionMillis || 0);
+            setIsPlaying(status.isPlaying);
+            
+            if (status.didJustFinish) {
+                setIsPlaying(false);
+                setPosition(status.durationMillis || 0);
+            }
+        }
+    }, []);
 
     // On mount, load the sound and keep it ready for instant playback
     useEffect(() => {
@@ -51,9 +74,9 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
                 sound.unloadAsync();
             }
         };
-    }, [uri]);
+    }, [uri, onPlaybackStatusUpdate]); // sound is not a dependency here because it's set inside
 
-    const playPause = async () => {
+    const playPause = React.useCallback(async () => {
         if (isLoading || !sound) return;
 
         try {
@@ -68,32 +91,9 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
         } catch (error) {
             console.error('[VOICE_PLAYER] Play/Pause error:', error);
         }
-    };
-
-    const onPlaybackStatusUpdate = (status: any) => {
-        if (status.isLoaded) {
-            setDuration(status.durationMillis || 0);
-            setPosition(status.positionMillis || 0);
-            setIsPlaying(status.isPlaying);
-            
-            if (status.didJustFinish) {
-                setIsPlaying(false);
-                setPosition(status.durationMillis || 0);
-            }
-        }
-    };
-
-    const formatTime = (millis: number) => {
-        const totalSeconds = millis / 1000;
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = Math.floor(totalSeconds % 60);
-        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    };
+    }, [isLoading, sound, isPlaying, position, duration]);
 
     const progress = duration > 0 ? (position / duration) * 100 : 0;
-
-    // Symmetrical, premium voice note soundwave levels
-    const waveHeights = [4, 8, 14, 20, 16, 10, 14, 22, 28, 20, 12, 18, 24, 18, 12, 8, 14, 20, 16, 10, 6, 4];
 
     return (
         <View style={styles.container}>
@@ -121,8 +121,8 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
             <View style={styles.rightContent}>
                 {/* Waveform */}
                 <View style={styles.waveContainer}>
-                    {waveHeights.map((h, i) => {
-                        const barProgress = (i / waveHeights.length) * 100;
+                    {WAVE_HEIGHTS.map((h, i) => {
+                        const barProgress = (i / WAVE_HEIGHTS.length) * 100;
                         const isActive = progress >= barProgress;
                         
                         let bgColor = 'rgba(0,0,0,0.2)';
@@ -158,7 +158,7 @@ export default function VoiceMessagePlayer({ uri, isCurrentUser }: VoiceMessageP
             </View>
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {

@@ -76,7 +76,7 @@ export default function NinjaVaultScreen() {
                         </View>
                         <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 8 }}>Hardcore Stealth</Text>
                         <Text style={{ textAlign: 'center', color: '#6B7280', fontSize: 15, lineHeight: 22 }}>
-                            Chats added to the Ninja Vault are completely invisible. There are no notifications or hints. To open the vault, search your exact passcode in the home screen.
+                            Chats added to the Ninja Vault are completely invisible. There are no notifications or hints. To open the vault, search your exact passcode in the home screen. The vault is secured with Biometric Authentication and automatically locks when you close the app.
                         </Text>
                     </View>
 

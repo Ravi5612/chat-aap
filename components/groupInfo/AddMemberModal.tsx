@@ -12,7 +12,30 @@ interface AddMemberModalProps {
     actionLoading: boolean;
 }
 
-export default function AddMemberModal({ visible, onClose, members, onAddMember, actionLoading }: AddMemberModalProps) {
+const SearchResultCard = React.memo(({ item, onAdd, disabled }: { item: any, onAdd: (id: string) => void, disabled: boolean }) => {
+    return (
+        <TouchableOpacity
+            style={styles.searchResultRow}
+            onPress={() => onAdd(item.id)}
+            disabled={disabled}
+        >
+            <Image
+                source={{
+                    uri: item.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.username || 'U')}&backgroundColor=F68537`
+                }}
+                style={styles.searchAvatar}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+            />
+            <Text style={styles.searchName}>{item.username}</Text>
+            <View style={styles.addMemberBtn}>
+                <Ionicons name="add-circle" size={28} color="#F68537" />
+            </View>
+        </TouchableOpacity>
+    );
+});
+
+export default React.memo(function AddMemberModal({ visible, onClose, members, onAddMember, actionLoading }: AddMemberModalProps) {
     const {
         searchQuery,
         searchResults,
@@ -21,10 +44,22 @@ export default function AddMemberModal({ visible, onClose, members, onAddMember,
         clearSearch
     } = useGroupSearch(members);
 
-    const handleClose = () => {
+    const handleClose = React.useCallback(() => {
         clearSearch();
         onClose();
-    };
+    }, [clearSearch, onClose]);
+
+    const handleAdd = React.useCallback((id: string) => {
+        onAddMember(id, handleClose);
+    }, [onAddMember, handleClose]);
+
+    const renderItem = React.useCallback(({ item }: { item: any }) => (
+        <SearchResultCard 
+            item={item} 
+            onAdd={handleAdd} 
+            disabled={actionLoading} 
+        />
+    ), [handleAdd, actionLoading]);
 
     return (
         <Modal
@@ -65,31 +100,13 @@ export default function AddMemberModal({ visible, onClose, members, onAddMember,
                                 <Text style={styles.emptyText}>No users found</Text>
                             ) : null
                         }
-                        renderItem={({ item }) => (
-                            <TouchableOpacity
-                                style={styles.searchResultRow}
-                                onPress={() => onAddMember(item.id, handleClose)}
-                                disabled={actionLoading}
-                            >
-                                <Image
-                                    source={{
-                                        uri: item.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.username || 'U')}&backgroundColor=F68537`
-                                    }}
-                                    style={styles.searchAvatar}
-                                    contentFit="cover"
-                                />
-                                <Text style={styles.searchName}>{item.username}</Text>
-                                <View style={styles.addMemberBtn}>
-                                    <Ionicons name="add-circle" size={28} color="#F68537" />
-                                </View>
-                            </TouchableOpacity>
-                        )}
+                        renderItem={renderItem}
                     />
                 </View>
             </View>
         </Modal>
     );
-}
+});
 
 const styles = StyleSheet.create({
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },

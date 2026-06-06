@@ -3,8 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 // System event message (e.g. "User joined the group")
-export function SystemMessage({ message, createdAt }: { message: string; createdAt: string }) {
-    const time = new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+export const SystemMessage = React.memo(function SystemMessage({ message, createdAt }: { message: string; createdAt: string }) {
+    const time = React.useMemo(() => new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), [createdAt]);
     return (
         <View style={styles.systemContainer}>
             <View style={styles.systemBubble}>
@@ -13,30 +13,31 @@ export function SystemMessage({ message, createdAt }: { message: string; created
             </View>
         </View>
     );
-}
+});
 
 // Date separator between message groups
-export function DateSeparator({ date }: { date: string }) {
-    const getDayLabel = (dateStr: string) => {
-        const d = new Date(dateStr);
+export const DateSeparator = React.memo(function DateSeparator({ date }: { date: string }) {
+    const dayLabel = React.useMemo(() => {
+        const d = new Date(date);
         const today = new Date();
         const yesterday = new Date();
         yesterday.setDate(today.getDate() - 1);
         if (d.toDateString() === today.toDateString()) return 'TODAY';
         if (d.toDateString() === yesterday.toDateString()) return 'YESTERDAY';
         return d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
-    };
+    }, [date]);
+
     return (
         <View style={styles.dateSeparatorContainer}>
             <View style={styles.dateSeparatorBubble}>
-                <Text style={styles.dateSeparatorText}>{getDayLabel(date)}</Text>
+                <Text style={styles.dateSeparatorText}>{dayLabel}</Text>
             </View>
         </View>
     );
-}
+});
 
 // Floating scroll-to-bottom button with unread badge
-export function ScrollToBottomButton({ onPress, unreadCount }: { onPress: () => void; unreadCount: number }) {
+export const ScrollToBottomButton = React.memo(function ScrollToBottomButton({ onPress, unreadCount }: { onPress: () => void; unreadCount: number }) {
     return (
         <View style={styles.scrollBtnWrapper}>
             <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.scrollBtn}>
@@ -49,7 +50,7 @@ export function ScrollToBottomButton({ onPress, unreadCount }: { onPress: () => 
             )}
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     // System message

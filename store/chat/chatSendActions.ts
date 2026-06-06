@@ -1,7 +1,7 @@
 import { saveToCache } from '@/lib/database';
 import { saveLocalMessage, syncLedgerExpense } from '@/lib/localDb';
 import { supabase } from '@/lib/supabase';
-import { encryptText, getChatKey } from '@/utils/chatCrypto';
+import { encryptText, getChatKey, getOrCreateMySenderKey, distributeSenderKey } from '@/utils/chatCrypto';
 import { logErrorToDB } from '@/utils/errorLogger';
 import { Alert } from 'react-native';
 import { uploadChatMessageMediaWithProgress } from '../../utils/uploadHelper';
@@ -43,10 +43,10 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
 
         const updatedMessages = scheduledAt ? messages : [...messages, tempMsg];
         if (!scheduledAt) {
-            set((state) => ({
-                messages: updatedMessages,
-                cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: updatedMessages, key: chatKey } }
-            }));
+            set((state: any) => ({
+            messages: [tempMsg, ...state.messages],
+            cache: { ...state.cache, [friendId]: { messages: [tempMsg, ...state.messages], key: state.chatKey } }
+        }));    
         }
 
         const { db } = useDbStore.getState();
@@ -55,6 +55,61 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
         }
 
         try {
+            let encryptKey = chatKey!;
+            let keyVersion = 1;
+
+            if (isGroup) {
+                const { key, version } = await getOrCreateMySenderKey(friendId, currentUser.id);
+                encryptKey = key;
+                keyVersion = version;
+
+                // Server-Coordinated Epoch check + Lazy Distribution
+                try {
+                    const [membersResponse, groupResponse] = await Promise.all([
+                        supabase.from('group_members').select('user_id').eq('group_id', friendId),
+                        supabase.from('groups').select('key_epoch').eq('id', friendId).single()
+                    ]);
+
+                    const members = membersResponse.data;
+                    const serverEpoch = groupResponse.data?.key_epoch || 1;
+
+                    if (members) {
+                        const memberIds = members.map(m => m.user_id).filter(id => id !== currentUser.id);
+                        
+                        // Find who already has this specific version of the key
+                        const { data: existingKeys } = await supabase.from('group_sender_keys')
+                            .select('receiver_id')
+                            .eq('group_id', friendId)
+                            .eq('sender_id', currentUser.id)
+                            .eq('key_version', version);
+                            
+                        const existingReceiverIds = existingKeys?.map(k => k.receiver_id) || [];
+                        
+                        // Check for Forward Secrecy Ratcheting:
+                        const removedIds = existingReceiverIds.filter(id => !memberIds.includes(id));
+                        
+                        // Force Ratchet if server epoch advanced OR client diff detects removed member (failsafe)
+                        if (version < serverEpoch || removedIds.length > 0) {
+                            console.log(`Crypto: Key Ratcheting forced (Version ${version} < Epoch ${serverEpoch} OR Member Removed)`);
+                            const rotated = await getOrCreateMySenderKey(friendId, currentUser.id, true); // forceRotate = true
+                            encryptKey = rotated.key;
+                            keyVersion = rotated.version;
+                            
+                            // Re-distribute the NEW key version to all currently valid members
+                            await distributeSenderKey(friendId, currentUser.id, encryptKey, keyVersion, memberIds);
+                        } else {
+                            // Normal lazy distribution for new missing members (Sender-Key Reuse Optimization)
+                            const missingIds = memberIds.filter(id => !existingReceiverIds.includes(id));
+                            if (missingIds.length > 0) {
+                                await distributeSenderKey(friendId, currentUser.id, encryptKey, version, missingIds);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Crypto: Failed to distribute sender keys lazily", e);
+                }
+            }
+
             if (text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Document]')) {
                 const isVoice = text.startsWith('[Voice Message]');
                 const isDoc = text.startsWith('[Document]');
@@ -90,14 +145,14 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                         },
                         originalName,
                         docMime,
-                        chatKey
+                        encryptKey
                     );
                     messageToEncrypt = `Sent ${fileData.name || (isVoice ? 'a voice message' : (isDoc ? 'a document' : 'an image'))}`;
                 }
             }
 
-            const encryptedText = await encryptText(messageToEncrypt, chatKey);
-            const encryptedFileUrl = fileData?.url ? await encryptText(fileData.url, chatKey) : null;
+            const encryptedText = await encryptText(messageToEncrypt, encryptKey);
+            const encryptedFileUrl = fileData?.url ? await encryptText(fileData.url, encryptKey) : null;
             const insertData: any = {
                 sender_id: currentUser.id,
                 message: encryptedText,
@@ -107,6 +162,7 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                 file_type: fileData?.type || null,
                 file_size: fileData?.size || null,
                 message_type: messageType || 'text',
+                key_version: keyVersion,
             };
             
             if (!scheduledAt) {
@@ -126,8 +182,8 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
 
             if (!scheduledAt) {
                 const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject, reply_to_id: replyToId };
-                set((state) => {
-                    const newMessages = state.messages.map(m => m.id === tempId ? finalMsg : m);
+                set((state: any) => {
+                    const newMessages = state.messages.map((m: any) => m.id === tempId ? finalMsg : m);
                     saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
                     const newProgress = { ...state.uploadProgress };
                     delete newProgress[tempId];
@@ -163,13 +219,13 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             console.error("SendMessage Error:", error);
             
             // ✅ MARK AS FAILED IN UI INSTEAD OF SPINNING FOREVER
-            set((state) => {
-                const newMessages = state.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m);
+            set((state: any) => {
+                const newMessages = state.messages.map((m: any) => m.id === tempId ? { ...m, status: 'failed' } : m);
                 saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
-                return {
-                    messages: newMessages,
-                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
-                };
+                set((state: any) => {
+                    const uniqueMessages = Array.from(new Map(newMessages.map((m: any) => [m.id, m])).values());
+                    return { messages: uniqueMessages, cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: state.chatKey } } };
+                });
             });
 
             logErrorToDB(error, 'ChatStore: Send Message', currentUser.id, currentUser.username);
@@ -181,7 +237,7 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
         try {
             const promises = friendIds.map(async (fid) => {
                 const fKey = await getChatKey(currentUser.id, fid, false);
-                const encText = await encryptText(messageText, fKey);
+                const encText = await encryptText(messageText, fKey!);
                 return supabase.from('messages').insert({
                     sender_id: currentUser.id,
                     receiver_id: fid,

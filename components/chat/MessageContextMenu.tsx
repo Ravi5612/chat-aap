@@ -23,7 +23,27 @@ interface MessageContextMenuProps {
 
 const { width, height } = Dimensions.get('window');
 
-export default function MessageContextMenu({
+const ActionItem = React.memo(({ icon, label, onPress, isLast = false, isDestructive = false, onClose }: any) => (
+    <TouchableOpacity
+        onPress={() => {
+            Haptics.selectionAsync();
+            onPress();
+            if (onClose) onClose();
+        }}
+        style={[
+            styles.actionItem,
+            !isLast && styles.actionDivider,
+            isDestructive && { backgroundColor: 'rgba(239, 68, 68, 0.05)' }
+        ]}
+    >
+        <View style={[styles.iconContainer, isDestructive && { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+            <Ionicons name={icon} size={18} color={isDestructive ? "#EF4444" : "#F68537"} />
+        </View>
+        <Text style={[styles.actionLabel, { color: isDestructive ? "#EF4444" : "#1E293B" }]}>{label}</Text>
+    </TouchableOpacity>
+));
+
+export default React.memo(function MessageContextMenu({
     visible,
     onClose,
     onSelectReaction,
@@ -59,26 +79,6 @@ export default function MessageContextMenu({
     // Adjust Y if too low
     const menuHeight = 280;
     const adjustedY = anchorY + menuHeight > height ? anchorY - menuHeight : anchorY;
-
-    const ActionItem = ({ icon, label, onPress, color = "#475569", isLast = false, isDestructive = false }: any) => (
-        <TouchableOpacity
-            onPress={() => {
-                Haptics.selectionAsync();
-                onPress();
-                onClose();
-            }}
-            style={[
-                styles.actionItem,
-                !isLast && styles.actionDivider,
-                isDestructive && { backgroundColor: 'rgba(239, 68, 68, 0.05)' }
-            ]}
-        >
-            <View style={[styles.iconContainer, isDestructive && { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
-                <Ionicons name={icon} size={18} color={isDestructive ? "#EF4444" : "#F68537"} />
-            </View>
-            <Text style={[styles.actionLabel, { color: isDestructive ? "#EF4444" : "#1E293B" }]}>{label}</Text>
-        </TouchableOpacity>
-    );
 
     return (
         <>
@@ -127,19 +127,20 @@ export default function MessageContextMenu({
 
                             {/* Actions List */}
                             <View style={styles.actionsList}>
-                                <ActionItem icon="arrow-undo-outline" label="Reply" onPress={() => onAction('reply')} />
-                                <ActionItem icon="copy-outline" label="Copy Text" onPress={() => onAction('copy')} />
-                                <ActionItem icon="language-outline" label="Translate 🌐" onPress={() => onAction('translate')} />
-                                <ActionItem icon="volume-high-outline" label="Listen 🔊" onPress={() => onAction('listen')} />
-                                <ActionItem icon="share-outline" label="Forward" onPress={() => onAction('forward')} />
-                                {canEdit && <ActionItem icon="information-circle-outline" label="Info" onPress={() => onAction('info')} />}
-                                {canEdit && <ActionItem icon="create-outline" label="Edit" onPress={() => onAction('edit')} />}
+                                <ActionItem icon="arrow-undo-outline" label="Reply" onPress={() => onAction('reply')} onClose={onClose} />
+                                <ActionItem icon="copy-outline" label="Copy Text" onPress={() => onAction('copy')} onClose={onClose} />
+                                <ActionItem icon="language-outline" label="Translate 🌐" onPress={() => onAction('translate')} onClose={onClose} />
+                                <ActionItem icon="volume-high-outline" label="Listen 🔊" onPress={() => onAction('listen')} onClose={onClose} />
+                                <ActionItem icon="share-outline" label="Forward" onPress={() => onAction('forward')} onClose={onClose} />
+                                {canEdit && <ActionItem icon="information-circle-outline" label="Info" onPress={() => onAction('info')} onClose={onClose} />}
+                                {canEdit && <ActionItem icon="create-outline" label="Edit" onPress={() => onAction('edit')} onClose={onClose} />}
                                 {canEdit && <ActionItem
                                     icon="trash-outline"
                                     label="Delete"
                                     onPress={() => onAction('delete')}
                                     isDestructive={true}
                                     isLast={true}
+                                    onClose={onClose}
                                 />}
                             </View>
                         </Animated.View>
@@ -161,7 +162,7 @@ export default function MessageContextMenu({
             />
         </>
     );
-}
+});
 
 const styles = StyleSheet.create({
     overlay: {

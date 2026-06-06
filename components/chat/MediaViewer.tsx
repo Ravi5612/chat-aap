@@ -95,8 +95,6 @@ const MediaViewer = memo(({ visible, onClose, imageUri, isVideo = false, allowDo
         }
     }, [imageUri]);
 
-    if (!visible) return null;
-
     return (
         <Modal
             visible={visible}
@@ -144,7 +142,7 @@ const MediaViewer = memo(({ visible, onClose, imageUri, isVideo = false, allowDo
                                 style={styles.fullImage}
                                 useNativeControls
                                 resizeMode={ResizeMode.CONTAIN}
-                                shouldPlay
+                                shouldPlay={visible}
                             />
                         ) : imageUri ? (
                             <Image
@@ -152,6 +150,7 @@ const MediaViewer = memo(({ visible, onClose, imageUri, isVideo = false, allowDo
                                 style={styles.fullImage}
                                 contentFit="contain"
                                 transition={300}
+                                cachePolicy="memory-disk"
                             />
                         ) : null}
                     </View>

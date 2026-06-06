@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system';
 import { gcm } from '@noble/ciphers/aes.js';
 import * as Crypto from 'expo-crypto';
 import { Buffer } from 'buffer';
+import { Alert } from 'react-native';
 
 export const encryptFileBase64 = async (base64: string, cryptoKey: Uint8Array): Promise<string> => {
     const iv = Crypto.getRandomBytes(12);
@@ -91,9 +92,7 @@ export const uploadChatMessageMedia = async (
         };
     } catch (error: any) {
         if (__DEV__) console.error('Error in uploadChatMessageMedia:', error);
-        import('react-native').then(({ Alert }) => {
-            Alert.alert('Upload Media Error', error?.message || JSON.stringify(error));
-        });
+        Alert.alert('Upload Media Error', error?.message || JSON.stringify(error));
         throw error;
     }
 };
@@ -153,7 +152,7 @@ export const uploadChatMessageMediaWithProgress = async (
     onProgress: (percent: number) => void,
     originalFileName?: string,
     mimeType?: string,
-    encryptWithNewKey: boolean = false
+    mediaKey?: Uint8Array
 ) => {
     let fileName = `${Date.now()}`;
     let contentType = '';
@@ -174,12 +173,9 @@ export const uploadChatMessageMediaWithProgress = async (
     const fileSize = fileInfo.exists ? (fileInfo as any).size : 0;
 
     let fileToUpload = uri;
-    let mediaKey: Uint8Array | null = null;
     const originalContentType = contentType;
 
-    if (encryptWithNewKey) {
-        mediaKey = Crypto.getRandomBytes(32);
-        
+    if (mediaKey) {
         // 🚨 YIELD THREAD 🚨: Allow React Native to render the UI (pending message) before heavy synchronous crypto
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -209,8 +205,7 @@ export const uploadChatMessageMediaWithProgress = async (
         url: cloudData.secure_url,
         name: originalFileName || fileName,
         type: originalContentType,
-        size: fileSize,
-        mediaKey: mediaKey ? Buffer.from(mediaKey).toString('base64') : null
+        size: fileSize
     };
 };
 

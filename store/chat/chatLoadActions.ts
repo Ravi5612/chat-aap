@@ -129,7 +129,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
             const data = (rawData || []).reverse();
 
             // Decrypt and filter
-            const decryptedMessages = await decryptMessageBatch(data, chatKey);
+            const decryptedMessages = await decryptMessageBatch(data, chatKey, currentUser.id);
             const finalMessages = await filterDeletedMessages(db, decryptedMessages);
 
             const activeChatId = get().activeChatId;
@@ -166,8 +166,8 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
             if (unreadIds.length > 0) {
                 const activeChatId = get().activeChatId;
                 if (activeChatId === friendId) {
-                    set((state) => ({
-                        messages: state.messages.map(m => unreadIds.includes(m.id) ? { ...m, is_read: true, status: 'read' } : m)
+                    set((state: any) => ({
+                        messages: state.messages.map((m: any) => unreadIds.includes(m.id) ? { ...m, is_read: true, status: 'read' } : m)
                     }));
                 }
             }
@@ -264,7 +264,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
             const data = (rawData || []).reverse();
 
             // Decrypt and filter
-            const decryptedOlderMessages = await decryptMessageBatch(data, chatKey);
+            const decryptedOlderMessages = await decryptMessageBatch(data, chatKey, currentUser.id);
             const filteredOlderMessages = await filterDeletedMessages(db, decryptedOlderMessages);
 
             const combinedMessages = [...filteredOlderMessages, ...messages].filter(m => m && m.id);
@@ -361,7 +361,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
 
             if (data && data.length > 0) {
                 // Decrypt and filter
-                const decryptedMessages = await decryptMessageBatch(data, chatKey);
+                const decryptedMessages = await decryptMessageBatch(data, chatKey, currentUser.id);
                 const { db } = useDbStore.getState();
                 const filtered = await filterDeletedMessages(db, decryptedMessages);
 

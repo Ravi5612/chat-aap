@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
 
 const DB_NAME = 'chatwarriors_cache.db';
 const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
@@ -7,6 +8,7 @@ const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 let _dbInstance: SQLite.SQLiteDatabase | null = null;
 
 export const getDb = () => {
+  if (Platform.OS === 'web') return null;
   if (!_dbInstance) {
     _dbInstance = SQLite.openDatabaseSync(DB_NAME);
   }

@@ -21,17 +21,21 @@ const formatDate = (dateString: string | null | undefined) => {
     });
 };
 
-export default function MessageInfoModal({ visible, onClose, message }: MessageInfoModalProps) {
+export default React.memo(function MessageInfoModal({ visible, onClose, message }: MessageInfoModalProps) {
     if (!visible || !message) return null;
 
-    const sentTime = formatDate(message.created_at);
-    const deliveredTime = formatDate(message.delivered_at);
-    
-    // Check both read_at and is_read fallback
-    let readTime = formatDate(message.read_at);
-    if (!readTime && message.is_read) {
-        readTime = 'Read (Time not recorded)';
-    }
+    const { sentTime, deliveredTime, readTime } = React.useMemo(() => {
+        const sent = formatDate(message.created_at);
+        const delivered = formatDate(message.delivered_at);
+        
+        // Check both read_at and is_read fallback
+        let read = formatDate(message.read_at);
+        if (!read && message.is_read) {
+            read = 'Read (Time not recorded)';
+        }
+        
+        return { sentTime: sent, deliveredTime: delivered, readTime: read };
+    }, [message.created_at, message.delivered_at, message.read_at, message.is_read]);
 
     return (
         <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -88,7 +92,7 @@ export default function MessageInfoModal({ visible, onClose, message }: MessageI
             </TouchableWithoutFeedback>
         </Modal>
     );
-}
+});
 
 const styles = StyleSheet.create({
     overlay: {

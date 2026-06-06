@@ -7,13 +7,114 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 
-export default function NearbySuggestions() {
+const getGenderBadge = (gender: string) => {
+    if (gender === 'male') return { icon: 'male', label: 'Male', color: '#3B82F6', bg: '#EFF6FF' };
+    if (gender === 'female') return { icon: 'female', label: 'Female', color: '#EC4899', bg: '#FDF2F8' };
+    return { icon: 'help-circle-outline', label: 'Unknown', color: '#94A3B8', bg: '#F8FAFC' };
+};
+
+const NearbyCard = React.memo(({ person, isRequested, onSendRequest }: any) => {
+    const badge = getGenderBadge(person.gender);
+    const requested = isRequested || person.requestStatus === 'pending';
+
+    return (
+        <View style={styles.card}>
+            <View style={{ position: 'relative' }}>
+                <Image
+                    source={{ uri: `https://api.dicebear.com/7.x/bottts/svg?seed=${person.id}&backgroundColor=F3F4F6` }}
+                    style={styles.avatar}
+                    transition={500}
+                    cachePolicy="memory-disk"
+                />
+                <View style={{
+                    position: 'absolute',
+                    bottom: 8,
+                    right: 2,
+                    width: 14,
+                    height: 14,
+                    backgroundColor: '#10B981',
+                    borderRadius: 7,
+                    borderWidth: 2,
+                    borderColor: 'white',
+                    zIndex: 10
+                }} />
+            </View>
+
+            <View style={[styles.genderBadge, { backgroundColor: badge.bg, borderColor: badge.color }]}>
+                <Ionicons name={badge.icon as any} size={12} color={badge.color} />
+                <Text style={{ fontSize: 10, fontWeight: 'bold', color: badge.color, marginLeft: 2 }}>
+                    {badge.label}
+                </Text>
+            </View>
+            
+            <Text style={styles.name} numberOfLines={1}>
+                Warrior #{person.id.slice(0, 4).toUpperCase()}
+            </Text>
+
+            <TouchableOpacity 
+                style={[styles.addButton, requested && styles.requestedButton]}
+                onPress={() => onSendRequest(person.id)}
+                disabled={requested}
+            >
+                <Ionicons 
+                    name={requested ? "checkmark-circle" : "person-add"} 
+                    size={16} 
+                    color="white" 
+                />
+                <Text style={styles.addText}>
+                    {requested ? "Sent" : "Connect"}
+                </Text>
+            </TouchableOpacity>
+        </View>
+    );
+});
+
+export default React.memo(function NearbySuggestions() {
     const { nearbyPeople, loading, isEnabled } = useNearbySuggestions();
     const currentUser = useAuthStore(state => state.user);
-    const profile = useAuthStore(state => state.profile);
     const updateProfile = useAuthStore(state => state.updateProfile);
 
     const [requestedIds, setRequestedIds] = React.useState<string[]>([]);
+
+    const sendRequest = React.useCallback(async (targetId: string) => {
+        if (!currentUser) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        
+        setRequestedIds(prev => {
+            if (prev.includes(targetId)) return prev;
+            return [...prev, targetId];
+        });
+        
+        const { error } = await supabase.from('friend_requests').insert({
+            sender_id: currentUser.id,
+            receiver_id: targetId,
+            status: 'pending'
+        });
+
+        if (error) {
+            setRequestedIds(prev => prev.filter(id => id !== targetId));
+            console.error('Request error:', error);
+            return;
+        }
+
+        try {
+            const { data: myProfile } = await supabase
+                .from('profiles')
+                .select('username')
+                .eq('id', currentUser.id)
+                .single();
+
+            await supabase.from('notifications').insert({
+                user_id: targetId,
+                sender_id: currentUser.id,
+                type: 'friend_request',
+                message: `${myProfile?.username || 'Someone'} sent you a friend request.`,
+                is_read: false
+            });
+        } catch (notifErr) {
+            console.warn('Notification failed:', notifErr);
+        }
+    }, [currentUser]);
 
     if (!isEnabled) {
         return (
@@ -65,51 +166,6 @@ export default function NearbySuggestions() {
         );
     }
 
-    const sendRequest = async (targetId: string) => {
-        if (!currentUser || requestedIds.includes(targetId)) return;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        
-        setRequestedIds(prev => [...prev, targetId]);
-        
-        const { error } = await supabase.from('friend_requests').insert({
-            sender_id: currentUser.id,
-            receiver_id: targetId,
-            status: 'pending'
-        });
-
-        if (error) {
-            setRequestedIds(prev => prev.filter(id => id !== targetId));
-            console.error('Request error:', error);
-            return;
-        }
-
-        // Notification bhejna — receiver ko pata chale
-        try {
-            const { data: myProfile } = await supabase
-                .from('profiles')
-                .select('username')
-                .eq('id', currentUser.id)
-                .single();
-
-            await supabase.from('notifications').insert({
-                user_id: targetId,
-                sender_id: currentUser.id,
-                type: 'friend_request',
-                message: `${myProfile?.username || 'Someone'} sent you a friend request.`,
-                is_read: false
-            });
-        } catch (notifErr) {
-            console.warn('Notification failed:', notifErr);
-        }
-    };
-
-
-    const getGenderBadge = (gender: string) => {
-        if (gender === 'male') return { icon: 'male', label: 'Male', color: '#3B82F6', bg: '#EFF6FF' };
-        if (gender === 'female') return { icon: 'female', label: 'Female', color: '#EC4899', bg: '#FDF2F8' };
-        return { icon: 'help-circle-outline', label: 'Unknown', color: '#94A3B8', bg: '#F8FAFC' };
-    };
-
     return (
         <View style={styles.container}>
             <ScrollView 
@@ -121,68 +177,18 @@ export default function NearbySuggestions() {
                     <ActivityIndicator color="#F68537" style={{ marginLeft: 20 }} />
                 ) : (
                     nearbyPeople.map((person) => (
-                        <View key={person.id} style={styles.card}>
-                            <View style={{ position: 'relative' }}>
-                                <Image
-                                    source={{ uri: `https://api.dicebear.com/7.x/bottts/svg?seed=${person.id}&backgroundColor=F3F4F6` }}
-                                    style={styles.avatar}
-                                    transition={500}
-                                />
-                                <View style={{
-                                    position: 'absolute',
-                                    bottom: 8,
-                                    right: 2,
-                                    width: 14,
-                                    height: 14,
-                                    backgroundColor: '#10B981',
-                                    borderRadius: 7,
-                                    borderWidth: 2,
-                                    borderColor: 'white',
-                                    zIndex: 10
-                                }} />
-                            </View>
-
-                            {/* Gender Badge */}
-                            {(() => {
-                                const badge = getGenderBadge(person.gender);
-                                return (
-                                    <View style={[styles.genderBadge, { backgroundColor: badge.bg, borderColor: badge.color }]}>
-                                        <Ionicons name={badge.icon as any} size={12} color={badge.color} />
-                                        <Text style={{ fontSize: 10, fontWeight: 'bold', color: badge.color, marginLeft: 2 }}>
-                                            {badge.label}
-                                        </Text>
-                                    </View>
-                                );
-                            })()}
-                            
-                            <Text style={styles.name} numberOfLines={1}>
-                                Warrior #{person.id.slice(0, 4).toUpperCase()}
-                            </Text>
-
-                            <TouchableOpacity 
-                                style={[
-                                    styles.addButton, 
-                                    (requestedIds.includes(person.id) || person.requestStatus === 'pending') && styles.requestedButton
-                                ]}
-                                onPress={() => sendRequest(person.id)}
-                                disabled={requestedIds.includes(person.id) || person.requestStatus === 'pending'}
-                            >
-                                <Ionicons 
-                                    name={(requestedIds.includes(person.id) || person.requestStatus === 'pending') ? "checkmark-circle" : "person-add"} 
-                                    size={16} 
-                                    color="white" 
-                                />
-                                <Text style={styles.addText}>
-                                    {(requestedIds.includes(person.id) || person.requestStatus === 'pending') ? "Sent" : "Connect"}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
+                        <NearbyCard 
+                            key={person.id} 
+                            person={person} 
+                            isRequested={requestedIds.includes(person.id)} 
+                            onSendRequest={sendRequest} 
+                        />
                     ))
                 )}
             </ScrollView>
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {

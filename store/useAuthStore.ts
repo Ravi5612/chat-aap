@@ -5,6 +5,10 @@ import { router } from 'expo-router';
 import { useDbStore } from './useDbStore';
 import { saveLocalProfile, getLocalProfile, updateLocalProfile, getPendingProfileSync, clearAllLocalData } from '@/lib/localDb';
 import { AppStorage } from '@/lib/storage';
+import * as Device from 'expo-device';
+import * as Crypto from 'expo-crypto';
+
+let killSwitchInterval: any = null;
 
 interface AuthState {
     session: Session | null;
@@ -21,6 +25,7 @@ interface AuthState {
     syncProfile: () => Promise<void>;
     updateProfile: (updates: any) => Promise<boolean>;
     syncPendingProfile: () => Promise<void>;
+    syncDevice: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -41,6 +46,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setInitializing: (initializing) => set({ initializing }),
     setIsRegistering: (isRegistering) => set({ isRegistering }),
     signOut: async () => {
+        if (killSwitchInterval) {
+            clearInterval(killSwitchInterval);
+            killSwitchInterval = null;
+        }
+
         const { user } = get();
 
         // 🛑 Clear All Local Stores and Databases by deleting the files!
@@ -196,6 +206,91 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             } catch (e) {
                 console.error('[SYNC] Profile sync failed:', e);
             }
+        }
+    },
+    syncDevice: async () => {
+        const { user } = get();
+        if (!user?.id) return;
+
+        try {
+            // 1. Get or Generate Unique Device ID
+            let deviceId = await AppStorage.getItemAsync('unique_device_id');
+            if (!deviceId) {
+                deviceId = Crypto.randomUUID();
+                await AppStorage.setItemAsync('unique_device_id', deviceId);
+            }
+
+            // 2. Get Hardware Info
+            const deviceName = Device.modelName || Device.deviceName || 'Unknown Device';
+            const osVersion = `${Device.osName || 'OS'} ${Device.osVersion || ''}`.trim();
+
+            // 3. Try to get IP-based Location (Silent fail if network error)
+            let lastLocation = 'Unknown Location';
+            try {
+                // Check if we have a cached location to avoid rate limits
+                const cachedLoc = await AppStorage.getItemAsync('device_location_cache');
+                const cachedTime = await AppStorage.getItemAsync('device_location_time');
+                const now = Date.now();
+                if (cachedLoc && cachedTime && (now - parseInt(cachedTime)) < 24 * 60 * 60 * 1000) {
+                    lastLocation = cachedLoc;
+                } else {
+                    const response = await fetch('https://ipapi.co/json/');
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.city && data.country_name) {
+                            lastLocation = `${data.city}, ${data.country_name}`;
+                            await AppStorage.setItemAsync('device_location_cache', lastLocation);
+                            await AppStorage.setItemAsync('device_location_time', now.toString());
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[syncDevice] Location fetch failed:', err);
+                const cachedLoc = await AppStorage.getItemAsync('device_location_cache');
+                if (cachedLoc) lastLocation = cachedLoc;
+            }
+
+            // 4. Upsert into database
+            const { error } = await supabase.from('user_devices').upsert({
+                user_id: user.id,
+                device_id: deviceId,
+                device_name: deviceName,
+                os_version: osVersion,
+                last_location: lastLocation,
+                last_active: new Date().toISOString(),
+                is_active: true
+            }, { onConflict: 'user_id,device_id' });
+
+            if (error) {
+                console.warn('[syncDevice] Supabase Upsert error:', error);
+            }
+
+            // 5. Start Kill-Switch Polling (Check every 60 seconds)
+            if (killSwitchInterval) clearInterval(killSwitchInterval);
+            killSwitchInterval = setInterval(async () => {
+                const currentUser = get().user;
+                if (!currentUser?.id) return;
+                
+                try {
+                    const { data, error } = await supabase
+                        .from('user_devices')
+                        .select('is_active')
+                        .eq('user_id', currentUser.id)
+                        .eq('device_id', deviceId)
+                        .single();
+                        
+                    if (data && data.is_active === false) {
+                        console.log('🚨 REMOTE LOGOUT INITIATED 🚨');
+                        get().signOut();
+                        alert('You have been logged out remotely from another device.');
+                    }
+                } catch (e) {
+                    // Ignore transient network errors
+                }
+            }, 60000);
+
+        } catch (error) {
+            console.error('[syncDevice] Master Error:', error);
         }
     }
 }));

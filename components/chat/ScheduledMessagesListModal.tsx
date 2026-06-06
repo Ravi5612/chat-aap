@@ -12,7 +12,28 @@ interface ScheduledMessagesListModalProps {
     chatKey: Uint8Array | null;
 }
 
-export default function ScheduledMessagesListModal({ visible, onClose, friendId, isGroup, chatKey }: ScheduledMessagesListModalProps) {
+const ScheduledMessageCard = React.memo(({ item, onCancel }: { item: any, onCancel: (id: string) => void }) => {
+    const timeString = React.useMemo(() => new Date(item.scheduled_at).toLocaleString(), [item.scheduled_at]);
+
+    return (
+        <View style={styles.messageCard}>
+            <View style={{ flex: 1 }}>
+                <Text style={styles.messageText} numberOfLines={2}>
+                    {item.message_type !== 'text' ? `[${item.message_type.toUpperCase()}] ` : ''}
+                    {item.message || 'Media'}
+                </Text>
+                <Text style={styles.timeText}>
+                    Scheduled for: {timeString}
+                </Text>
+            </View>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => onCancel(item.id)}>
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            </TouchableOpacity>
+        </View>
+    );
+});
+
+export default React.memo(function ScheduledMessagesListModal({ visible, onClose, friendId, isGroup, chatKey }: ScheduledMessagesListModalProps) {
     const [messages, setMessages] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -54,7 +75,7 @@ export default function ScheduledMessagesListModal({ visible, onClose, friendId,
         }
     };
 
-    const handleCancel = async (id: string) => {
+    const handleCancel = React.useCallback(async (id: string) => {
         try {
             const { error } = await supabase.from('scheduled_messages').delete().eq('id', id);
             if (error) throw error;
@@ -63,24 +84,11 @@ export default function ScheduledMessagesListModal({ visible, onClose, friendId,
             console.error("Failed to cancel scheduled message:", error);
             require('react-native').Alert.alert('Error', 'Failed to cancel the message.');
         }
-    };
+    }, []);
 
-    const renderItem = ({ item }: { item: any }) => (
-        <View style={styles.messageCard}>
-            <View style={{ flex: 1 }}>
-                <Text style={styles.messageText} numberOfLines={2}>
-                    {item.message_type !== 'text' ? `[${item.message_type.toUpperCase()}] ` : ''}
-                    {item.message || 'Media'}
-                </Text>
-                <Text style={styles.timeText}>
-                    Scheduled for: {new Date(item.scheduled_at).toLocaleString()}
-                </Text>
-            </View>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(item.id)}>
-                <Ionicons name="trash-outline" size={20} color="#EF4444" />
-            </TouchableOpacity>
-        </View>
-    );
+    const renderItem = React.useCallback(({ item }: { item: any }) => (
+        <ScheduledMessageCard item={item} onCancel={handleCancel} />
+    ), [handleCancel]);
 
     return (
         <Modal visible={visible} transparent animationType="slide">
@@ -112,7 +120,7 @@ export default function ScheduledMessagesListModal({ visible, onClose, friendId,
             </View>
         </Modal>
     );
-}
+});
 
 const styles = StyleSheet.create({
     overlay: {

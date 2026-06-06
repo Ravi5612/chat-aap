@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { initDatabase } from '@/lib/localDb';
 import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
 
 interface DbState {
     db: SQLite.SQLiteDatabase | null;
@@ -21,6 +22,10 @@ export const useDbStore = create<DbState>((set, get) => ({
         if (initPromise) return initPromise;
 
         initPromise = (async () => {
+            if (Platform.OS === 'web') {
+                set({ db: null, isInitialized: true, error: null });
+                return;
+            }
             try {
                 // Add a 5-second timeout to prevent infinite hang if SQLite deadlocks
                 let timer: ReturnType<typeof setTimeout>;

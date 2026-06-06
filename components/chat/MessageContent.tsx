@@ -53,15 +53,35 @@ const MessageContent = memo(({
     const isCallLog = message.message_type === 'call' || !!message.call_details;
     const callDetails = message.call_details || {};
     
-    const isStatusMention = textContent?.startsWith('[StatusMention] ');
-    const statusMentionId = isStatusMention ? textContent.replace('[StatusMention] ', '').trim() : null;
-
     const ledgerData = useMemo(() => {
         if (message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:')) {
             try { return JSON.parse(message.message.replace('SYSTEM_LEDGER:', '')); } catch (e) { return null; }
         }
         return null;
     }, [message.message, message.message_type]);
+
+    const textMetrics = useMemo(() => {
+        const text = textContent || '';
+        const trimmedText = text.trim();
+        const isStatusMention = text.startsWith('[StatusMention] ');
+        const statusMentionId = isStatusMention ? text.replace('[StatusMention] ', '').trim() : null;
+        
+        const isSentPrefix = text.startsWith('Sent ');
+        const showText = trimmedText !== '' 
+            && !isStatusMention 
+            && !(hasImage && isSentPrefix) 
+            && !(isVoiceMessage && isSentPrefix) 
+            && message.message_type !== 'ledger';
+            
+        const isDecrypting = trimmedText.startsWith('{"iv":');
+        const isDeleted = text === 'SYSTEM_MSG: DELETED';
+        
+        let finalDisplay = text;
+        if (isDecrypting) finalDisplay = 'Decrypting...';
+        else if (isDeleted) finalDisplay = '🚫 This message was deleted';
+        
+        return { isStatusMention, statusMentionId, showText, finalDisplay, isDecrypting, isDeleted };
+    }, [textContent, hasImage, isVoiceMessage, message.message_type]);
 
     const handleImageContentPress = useCallback(() => {
         onImagePress?.((localImageUrl || imageUrl) as string);
@@ -83,48 +103,35 @@ const MessageContent = memo(({
         if (documentUrl) Linking.openURL(documentUrl);
     }, [documentUrl]);
 
-    const renderLedger = () => {
-        try {
-            const data = ledgerData;
-            if (!data) return <Text style={styles.errorText}>Error parsing ledger</Text>;
-            const isDeneHain = data.type === 'gave' ? !isCurrentUser : isCurrentUser;
-            const themeColor = isDeneHain ? '#EF4444' : '#F68537';
-            const label = isDeneHain ? 'Dene Hain' : 'Lene Hain';
-            return (
-                <>
+    return (
+        <>
+            {/* Ledger Entry UI */}
+            {message.message_type === 'ledger' && ledgerData && (
+                <View style={styles.ledgerContainer}>
                     <View style={[styles.ledgerHeader, { borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }]}>
-                        <View style={[styles.ledgerIconContainer, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}10` }]}>
-                            <Ionicons name="receipt" size={20} color={isCurrentUser ? 'white' : themeColor} />
+                        <View style={[styles.ledgerIconContainer, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${ledgerData.type === 'gave' ? (isCurrentUser ? '#F68537' : '#EF4444') : (isCurrentUser ? '#EF4444' : '#F68537')}10` }]}>
+                            <Ionicons name="receipt" size={20} color={isCurrentUser ? 'white' : (ledgerData.type === 'gave' ? (isCurrentUser ? '#F68537' : '#EF4444') : (isCurrentUser ? '#EF4444' : '#F68537'))} />
                         </View>
                         <View style={styles.flex1}>
                             <Text style={[styles.ledgerTitle, { color: isCurrentUser ? 'white' : '#1F2937' }]}>Hisab-Kitab</Text>
                         </View>
                     </View>
                     <View>
-                        <Text style={[styles.ledgerAmount, { color: isCurrentUser ? 'white' : themeColor }]}>₹{data.amount}</Text>
-                        <Text style={[styles.ledgerDesc, { color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#64748B' }]}>{data.description}</Text>
+                        <Text style={[styles.ledgerAmount, { color: isCurrentUser ? 'white' : (ledgerData.type === 'gave' ? (isCurrentUser ? '#F68537' : '#EF4444') : (isCurrentUser ? '#EF4444' : '#F68537')) }]}>₹{ledgerData.amount}</Text>
+                        <Text style={[styles.ledgerDesc, { color: isCurrentUser ? 'rgba(255,255,255,0.8)' : '#64748B' }]}>{ledgerData.description}</Text>
                         <View style={[
                             styles.ledgerBadge,
                             { 
-                                backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${themeColor}20`,
+                                backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : `${ledgerData.type === 'gave' ? (isCurrentUser ? '#F68537' : '#EF4444') : (isCurrentUser ? '#EF4444' : '#F68537')}20`,
                                 borderWidth: isCurrentUser ? 0 : 1, 
-                                borderColor: `${themeColor}40` 
+                                borderColor: `${ledgerData.type === 'gave' ? (isCurrentUser ? '#F68537' : '#EF4444') : (isCurrentUser ? '#EF4444' : '#F68537')}40` 
                             }
                         ]}>
-                            <Text style={[styles.ledgerBadgeText, { color: isCurrentUser ? 'white' : themeColor }]}>{label}</Text>
+                            <Text style={[styles.ledgerBadgeText, { color: isCurrentUser ? 'white' : (ledgerData.type === 'gave' ? (isCurrentUser ? '#F68537' : '#EF4444') : (isCurrentUser ? '#EF4444' : '#F68537')) }]}>
+                                {ledgerData.type === 'gave' ? (!isCurrentUser ? 'Dene Hain' : 'Lene Hain') : (!isCurrentUser ? 'Lene Hain' : 'Dene Hain')}
+                            </Text>
                         </View>
                     </View>
-                </>
-            );
-        } catch (e) { return <Text style={styles.errorText}>Error</Text>; }
-    };
-
-    return (
-        <>
-            {/* Ledger Entry UI */}
-            {message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:') && (
-                <View style={styles.ledgerContainer}>
-                    {renderLedger()}
                 </View>
             )}
 
@@ -138,6 +145,7 @@ const MessageContent = memo(({
                             style={styles.mediaImage} 
                             contentFit="cover" 
                             transition={300}
+                            cachePolicy="memory-disk"
                         />
                         {imageLoading && uploadProgress === undefined && (
                             <View style={styles.mediaLoadingOverlay}>
@@ -265,9 +273,9 @@ const MessageContent = memo(({
             )}
 
             {/* Status Mention Card - Premium Design */}
-            {isStatusMention && statusMentionId && (
+            {textMetrics.isStatusMention && textMetrics.statusMentionId && (
                 <StatusMentionCard
-                    statusId={statusMentionId}
+                    statusId={textMetrics.statusMentionId}
                     isCurrentUser={isCurrentUser}
                     targetUserId={message.sender_id}
                     router={router}
@@ -275,13 +283,13 @@ const MessageContent = memo(({
             )}
 
             <View style={styles.footerContainer}>
-                {textContent && textContent.trim() !== '' && !isStatusMention && !(hasImage && textContent.startsWith('Sent ')) && !(isVoiceMessage && textContent.startsWith('Sent ')) && message.message_type !== 'ledger' && (
+                {textMetrics.showText && (
                     <Text style={[
                         styles.msgText,
                         { color: isCurrentUser ? 'white' : '#1F2937' },
-                        (textContent.trim().startsWith('{"iv":') || textContent === 'SYSTEM_MSG: DELETED') && styles.msgTextItalic
+                        (textMetrics.isDecrypting || textMetrics.isDeleted) && styles.msgTextItalic
                     ]}>
-                        {textContent.trim().startsWith('{"iv":') ? 'Decrypting...' : (textContent === 'SYSTEM_MSG: DELETED' ? '🚫 This message was deleted' : textContent)}
+                        {textMetrics.finalDisplay}
                     </Text>
                 )}
 

@@ -121,7 +121,12 @@
           "microphonePermission": "Allow ChatWarriors to access the microphone for voice typing",
           "speechRecognitionPermission": "Allow ChatWarriors to recognize your speech for voice typing"
         }
-      ]
+      ],
+      [
+        "expo-pip",
+        {}
+      ],
+      "./plugins/withCustomSound.js"
     ],
     "experiments": {
       "typedRoutes": true,

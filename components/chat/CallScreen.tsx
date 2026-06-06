@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, memo } from 'react';
-import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleSheet, AppState } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -9,6 +9,7 @@ import { useAgora } from '@/hooks/useAgora';
 import { useWindowDimensions } from 'react-native';
 import { useCallActions } from '@/hooks/useCallActions';
 import { CallEndedOverlay } from './CallScreenComponents';
+import ExpoPip from 'expo-pip';
 
 const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -79,6 +80,7 @@ export default function CallScreen({
     const { width, height } = useWindowDimensions();
     const [isSwapped, setIsSwapped] = useState(false);
     const [showControls, setShowControls] = useState(true);
+    const { isInPipMode } = ExpoPip.useIsInPip();
 
     // Draggable PIP
     const translateX = useSharedValue(0);
@@ -154,6 +156,23 @@ export default function CallScreen({
     const toggleSwap = useCallback(() => { if (!isGroup) setIsSwapped(p => !p); }, [isGroup]);
     const toggleControls = useCallback(() => setShowControls(p => !p), []);
 
+    // Listen to AppState to trigger PiP automatically on background
+    React.useEffect(() => {
+        const sub = AppState.addEventListener('change', (nextState) => {
+            if (nextState === 'background' || nextState === 'inactive') {
+                if (callState === 'active' && callType === 'video' && ExpoPip.isAvailable()) {
+                    // Try to enter PiP
+                    try {
+                        ExpoPip.enterPipMode({ width: 300, height: 400 });
+                    } catch (e) {
+                        console.warn('Failed to enter PiP:', e);
+                    }
+                }
+            }
+        });
+        return () => sub.remove();
+    }, [callState, callType]);
+
     if (!visible) return null;
 
     return (
@@ -169,7 +188,7 @@ export default function CallScreen({
         >
             <View style={styles.container}>
                 {/* Minimize Button */}
-                {callState !== 'ended' && onMinimize && showControls && (
+                {!isInPipMode && callState !== 'ended' && onMinimize && showControls && (
                     <TouchableOpacity style={styles.minimizeButton} onPress={onMinimize}>
                         <Ionicons name="chevron-down" size={32} color="white" />
                     </TouchableOpacity>
@@ -208,12 +227,12 @@ export default function CallScreen({
                 </TouchableWithoutFeedback>
 
                 {/* Ended Overlay */}
-                {callState === 'ended' && (
+                {!isInPipMode && callState === 'ended' && (
                     <CallEndedOverlay friend={friend} endReason={endReason} onRetry={retryCall} onGoToChat={goToChat} />
                 )}
 
-                {/* PIP Local Preview */}
-                {callType === 'video' && (callState === 'active' || callState === 'outgoing') && isEngineReady && (
+                {/* PIP Local Preview (Hide if OS PiP is active) */}
+                {!isInPipMode && callType === 'video' && (callState === 'active' || callState === 'outgoing') && isEngineReady && (
                     <GestureDetector gesture={panGesture}>
                         <Animated.View style={[styles.pipContainer, animatedStyle]}>
                             <TouchableOpacity activeOpacity={0.8} onPress={toggleSwap} style={styles.flex1}>
@@ -235,7 +254,7 @@ export default function CallScreen({
                 )}
 
                 {/* Timer */}
-                {callState === 'active' && (
+                {!isInPipMode && callState === 'active' && (
                     <View style={styles.timerContainer}>
                         <View style={styles.recordingDot} />
                         <Text style={styles.timerText}>{formatDuration(callDuration)}</Text>
@@ -243,13 +262,16 @@ export default function CallScreen({
                 )}
 
                 {/* Connection Status */}
-                <View style={styles.statusIndicator}>
-                    <Text style={styles.statusText}>{connectionStatus}</Text>
-                </View>
+                {!isInPipMode && (
+                    <View style={styles.statusIndicator}>
+                        <Text style={styles.statusText}>{connectionStatus}</Text>
+                    </View>
+                )}
 
                 {/* Controls */}
-                <View style={styles.controlsWrapper}>
-                    {showControls && (
+                {!isInPipMode && (
+                    <View style={styles.controlsWrapper}>
+                        {showControls && (
                         <CallControls
                             callState={callState}
                             callType={callType}
@@ -263,8 +285,9 @@ export default function CallScreen({
                             onAccept={acceptCall}
                             onEnd={endCall}
                         />
-                    )}
-                </View>
+                        )}
+                    </View>
+                )}
             </View>
         </Modal>
     );

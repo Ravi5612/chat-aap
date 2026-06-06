@@ -10,7 +10,7 @@ interface GroupBannerProps {
     myRole: 'admin' | 'member';
 }
 
-export default function GroupBanner({ groupName, groupImage, memberCount, myRole }: GroupBannerProps) {
+export default React.memo(function GroupBanner({ groupName, groupImage, memberCount, myRole }: GroupBannerProps) {
     return (
         <View style={styles.groupBanner}>
             <View style={styles.groupAvatarWrapper}>
@@ -20,6 +20,7 @@ export default function GroupBanner({ groupName, groupImage, memberCount, myRole
                     }}
                     style={styles.groupAvatar}
                     contentFit="cover"
+                    cachePolicy="memory-disk"
                 />
             </View>
             <Text style={styles.groupName}>{groupName}</Text>
@@ -32,7 +33,7 @@ export default function GroupBanner({ groupName, groupImage, memberCount, myRole
             )}
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     groupBanner: {

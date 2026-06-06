@@ -141,6 +141,7 @@ export default function RootLayout() {
           try {
             const cachedSession = JSON.parse(cachedSessionStr);
             useAuthStore.setState({ session: cachedSession, user: cachedSession.user });
+            useAuthStore.getState().syncDevice();
 
             // --- EAGER LOCAL HYDRATION START ---
             const { db } = useDbStore.getState();
@@ -227,6 +228,9 @@ export default function RootLayout() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setSession(session);
+      if (session?.user) {
+        useAuthStore.getState().syncDevice();
+      }
     });
 
     const appStateSub = AppState.addEventListener('change', handleAppStateChange);

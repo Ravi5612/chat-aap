@@ -3,10 +3,10 @@ import { Alert } from 'react-native';
 
 export const displayIncomingCall = async (callerName: string, channelName: string, callerAvatar?: string) => {
   const channelId = await notifee.createChannel({
-    id: 'incoming_calls',
+    id: 'incoming_calls_v2', // Change ID so Android registers the new sound setting
     name: 'Incoming Calls',
     importance: AndroidImportance.HIGH,
-    sound: 'default',
+    sound: 'ringtone',
     vibration: true,
   });
 

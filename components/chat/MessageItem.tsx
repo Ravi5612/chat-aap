@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
 import FlyingReaction from './FlyingReaction';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
+import { Buffer } from 'buffer';
 
 import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
 import { useMessageGestures } from '@/hooks/useMessageGestures';
@@ -47,67 +48,83 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
     const uploadProgress = useChatStore(state => state.uploadProgress[message.id]);
 
     // Parse Message
-    const isVoiceMessage = message.file_type?.startsWith('audio/') || message.message?.startsWith('[Voice Message]');
-    const voiceUri = message.file_url || (message.message?.startsWith('[Voice Message]') ? message.message.split(' ')[2] : null);
-    const isVideoMessage = message.file_type === 'video/mp4' || message.file_type?.startsWith('video/') || message.message?.startsWith('[Video]');
-    let videoUrl = message.file_type?.startsWith('video/') ? message.file_url : null;
-    if (!videoUrl && message.message?.startsWith('[Video]')) videoUrl = message.message.split(' ')[1];
-    const hasImage = !isVideoMessage && (message.file_type?.startsWith('image/') || message.message?.includes('[Image]') || message.file_url);
-    let imageUrl = !isVideoMessage && (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
-    let textContent = message.message;
+    const parsedData = React.useMemo(() => {
+        let textContent = message.message || '';
+        const isVoiceMessage = message.file_type?.startsWith('audio/') || textContent.startsWith('[Voice Message]');
+        const voiceUri = message.file_url || (textContent.startsWith('[Voice Message]') ? textContent.split(' ')[2] : null);
+        
+        const isVideoMessage = message.file_type === 'video/mp4' || message.file_type?.startsWith('video/') || textContent.startsWith('[Video]');
+        let videoUrl = message.file_type?.startsWith('video/') ? message.file_url : null;
+        if (!videoUrl && textContent.startsWith('[Video]')) videoUrl = textContent.split(' ')[1];
+        
+        const hasImage = !isVideoMessage && (message.file_type?.startsWith('image/') || textContent.includes('[Image]') || message.file_url);
+        let imageUrl = !isVideoMessage && (message.file_type?.startsWith('image/') || (message.file_url && !message.file_type)) ? message.file_url : null;
+        
+        if (!imageUrl && textContent.startsWith('[Image]')) {
+            const parts = textContent.split(' ');
+            imageUrl = parts[1];
+            textContent = parts.slice(2).join(' ');
+        }
+        if (isVideoMessage && textContent.startsWith('[Video]')) textContent = '';
+        if (isVoiceMessage && textContent.startsWith('[Voice Message]')) textContent = '';
 
-    if (!imageUrl && textContent?.startsWith('[Image]')) {
-        const parts = textContent.split(' ');
-        imageUrl = parts[1];
-        textContent = parts.slice(2).join(' ');
-    }
-    if (isVideoMessage && textContent?.startsWith('[Video]')) textContent = '';
+        const isContactMessage = textContent.startsWith('[Contact]');
+        let contactName = '', contactPhone = '';
+        if (isContactMessage) {
+            const parts = textContent.substring(9).split('|');
+            contactName = parts[0]?.trim() || 'Unknown Contact';
+            contactPhone = parts[1]?.trim() || '';
+            textContent = '';
+        }
 
-    if (isVoiceMessage && textContent?.startsWith('[Voice Message]')) textContent = '';
+        const isLocationMessage = textContent.startsWith('[Location]');
+        let locationCoords = '', locationAddress = '';
+        if (isLocationMessage) {
+            const parts = textContent.substring(11).split('|');
+            locationCoords = parts[0]?.trim() || '';
+            locationAddress = parts[1]?.trim() || 'Shared Location';
+            textContent = '';
+        }
 
-    const isContactMessage = textContent?.startsWith('[Contact]');
-    let contactName = '', contactPhone = '';
-    if (isContactMessage) {
-        const parts = textContent!.substring(9).split('|');
-        contactName = parts[0]?.trim() || 'Unknown Contact';
-        contactPhone = parts[1]?.trim() || '';
-        textContent = '';
-    }
+        const isDocumentMessage = textContent.startsWith('[Document]') || (message.file_url && message.file_type && !message.file_type.startsWith('image/') && !message.file_type.startsWith('audio/') && !message.file_type.startsWith('video/'));
+        let documentName = message.file_name || 'Document';
+        let documentSize = message.file_size ? `${(message.file_size / 1024 / 1024).toFixed(2)} MB` : '';
+        let documentUrl = message.file_url;
+        if (textContent.startsWith('[Document]')) {
+            const parts = textContent.substring(11).split('|');
+            if (!message.file_name) documentName = parts[1]?.trim() || 'Document';
+            if (!documentUrl) documentUrl = parts[0]?.trim() || '';
+            textContent = '';
+        }
 
-    const isLocationMessage = textContent?.startsWith('[Location]');
-    let locationCoords = '', locationAddress = '';
-    if (isLocationMessage) {
-        const parts = textContent!.substring(11).split('|');
-        locationCoords = parts[0]?.trim() || '';
-        locationAddress = parts[1]?.trim() || 'Shared Location';
-        textContent = '';
-    }
+        if (translatedText) {
+            textContent = translatedText.text;
+        }
 
-    const isDocumentMessage = textContent?.startsWith('[Document]') || (message.file_url && message.file_type && !message.file_type.startsWith('image/') && !message.file_type.startsWith('audio/') && !message.file_type.startsWith('video/'));
-    let documentName = message.file_name || 'Document';
-    let documentSize = message.file_size ? `${(message.file_size / 1024 / 1024).toFixed(2)} MB` : '';
-    let documentUrl = message.file_url;
-    if (textContent?.startsWith('[Document]')) {
-        const parts = textContent.substring(11).split('|');
-        if (!message.file_name) documentName = parts[1]?.trim() || 'Document';
-        if (!documentUrl) documentUrl = parts[0]?.trim() || '';
-        textContent = '';
-    }
+        return {
+            isVoiceMessage, voiceUri, isVideoMessage, videoUrl, hasImage, imageUrl,
+            textContent, isContactMessage, contactName, contactPhone,
+            isLocationMessage, locationCoords, locationAddress,
+            isDocumentMessage, documentName, documentSize, documentUrl
+        };
+    }, [message.message, message.file_type, message.file_url, message.file_name, message.file_size, translatedText]);
 
-    if (translatedText) {
-        textContent = translatedText.text;
-    }
+    const customKey = React.useMemo(() => {
+        return message.decryptionKeyBase64 ? new Uint8Array(Buffer.from(message.decryptionKeyBase64, 'base64')) : null;
+    }, [message.decryptionKeyBase64]);
 
-    const { localImageUrl, localVoiceUrl, localDocumentUrl, imageLoading } = useMessageMediaCache(message, imageUrl, voiceUri, documentUrl);
-    const finalVideoUrl = videoUrl || message.file_url || null;
+    const { localImageUrl, localVoiceUrl, localDocumentUrl, imageLoading } = useMessageMediaCache(message, parsedData.imageUrl, parsedData.voiceUri, parsedData.documentUrl, customKey);
+    const finalVideoUrl = parsedData.videoUrl || message.file_url || null;
     const { decryptedStatusContent, decryptedStatusMedia } = useStatusContext(message.status_context);
 
-    const formatTime = (ts: string) => {
+    const formatTime = React.useCallback((ts: string) => {
         if (!ts) return '';
         return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    };
+    }, []);
 
-    const handleLongPress = (event: any) => onLongPress?.(message, event.nativeEvent.pageY);
+    const handleLongPress = React.useCallback((event: any) => {
+        onLongPress?.(message, event.nativeEvent.pageY);
+    }, [onLongPress, message]);
 
     const isSystemMsg = message.message?.startsWith('SYSTEM_MSG:');
     if (isSystemMsg) {
@@ -129,7 +146,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: 8, paddingHorizontal: 16, width: '100%' }}>
                 <View style={{ backgroundColor: '#FEF08A', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, maxWidth: '85%' }}>
                     <Text style={{ fontSize: 11, color: '#A16207', textAlign: 'center' }}>
-                        {textContent || message.message}
+                        {parsedData.textContent || message.message}
                     </Text>
                 </View>
             </View>
@@ -219,13 +236,13 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
                         <MessageContent
                             message={message} isCurrentUser={isCurrentUser} formatTime={formatTime} handleLongPress={handleLongPress} onImagePress={onImagePress}
-                            imageUrl={imageUrl} localImageUrl={localImageUrl} imageLoading={imageLoading} uploadProgress={uploadProgress}
-                            isVoiceMessage={isVoiceMessage} voiceUri={voiceUri} localVoiceUrl={localVoiceUrl} textContent={textContent}
-                            isContactMessage={isContactMessage} contactName={contactName} contactPhone={contactPhone}
-                            isLocationMessage={isLocationMessage} locationCoords={locationCoords} locationAddress={locationAddress}
-                            isDocumentMessage={isDocumentMessage} documentName={documentName} documentSize={documentSize} documentUrl={localDocumentUrl || documentUrl}
-                            hasImage={hasImage}
-                            isVideoMessage={isVideoMessage} videoUrl={finalVideoUrl}
+                            imageUrl={parsedData.imageUrl} localImageUrl={localImageUrl} imageLoading={imageLoading} uploadProgress={uploadProgress}
+                            isVoiceMessage={parsedData.isVoiceMessage} voiceUri={parsedData.voiceUri} localVoiceUrl={localVoiceUrl} textContent={parsedData.textContent}
+                            isContactMessage={parsedData.isContactMessage} contactName={parsedData.contactName} contactPhone={parsedData.contactPhone}
+                            isLocationMessage={parsedData.isLocationMessage} locationCoords={parsedData.locationCoords} locationAddress={parsedData.locationAddress}
+                            isDocumentMessage={parsedData.isDocumentMessage} documentName={parsedData.documentName} documentSize={parsedData.documentSize} documentUrl={localDocumentUrl || parsedData.documentUrl}
+                            hasImage={parsedData.hasImage}
+                            isVideoMessage={parsedData.isVideoMessage} videoUrl={finalVideoUrl}
                         />
                     </TouchableOpacity>
 

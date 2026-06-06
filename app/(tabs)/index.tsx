@@ -1,4 +1,5 @@
-import { View, FlatList, Text, RefreshControl, Alert, Keyboard, TouchableOpacity, Share } from 'react-native';
+import { View, FlatList, Text, RefreshControl, Alert, Keyboard, TouchableOpacity, Share, AppState, AppStateStatus } from 'react-native';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -85,12 +86,55 @@ function HomeScreen() {
         loadVaultPasscode();
     }, []);
 
-    const handleSearchChange = useCallback((text: string) => {
+    // Auto-lock vault when app goes to background
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'background' || nextAppState === 'inactive') {
+                if (useFriendsStore.getState().isVaultOpen) {
+                    useFriendsStore.getState().setVaultOpen(false);
+                    setSearchQuery('');
+                }
+            }
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, []);
+
+    const handleSearchChange = useCallback(async (text: string) => {
         if (vaultPasscode && text === vaultPasscode) {
-            setVaultOpen(true);
             setSearchQuery('');
             Keyboard.dismiss();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            
+            try {
+                const hasHardware = await LocalAuthentication.hasHardwareAsync();
+                const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+                if (hasHardware && isEnrolled) {
+                    const result = await LocalAuthentication.authenticateAsync({
+                        promptMessage: 'Unlock Ninja Vault',
+                        fallbackLabel: 'Use Device Passcode',
+                        disableDeviceFallback: false,
+                    });
+                    
+                    if (result.success) {
+                        setVaultOpen(true);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } else {
+                        Alert.alert('Access Denied', 'Authentication failed.');
+                    }
+                } else {
+                    // Fallback if no biometrics setup
+                    setVaultOpen(true);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+            } catch (err) {
+                console.error("Local auth error:", err);
+                // Fallback on error
+                setVaultOpen(true);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
         } else {
             setSearchQuery(text);
         }
@@ -154,8 +198,9 @@ function HomeScreen() {
             isOnline={item.isOnline}
             onViewUserStatus={handleViewUserStatus}
             onImageClick={handleImageClick}
+            currentUserId={currentUser?.id}
         />
-    ), [handleSelectFriend, handleLongPress, handleViewUserStatus, handleImageClick]);
+    ), [handleSelectFriend, handleLongPress, handleViewUserStatus, handleImageClick, currentUser?.id]);
 
     // Removed full screen HomeSkeleton to prevent HomeSuggestions from flashing
 
@@ -177,10 +222,42 @@ function HomeScreen() {
                     ListHeaderComponent={
                         <View>
                             {isVaultOpen ? (
-                                <View style={{ backgroundColor: '#111827', padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, borderRadius: 12, marginHorizontal: 16, marginTop: 12 }}>
-                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>🥷 Ninja Vault Unlocked</Text>
-                                    <TouchableOpacity onPress={() => setVaultOpen(false)} style={{ backgroundColor: '#EF4444', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
-                                        <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>Lock Vault</Text>
+                                <View style={{ 
+                                    backgroundColor: '#111827', 
+                                    padding: 16, 
+                                    flexDirection: 'row', 
+                                    justifyContent: 'space-between', 
+                                    alignItems: 'center', 
+                                    marginBottom: 8, 
+                                    borderRadius: 16, 
+                                    marginHorizontal: 16, 
+                                    marginTop: 12,
+                                    shadowColor: '#000',
+                                    shadowOffset: { width: 0, height: 8 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 12,
+                                    elevation: 8,
+                                    borderWidth: 1,
+                                    borderColor: 'rgba(255,255,255,0.1)'
+                                }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                            <Ionicons name="eye-off" size={20} color="#FBBF24" />
+                                        </View>
+                                        <View>
+                                            <Text style={{ color: 'white', fontWeight: '900', fontSize: 16, letterSpacing: 0.5 }}>Ninja Vault</Text>
+                                            <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 2, fontWeight: '600' }}>Unlocked & Visible</Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity 
+                                        onPress={() => {
+                                            useFriendsStore.getState().setVaultOpen(false);
+                                            setSearchQuery('');
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                        }} 
+                                        style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                                    >
+                                        <Text style={{ color: '#F87171', fontSize: 13, fontWeight: 'bold' }}>Lock</Text>
                                     </TouchableOpacity>
                                 </View>
                             ) : (

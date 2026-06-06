@@ -23,7 +23,7 @@ interface MessageListProps {
     autoListenMode?: boolean;
 }
 
-export default function MessageList({
+export default React.memo(function MessageList({
     messages, currentUser, onReply, onLongPress, onImagePress,
     friendName, flyingEmoji, onLoadMore, loadingMore = false, translatedMessages = {}, autoListenMode = false,
 }: MessageListProps) {
@@ -58,11 +58,14 @@ export default function MessageList({
 
     const keyExtractor = useCallback((item: any) => item.id, []);
 
-    const ListFooterComponent = loadingMore ? (
-        <View style={{ paddingVertical: 12, alignItems: 'center' }}>
-            <ActivityIndicator size="small" color="#F68537" />
-        </View>
-    ) : null;
+    const renderFooter = useCallback(() => {
+        if (!loadingMore) return null;
+        return (
+            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color="#F68537" />
+            </View>
+        );
+    }, [loadingMore]);
 
     return (
         <View style={{ flex: 1 }}>
@@ -72,7 +75,7 @@ export default function MessageList({
                 data={groupedMessages}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
-                ListFooterComponent={ListFooterComponent}
+                ListFooterComponent={renderFooter}
                 contentContainerStyle={{ paddingVertical: 16 }}
                 showsVerticalScrollIndicator={false}
                 onEndReached={onLoadMore}
@@ -97,4 +100,4 @@ export default function MessageList({
             )}
         </View>
     );
-}
+});

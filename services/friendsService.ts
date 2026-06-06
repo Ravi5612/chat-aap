@@ -134,7 +134,7 @@ export async function fetchAndFormatFriendsData(
     }
 
     // Attempt to extract statusKey from the first found status for each user
-    const keyCache: Record<string, Uint8Array> = {};
+    const keyCache: Record<string, Uint8Array | null> = {};
     for (const uid of uniqueStatusUsers) {
         // Find the most recent status of this user
         const latestStatus = sortedStatuses.find(s => s.user_id === uid);

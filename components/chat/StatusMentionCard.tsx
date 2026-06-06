@@ -11,11 +11,12 @@ interface StatusMentionCardProps {
     router: any;
 }
 
-export default function StatusMentionCard({ statusId, isCurrentUser, targetUserId, router }: StatusMentionCardProps) {
+export default React.memo(function StatusMentionCard({ statusId, isCurrentUser, targetUserId, router }: StatusMentionCardProps) {
     const [status, setStatus] = useState<any>(null);
     const [senderProfile, setSenderProfile] = useState<any>(null);
 
     useEffect(() => {
+        let mounted = true;
         const load = async () => {
             try {
                 const { data: s } = await supabase
@@ -23,18 +24,19 @@ export default function StatusMentionCard({ statusId, isCurrentUser, targetUserI
                     .select('id, user_id, media_url, media_type, background_color, content')
                     .eq('id', statusId)
                     .single();
-                if (s) {
+                if (s && mounted) {
                     setStatus(s);
                     const { data: profile } = await supabase
                         .from('profiles')
                         .select('username, avatar_url')
                         .eq('id', s.user_id)
                         .single();
-                    if (profile) setSenderProfile(profile);
+                    if (profile && mounted) setSenderProfile(profile);
                 }
             } catch (e) {}
         };
         load();
+        return () => { mounted = false; };
     }, [statusId]);
 
     const hasImage = status?.media_url && (status?.media_type === 'image' || status?.media_type === 'video');
@@ -44,10 +46,14 @@ export default function StatusMentionCard({ statusId, isCurrentUser, targetUserI
     const subtextColor = isCurrentUser ? 'rgba(255,255,255,0.7)' : '#6B7280';
     const borderColor = isCurrentUser ? 'rgba(255,255,255,0.15)' : 'rgba(246,133,55,0.2)';
 
+    const handlePress = React.useCallback(() => {
+        router.push(`/status/viewer?userId=${targetUserId}&statusId=${statusId}`);
+    }, [router, targetUserId, statusId]);
+
     return (
         <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => router.push(`/status/viewer?userId=${targetUserId}&statusId=${statusId}`)}
+            onPress={handlePress}
             style={[styles.card, { borderColor }]}
         >
             {/* Header row */}
@@ -69,6 +75,7 @@ export default function StatusMentionCard({ statusId, isCurrentUser, targetUserI
                     <Image
                         source={{ uri: senderProfile.avatar_url }}
                         style={styles.avatar}
+                        cachePolicy="memory-disk"
                     />
                 )}
             </View>
@@ -80,6 +87,7 @@ export default function StatusMentionCard({ statusId, isCurrentUser, targetUserI
                         source={{ uri: status.media_url }}
                         style={StyleSheet.absoluteFillObject}
                         contentFit="cover"
+                        cachePolicy="memory-disk"
                     />
                 ) : (
                     status?.content ? (
@@ -101,7 +109,7 @@ export default function StatusMentionCard({ statusId, isCurrentUser, targetUserI
             </View>
         </TouchableOpacity>
     );
-}
+});
 
 const styles = StyleSheet.create({
     card: {

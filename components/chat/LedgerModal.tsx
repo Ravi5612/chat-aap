@@ -75,13 +75,18 @@ const LedgerModal = memo(({ visible, onClose, friendId, friendName }: LedgerModa
                         .order('created_at', { ascending: false });
 
                     if (cloudData && !error && cloudData.length > 0) {
-                        for (const item of cloudData) {
-                            const isMe = item.user_id === user.id;
-                            const finalType = isMe ? item.type : (item.type === 'gave' ? 'took' : 'gave');
-                            const targetFriendId = isMe ? item.friend_id : item.user_id;
-                            
-                            await addLocalExpense(db, targetFriendId, item.amount, item.description, finalType, item.sync_id);
-                        }
+                        await db.withTransactionAsync(async () => {
+                            for (const item of cloudData) {
+                                const isMe = item.user_id === user.id;
+                                const finalType = isMe ? item.type : (item.type === 'gave' ? 'took' : 'gave');
+                                const targetFriendId = isMe ? item.friend_id : item.user_id;
+                                
+                                await db.runAsync(
+                                    `INSERT OR IGNORE INTO expenses (friend_id, amount, description, type, created_at, sync_id) VALUES (?, ?, ?, ?, ?, ?)`,
+                                    [targetFriendId, item.amount, item.description, finalType, item.created_at || new Date().toISOString(), item.sync_id]
+                                );
+                            }
+                        });
                         // Re-load local after sync
                         const updatedData = await getLocalExpenses(db, friendId);
                         const updatedBal = await getExpenseBalance(db, friendId);
@@ -239,6 +244,10 @@ const LedgerModal = memo(({ visible, onClose, friendId, friendName }: LedgerModa
                             contentContainerStyle={styles.listContent}
                             ListEmptyComponent={renderEmpty}
                             renderItem={renderItem}
+                            initialNumToRender={15}
+                            maxToRenderPerBatch={10}
+                            windowSize={10}
+                            removeClippedSubviews={Platform.OS === 'android'}
                         />
                     </View>
                 </KeyboardAvoidingView>

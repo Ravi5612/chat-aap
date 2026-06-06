@@ -11,7 +11,7 @@ interface MemberListItemProps {
     onRemoveMember: (member: any) => void;
 }
 
-export default function MemberListItem({
+export default React.memo(function MemberListItem({
     member,
     currentUser,
     myRole,
@@ -21,6 +21,14 @@ export default function MemberListItem({
     const isMe = member.id === currentUser?.id;
     const isAdmin = member.role === 'admin';
 
+    const handleMakeAdmin = React.useCallback(() => {
+        onMakeAdmin(member);
+    }, [member, onMakeAdmin]);
+
+    const handleRemoveMember = React.useCallback(() => {
+        onRemoveMember(member);
+    }, [member, onRemoveMember]);
+
     return (
         <View style={styles.memberRow}>
             <View style={styles.memberAvatarContainer}>
@@ -28,6 +36,7 @@ export default function MemberListItem({
                     source={{ uri: member.img }}
                     style={styles.memberAvatar}
                     contentFit="cover"
+                    cachePolicy="memory-disk"
                 />
                 {member.isOnline && <View style={styles.onlineDot} />}
             </View>
@@ -51,14 +60,14 @@ export default function MemberListItem({
                 <View style={styles.actionRow}>
                     {!isAdmin && (
                         <TouchableOpacity
-                            onPress={() => onMakeAdmin(member)}
+                            onPress={handleMakeAdmin}
                             style={[styles.actionBtn, styles.promoteBtn]}
                         >
                             <Ionicons name="shield-checkmark-outline" size={16} color="#F68537" />
                         </TouchableOpacity>
                     )}
                     <TouchableOpacity
-                        onPress={() => onRemoveMember(member)}
+                        onPress={handleRemoveMember}
                         style={[styles.actionBtn, styles.removeBtn]}
                     >
                         <Ionicons name="person-remove-outline" size={16} color="#EF4444" />
@@ -67,7 +76,7 @@ export default function MemberListItem({
             )}
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     memberRow: {

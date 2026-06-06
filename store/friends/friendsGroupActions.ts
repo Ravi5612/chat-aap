@@ -12,6 +12,12 @@ export const createFriendsGroupActions = (set: StoreSet, get: StoreGet) => ({
             const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', activeUserId);
             if (error) throw error;
 
+            // Increment Key Epoch to force Ratcheting for remaining members
+            const { data: gData } = await supabase.from('groups').select('key_epoch').eq('id', groupId).single();
+            if (gData) {
+                await supabase.from('groups').update({ key_epoch: (gData.key_epoch || 1) + 1 }).eq('id', groupId);
+            }
+
             await get().loadFriends(activeUserId);
             return true;
         } catch (e) {
@@ -80,6 +86,12 @@ export const createFriendsGroupActions = (set: StoreSet, get: StoreGet) => ({
             }
             const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', userId);
             if (error) throw error;
+
+            // Increment Key Epoch to force Ratcheting for remaining members
+            const { data: gData } = await supabase.from('groups').select('key_epoch').eq('id', groupId).single();
+            if (gData) {
+                await supabase.from('groups').update({ key_epoch: (gData.key_epoch || 1) + 1 }).eq('id', groupId);
+            }
 
             const { data: profile } = await supabase.from('profiles').select('username').eq('id', userId).single();
             await supabase.from('messages').insert([{ group_id: groupId, sender_id: removedBy, message: `SYSTEM_MSG: ${profile?.username || 'A user'} was removed from the group`, status: 'sent', is_read: false }]);

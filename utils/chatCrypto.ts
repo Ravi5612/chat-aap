@@ -181,74 +181,64 @@ export async function getX25519SharedSecret(friendPublicKeyBase64: string, userI
 }
 
 /**
- * 🔑 Generate deterministic crypto key for a chat
- * Now updated to use X25519 Diffie-Hellman for 1-on-1 chats!
+ * 🔑 Get True E2EE Shared Secret using X25519 Diffie-Hellman for P2P Chats
  */
 export async function getChatKey(userId: string, friendId: string, isGroup: boolean = false): Promise<Uint8Array | null> {
     if (!userId || !friendId) {
         throw new Error("Invalid IDs for chat key");
     }
 
-    if (!isGroup) {
-        // True E2EE (X25519)
-        const baseKeyCacheStr = `x25519:${userId}:${friendId}`;
-        if (keyCache.has(baseKeyCacheStr)) return keyCache.get(baseKeyCacheStr)!;
-
-        // ✅ If our own private key is missing, auto-generate a fresh one (prevents null chatKey)
-        const ownPrivateKey = await getLocalPrivateKey(userId);
-        if (!ownPrivateKey) {
-            console.warn('Crypto: Own private key missing! Auto-generating fresh key...');
-            try {
-                const randomBytes = await Crypto.getRandomBytesAsync(32);
-                const privateKey = new Uint8Array(randomBytes);
-                const publicKey = x25519.getPublicKey(privateKey);
-                const privateKeyBase64 = Buffer.from(privateKey).toString('base64');
-                const publicKeyBase64 = Buffer.from(publicKey).toString('base64');
-                await AppStorage.setItemAsync(`private_x25519_${userId}`, privateKeyBase64);
-                // Update public key in Supabase
-                await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', userId);
-                console.log('Crypto: Fresh X25519 key pair generated and saved!');
-            } catch (e) {
-                console.error('Crypto: Failed to generate fresh key pair', e);
-            }
-        }
-
-        try {
-            const { data } = await supabase.from('profiles').select('public_key').eq('id', friendId).single();
-            if (data?.public_key) {
-                const key = await getX25519SharedSecret(data.public_key, userId);
-                if (key) {
-                    keyCache.set(baseKeyCacheStr, key);
-                    console.log(`Crypto: X25519 Key generated for friend ${friendId}`);
-                    return key;
-                }
-            } else {
-                console.warn(`Friend ${friendId} does not have a public key yet. Using PBKDF2 fallback.`);
-            }
-        } catch (e) {
-            console.warn('Failed to fetch friend public key for E2EE', e);
-        }
-
-        // ✅ PBKDF2 Fallback — ensures messages can always be sent/received
-        // Both sides will derive same deterministic key from sorted IDs
-        const sortedIds = [userId, friendId].sort().join(':');
-        const fallbackBase = `p2p_fallback_v1:${sortedIds}`;
-        const fallbackCacheStr = `fallback:${sortedIds}`;
-        if (keyCache.has(fallbackCacheStr)) return keyCache.get(fallbackCacheStr)!;
-        const fallbackKey = await pbkdf2Async(sha256, encoder.encode(fallbackBase), encoder.encode(SALT), {
-            c: 1000,
-            dkLen: 32
-        });
-        const fallbackUint = new Uint8Array(fallbackKey);
-        keyCache.set(fallbackCacheStr, fallbackUint);
-        console.warn(`Crypto: Using PBKDF2 fallback key for ${friendId} (E2EE not available)`);
-        return fallbackUint;
+    if (isGroup) {
+        throw new Error("getChatKey cannot be used for groups in True E2EE mode. Use getGroupSenderKeyFromDB instead.");
     }
 
-    // Fallback for groups
-    const baseKey = `group_v6:${friendId}`;
+    // True E2EE (X25519)
+    const baseKeyCacheStr = `x25519:${userId}:${friendId}`;
+    if (keyCache.has(baseKeyCacheStr)) return keyCache.get(baseKeyCacheStr)!;
 
-    // ✅ Noble PBKDF2 Async - non-blocking for React Native UI
+    // ✅ If our own private key is missing, auto-generate a fresh one
+    const ownPrivateKey = await getLocalPrivateKey(userId);
+    if (!ownPrivateKey) {
+        console.warn('Crypto: Own private key missing! Auto-generating fresh key...');
+        try {
+            const randomBytes = await Crypto.getRandomBytesAsync(32);
+            const privateKey = new Uint8Array(randomBytes);
+            const publicKey = x25519.getPublicKey(privateKey);
+            const privateKeyBase64 = Buffer.from(privateKey).toString('base64');
+            const publicKeyBase64 = Buffer.from(publicKey).toString('base64');
+            await AppStorage.setItemAsync(`private_x25519_${userId}`, privateKeyBase64);
+            await supabase.from('profiles').update({ public_key: publicKeyBase64 }).eq('id', userId);
+            console.log('Crypto: Fresh X25519 key pair generated and saved!');
+        } catch (e) {
+            console.error('Crypto: Failed to generate fresh key pair', e);
+            throw new Error("E2EE Identity generation failed.");
+        }
+    }
+
+    try {
+        const { data } = await supabase.from('profiles').select('public_key').eq('id', friendId).single();
+        if (data?.public_key) {
+            const key = await getX25519SharedSecret(data.public_key, userId);
+            if (key) {
+                keyCache.set(baseKeyCacheStr, key);
+                console.log(`Crypto: X25519 Key generated for friend ${friendId}`);
+                return key;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch friend public key for E2EE', e);
+    }
+
+    throw new Error(`E2EE: Target user ${friendId} has no public key. Secure connection aborted.`);
+}
+
+/**
+ * 🔑 Legacy PBKDF2 Fallback for old group messages (Migration Dual-Mode)
+ */
+export async function getLegacyGroupKey(groupId: string): Promise<Uint8Array> {
+    const baseKey = `group_v6:${groupId}`;
+    if (keyCache.has(baseKey)) return keyCache.get(baseKey)!;
+
     const key = await pbkdf2Async(sha256, encoder.encode(baseKey), encoder.encode(SALT), {
         c: 1000,
         dkLen: 32 // 256 bits
@@ -256,8 +246,127 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
 
     const uintKey = new Uint8Array(key);
     keyCache.set(baseKey, uintKey);
-    console.log(`Crypto: Group Key generated for ${baseKey.substring(0, 8)}`);
     return uintKey;
+}
+
+// ==========================================
+// 🛡️ TRUE E2EE SENDER-KEYS (FOR GROUPS)
+// ==========================================
+
+export async function getOrCreateMySenderKey(groupId: string, myId: string, forceRotate: boolean = false): Promise<{ key: Uint8Array, version: number }> {
+    const storageKey = `sender_key_${groupId}`;
+    const storageVerKey = `sender_version_${groupId}`;
+
+    if (!forceRotate) {
+        const existingKeyStr = await AppStorage.getItemAsync(storageKey);
+        const existingVerStr = await AppStorage.getItemAsync(storageVerKey);
+        if (existingKeyStr && existingVerStr) {
+            return { key: Buffer.from(existingKeyStr, 'base64'), version: parseInt(existingVerStr, 10) };
+        }
+    }
+
+    // Need to generate new key (Ratchet)
+    let newVersion = 1;
+
+    // Fetch highest version from DB to increment correctly
+    const { data: latestKeyRow } = await supabase
+        .from('group_sender_keys')
+        .select('key_version')
+        .eq('group_id', groupId)
+        .eq('sender_id', myId)
+        .order('key_version', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (latestKeyRow) {
+        newVersion = latestKeyRow.key_version + 1;
+        // Deactivate old keys
+        await supabase
+            .from('group_sender_keys')
+            .update({ is_active: false })
+            .eq('group_id', groupId)
+            .eq('sender_id', myId);
+    }
+
+    const randomBytes = await Crypto.getRandomBytesAsync(32);
+    const newAesKey = new Uint8Array(randomBytes);
+    
+    await AppStorage.setItemAsync(storageKey, Buffer.from(newAesKey).toString('base64'));
+    await AppStorage.setItemAsync(storageVerKey, newVersion.toString());
+
+    return { key: newAesKey, version: newVersion };
+}
+
+export async function distributeSenderKey(groupId: string, myId: string, aesKey: Uint8Array, keyVersion: number, targetMemberIds: string[]): Promise<void> {
+    if (targetMemberIds.length === 0) return;
+
+    // Fetch public keys for all targets
+    const { data: profiles } = await supabase.from('profiles').select('id, public_key').in('id', targetMemberIds);
+    if (!profiles) return;
+
+    const insertPayloads = [];
+
+    for (const profile of profiles) {
+        if (!profile.public_key) continue;
+
+        // Encrypt our AES Sender Key for this specific member's eyes only
+        const sharedSecret = await getX25519SharedSecret(profile.public_key, myId);
+        if (!sharedSecret) continue;
+
+        const aesKeyBase64 = Buffer.from(aesKey).toString('base64');
+        const encryptedAESKey = await encryptText(aesKeyBase64, sharedSecret);
+
+        if (encryptedAESKey) {
+            insertPayloads.push({
+                group_id: groupId,
+                sender_id: myId,
+                receiver_id: profile.id,
+                encrypted_key: encryptedAESKey,
+                key_version: keyVersion,
+                is_active: true
+            });
+        }
+    }
+
+    if (insertPayloads.length > 0) {
+        await supabase.from('group_sender_keys').insert(insertPayloads);
+        console.log(`Crypto: Distributed Sender Key v${keyVersion} to ${insertPayloads.length} members in group ${groupId}`);
+    }
+}
+
+export async function getDecryptedSenderKey(groupId: string, senderId: string, myId: string, keyVersion: number): Promise<Uint8Array | null> {
+    const cacheStr = `group_key_${groupId}_${senderId}_v${keyVersion}`;
+    if (keyCache.has(cacheStr)) return keyCache.get(cacheStr)!;
+
+    // Fetch from DB
+    const { data: keyRecord } = await supabase
+        .from('group_sender_keys')
+        .select('encrypted_key')
+        .eq('group_id', groupId)
+        .eq('sender_id', senderId)
+        .eq('receiver_id', myId)
+        .eq('key_version', keyVersion)
+        .maybeSingle();
+
+    if (!keyRecord || !keyRecord.encrypted_key) {
+        console.warn(`Crypto: Missing sender key for ${senderId} in group ${groupId} (v${keyVersion})`);
+        return null;
+    }
+
+    // Get sender's public key to derive shared secret
+    const { data: profile } = await supabase.from('profiles').select('public_key').eq('id', senderId).single();
+    if (!profile?.public_key) return null;
+
+    const sharedSecret = await getX25519SharedSecret(profile.public_key, myId);
+    if (!sharedSecret) return null;
+
+    // Decrypt the AES Sender Key
+    const decryptedBase64 = await decryptText(keyRecord.encrypted_key, sharedSecret);
+    if (!decryptedBase64) return null;
+
+    const aesKey = new Uint8Array(Buffer.from(decryptedBase64, 'base64'));
+    keyCache.set(cacheStr, aesKey);
+    return aesKey;
 }
 
 /**

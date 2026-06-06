@@ -40,7 +40,7 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
             if (error) throw error;
 
             const newMessages = messages.map(m => m.id === messageId ? { ...m, reactions } : m);
-            set((state) => ({
+            set((state: any) => ({
                 messages: newMessages,
                 cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
             }));
@@ -69,7 +69,7 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
             if (error) throw error;
 
             const newMessages = messages.map(m => m.id === messageId ? { ...m, message: newText, is_edited: true } : m);
-            set((state) => ({
+            set((state: any) => ({
                 messages: newMessages,
                 cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
             }));
@@ -115,7 +115,7 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
 
             // Update Cache Safely
             const finalMessages = get().messages;
-            set((state) => ({
+            set((state: any) => ({
                 cache: {
                     ...state.cache,
                     [activeChatId]: {
