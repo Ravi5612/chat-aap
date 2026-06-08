@@ -17,5 +17,17 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
     const senderName = title;
     
     await displayMessageNotification(senderName as string, body as string);
+    
+    // Mark as delivered for TRUE double-tick in background
+    const messageId = remoteMessage.data?.messageId;
+    if (messageId) {
+      try {
+        const { supabase } = require('../lib/supabase');
+        await supabase.auth.getSession(); // Ensure session is loaded from SecureStore
+        await supabase.from('messages').update({ status: 'delivered' }).eq('id', messageId);
+      } catch (e) {
+        console.log('Background delivery update failed:', e);
+      }
+    }
   }
 });

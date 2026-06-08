@@ -65,7 +65,10 @@ export default React.memo(function MessageInfoModal({ visible, onClose, message 
                                 {/* Delivered */}
                                 <View style={styles.infoRow}>
                                     <View style={[styles.iconBox, { backgroundColor: 'rgba(99, 102, 241, 0.1)' }]}>
-                                        <Ionicons name="checkmark-done" size={20} color="#6366F1" />
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Ionicons name="checkmark" size={20} color="#6366F1" style={{ marginRight: -8 }} />
+                                            <Ionicons name="checkmark" size={20} color="#6366F1" />
+                                        </View>
                                     </View>
                                     <View style={styles.textContainer}>
                                         <Text style={styles.label}>Delivered</Text>
@@ -75,8 +78,11 @@ export default React.memo(function MessageInfoModal({ visible, onClose, message 
 
                                 {/* Read */}
                                 <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                                    <View style={[styles.iconBox, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                                        <Ionicons name="checkmark-done" size={20} color="#10B981" />
+                                    <View style={[styles.iconBox, { backgroundColor: 'rgba(13, 27, 42, 0.1)' }]}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Ionicons name="checkmark" size={20} color="#0D1B2A" style={{ marginRight: -8 }} />
+                                            <Ionicons name="checkmark" size={20} color="#0D1B2A" />
+                                        </View>
                                     </View>
                                     <View style={styles.textContainer}>
                                         <Text style={styles.label}>Read</Text>

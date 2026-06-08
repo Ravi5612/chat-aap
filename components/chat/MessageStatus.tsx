@@ -26,7 +26,10 @@ export default React.memo(function MessageStatus({ status }: MessageStatusProps)
     if (status === 'delivered') {
         return (
             <View style={styles.container}>
-                <Ionicons name="checkmark-done" size={16} color="#94a3b8" />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="checkmark" size={16} color="#FFFFFF" style={{ marginRight: -6 }} />
+                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                </View>
             </View>
         );
     }
@@ -34,7 +37,10 @@ export default React.memo(function MessageStatus({ status }: MessageStatusProps)
     if (status === 'read') {
         return (
             <View style={styles.container}>
-                <Ionicons name="checkmark-done" size={16} color="#10B981" />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="checkmark" size={16} color="#0D1B2A" style={{ marginRight: -6 }} />
+                    <Ionicons name="checkmark" size={16} color="#0D1B2A" />
+                </View>
             </View>
         );
     }
