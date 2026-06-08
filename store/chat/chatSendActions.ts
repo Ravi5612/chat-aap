@@ -44,9 +44,9 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
         const updatedMessages = scheduledAt ? messages : [...messages, tempMsg];
         if (!scheduledAt) {
             set((state: any) => ({
-            messages: [tempMsg, ...state.messages],
-            cache: { ...state.cache, [friendId]: { messages: [tempMsg, ...state.messages], key: state.chatKey } }
-        }));    
+                messages: [tempMsg, ...(state.messages || [])],
+                cache: { ...state.cache, [friendId]: { messages: [tempMsg, ...(state.messages || [])], key: state.chatKey } }
+            }));    
         }
 
         const { db } = useDbStore.getState();
@@ -221,11 +221,13 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             // ✅ MARK AS FAILED IN UI INSTEAD OF SPINNING FOREVER
             set((state: any) => {
                 const newMessages = state.messages.map((m: any) => m.id === tempId ? { ...m, status: 'failed' } : m);
-                saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
-                set((state: any) => {
-                    const uniqueMessages = Array.from(new Map(newMessages.map((m: any) => [m.id, m])).values());
-                    return { messages: uniqueMessages, cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: state.chatKey } } };
-                });
+                const uniqueMessages = Array.from(new Map(newMessages.map((m: any) => [m.id, m])).values());
+                saveToCache(`chat_messages_${friendId}`, { messages: uniqueMessages });
+                
+                return { 
+                    messages: uniqueMessages, 
+                    cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: state.chatKey } } 
+                };
             });
 
             logErrorToDB(error, 'ChatStore: Send Message', currentUser.id, currentUser.username);
