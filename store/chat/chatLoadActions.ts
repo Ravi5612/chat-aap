@@ -233,6 +233,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
                 return;
             }
 
+            // Store is ASC (oldest→newest), so messages[0] is the oldest message — correct for pagination
             const oldestMsg = messages[0];
             if (!oldestMsg || !oldestMsg.created_at) {
                 set({ loadingMore: false, hasMore: false });

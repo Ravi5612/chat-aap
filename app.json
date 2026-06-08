@@ -18,6 +18,8 @@
         "NSLocationWhenInUseUsageDescription": "ChatWarriors uses your location to help you find your lost device if you enable Device Tracker.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "ChatWarriors uses your background location to help you find your lost device even when the app is closed.",
         "UIBackgroundModes": [
+          "audio",
+          "voip",
           "location",
           "fetch",
           "remote-notification"
@@ -39,6 +41,8 @@
         "INTERNET",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PROJECTION",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "FOREGROUND_SERVICE_CAMERA",
         "ACCESS_NETWORK_STATE",
         "ACCESS_WIFI_STATE",
         "BLUETOOTH",

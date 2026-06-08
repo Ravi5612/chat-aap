@@ -1,13 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
-import * as AgoraRTC from 'react-native-agora';
-import { 
-    IRtcEngine, 
-    ChannelProfileType, 
-    ClientRoleType,
-} from 'react-native-agora';
-
-const APP_ID = process.env.EXPO_PUBLIC_AGORA_APP_ID || '';
+import { useState, useEffect, useRef } from 'react';
+import { IRtcEngine } from 'react-native-agora';
+import { useAgoraActions } from './agora/useAgoraActions';
+import { useAgoraConnection } from './agora/useAgoraConnection';
 
 interface UseAgoraProps {
     callState: 'incoming' | 'outgoing' | 'active' | null;
@@ -55,154 +49,6 @@ export const useAgora = ({
         callTypeRef.current = callType;
     }, [onEndCall, onAcceptCall, callType]);
 
-    const init = async (): Promise<boolean> => {
-        if (engine.current) return true;
-        
-        try {
-            if (__DEV__) console.log('[CALL_ACTION] Initializing Agora Engine...');
-            
-            if (!APP_ID) {
-                if (__DEV__) console.error('[CALL_ACTION] AGORA_APP_ID is missing! Check your environment variables.');
-                setConnectionStatus('Error: Missing App ID');
-                return false;
-            }
-
-            if (Platform.OS === 'android') {
-                const granted = await PermissionsAndroid.requestMultiple([
-                    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-                    PermissionsAndroid.PERMISSIONS.CAMERA,
-                ]);
-                
-                if (granted['android.permission.RECORD_AUDIO'] !== 'granted' || 
-                    (callTypeRef.current === 'video' && granted['android.permission.CAMERA'] !== 'granted')) {
-                    setConnectionStatus('Error: Permissions denied');
-                    return false;
-                }
-            }
-
-            const rtcEngine = AgoraRTC.createAgoraRtcEngine();
-            engine.current = rtcEngine;
-
-            const eventHandler = {
-                onJoinChannelSuccess: (connection: any) => {
-                    if (__DEV__) console.log('[CALL_ACTION] Joined successfully. Local UID:', connection.localUid);
-                    setJoined(true);
-                    setConnectionStatus('Connected');
-                    if (callTypeRef.current === 'video') {
-                        rtcEngine.enableLocalVideo(true);
-                    }
-                },
-                onUserJoined: (connection: any, rUid: number) => {
-                    if (__DEV__) console.log('[CALL_ACTION] REMOTE USER JOINED! UID:', rUid);
-                    setRemoteUids(prev => [...new Set([...prev, rUid])]);
-                    
-                    if (stateRef.current === 'outgoing' && !hasAcceptedRef.current) {
-                        hasAcceptedRef.current = true;
-                        onAcceptCallRef.current();
-                    }
-                },
-                onUserOffline: (connection: any, rUid: number) => {
-                    if (__DEV__) console.log('[CALL_ACTION] Remote user offline:', rUid);
-                    setRemoteUids(prev => prev.filter(uid => uid !== rUid));
-                    
-                    if (!isGroup) {
-                        onEndCallRef.current();
-                    }
-                },
-                onLeaveChannel: () => {
-                    if (__DEV__) console.log('[CALL_ACTION] Left Agora channel');
-                    setJoined(false);
-                    setRemoteUids([]);
-                    setRemoteAudioMuted(false);
-                    setRemoteVideoMuted(false);
-                    setConnectionStatus('Disconnected');
-                },
-                onUserMuteAudio: (connection: any, rUid: number, muted: boolean) => {
-                    if (__DEV__) console.log('[CALL_ACTION] Remote user mute audio:', rUid, muted);
-                    setRemoteAudioMuted(muted);
-                },
-                onUserMuteVideo: (connection: any, rUid: number, muted: boolean) => {
-                    if (__DEV__) console.log('[CALL_ACTION] Remote user mute video:', rUid, muted);
-                    setRemoteVideoMuted(muted);
-                },
-                onError: (err: any) => {
-                    if (__DEV__) console.error('[CALL_ACTION] Agora Error:', err);
-                    setConnectionStatus(`Error: ${err}`);
-                }
-            };
-
-            rtcEngine.initialize({
-                appId: APP_ID,
-                channelProfile: ChannelProfileType.ChannelProfileLiveBroadcasting,
-            });
-
-            rtcEngine.registerEventHandler(eventHandler);
-            rtcEngine.enableAudio();
-            rtcEngine.setEnableSpeakerphone(callTypeRef.current === 'video'); // Audio routing fix
-            if (callTypeRef.current === 'video') {
-                rtcEngine.enableVideo();
-                rtcEngine.startPreview();
-            }
-            rtcEngine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
-            setIsEngineReady(true);
-            if (__DEV__) console.log('[CALL_ACTION] Agora Engine Initialized Successfully');
-            return true;
-        } catch (e) {
-            if (__DEV__) console.error('[CALL_ACTION] Failed to initialize Agora:', e);
-            setIsEngineReady(false);
-            return false;
-        }
-    };
-
-    const join = async () => {
-        if (!engine.current || isJoining.current || joined || !channelName.current) {
-            return;
-        }
-
-        try {
-            isJoining.current = true;
-            if (__DEV__) console.log('[CALL_ACTION] Joining channel:', channelName.current);
-            if (callTypeRef.current === 'video') {
-                engine.current.startPreview();
-            }
-            
-            const joinResult = engine.current.joinChannel('', channelName.current, 0, {
-                clientRoleType: ClientRoleType.ClientRoleBroadcaster,
-                publishMicrophoneTrack: true,
-                publishCameraTrack: callTypeRef.current === 'video',
-                autoSubscribeAudio: true,
-                autoSubscribeVideo: callTypeRef.current === 'video',
-            });
-
-            if (joinResult !== 0) {
-                isJoining.current = false;
-                setConnectionStatus(`Join Failed: ${joinResult}`);
-            }
-        } catch (e) {
-            isJoining.current = false;
-            if (__DEV__) console.error('[CALL_ACTION] Join error:', e);
-        }
-    };
-
-    const leave = useCallback(() => {
-        if (engine.current) {
-            if (__DEV__) console.log('[CALL_ACTION] Leaving channel and stopping media');
-            try {
-                engine.current.leaveChannel();
-                engine.current.stopPreview();
-                engine.current.release(); // Fully release resources
-            } catch (e) {
-                if (__DEV__) console.warn('Error releasing engine:', e);
-            }
-            engine.current = null;
-            setJoined(false);
-            setIsEngineReady(false); // Reset ready state
-            setRemoteUids([]);
-            isJoining.current = false;
-            setConnectionStatus('Disconnected');
-        }
-    }, []);
-
     // Stabilize callState with a Ref to avoid closures issues
     const stateRef = useRef(callState);
     useEffect(() => {
@@ -222,6 +68,40 @@ export const useAgora = ({
             }
         }
     }, [currentUser?.id, friend?.id, isGroup]);
+
+    const { init, join, leave } = useAgoraConnection(
+        engine,
+        channelName,
+        isJoining,
+        hasAcceptedRef,
+        callTypeRef,
+        stateRef,
+        onAcceptCallRef,
+        onEndCallRef,
+        isGroup,
+        joined,
+        setJoined,
+        setRemoteUids,
+        setConnectionStatus,
+        setRemoteAudioMuted,
+        setRemoteVideoMuted,
+        setIsEngineReady
+    );
+
+    const {
+        toggleMute,
+        toggleVideo,
+        switchCamera,
+        toggleScreenShare,
+        toggleSpeakerphone
+    } = useAgoraActions(
+        engine,
+        callTypeRef,
+        isMuted, setIsMuted,
+        isVideoOff, setIsVideoOff,
+        isScreenSharing, setIsScreenSharing,
+        isSpeakerphone, setIsSpeakerphone
+    );
 
     useEffect(() => {
         const isCallActive = ['active', 'outgoing', 'incoming'].includes(callState as string);
@@ -249,64 +129,6 @@ export const useAgora = ({
             }
         };
     }, []);
-
-    const toggleMute = () => {
-        if (engine.current) {
-            engine.current.muteLocalAudioStream(!isMuted);
-            setIsMuted(!isMuted);
-        }
-    };
-
-    const toggleVideo = () => {
-        if (engine.current) {
-            engine.current.muteLocalVideoStream(!isVideoOff);
-            setIsVideoOff(!isVideoOff);
-        }
-    };
-
-    const switchCamera = () => {
-        if (engine.current && !isScreenSharing) {
-            engine.current.switchCamera();
-        }
-    };
-
-    const toggleScreenShare = async () => {
-        if (!engine.current) return;
-        try {
-            if (isScreenSharing) {
-                await engine.current.stopScreenCapture();
-                if (callTypeRef.current === 'video') {
-                    await engine.current.updateChannelMediaOptions({
-                        publishScreenCaptureVideo: false,
-                        publishCameraTrack: true,
-                    });
-                    if (!isVideoOff) engine.current.startPreview();
-                }
-                setIsScreenSharing(false);
-            } else {
-                await engine.current.startScreenCapture({
-                    captureVideo: true,
-                    captureAudio: false,
-                    videoParams: { dimensions: { width: 1280, height: 720 }, frameRate: 15, bitrate: 1000 }
-                });
-                await engine.current.updateChannelMediaOptions({
-                    publishCameraTrack: false,
-                    publishScreenCaptureVideo: true,
-                });
-                setIsScreenSharing(true);
-            }
-        } catch (e) {
-            if (__DEV__) console.error('[CALL_ACTION] Screen share error:', e);
-        }
-    };
-
-    const toggleSpeakerphone = () => {
-        if (engine.current) {
-            const newState = !isSpeakerphone;
-            engine.current.setEnableSpeakerphone(newState);
-            setIsSpeakerphone(newState);
-        }
-    };
 
     return {
         joined,

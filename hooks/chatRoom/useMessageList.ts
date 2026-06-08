@@ -38,27 +38,39 @@ export const useMessageList = (messages: any[], currentUser: any) => {
         hideBtn();
     }, [hideBtn]);
 
-    // Date-grouped messages for inverted FlatList (DESC order: newest at index 0)
+    // Date-grouped messages for inverted FlatList
+    // inverted=true → index 0 = screen BOTTOM → array must be DESCENDING (newest first)
     const groupedMessages = useMemo(() => {
+        // Always sort newest → oldest regardless of how messages arrived in store
+        const sorted = [...messages].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+
         const items: any[] = [];
-        let nextDateStr = messages.length > 0 && messages[0]?.created_at ? new Date(messages[0].created_at).toDateString() : '';
-        
-        for (let i = 0; i < messages.length; i++) {
-            const msg = messages[i];
+        for (let i = 0; i < sorted.length; i++) {
+            const msg = sorted[i];
             if (!msg || !msg.created_at) continue;
-            
+
             items.push({ ...msg, type: 'message' });
-            
-            const currentDateStr = nextDateStr;
-            const nextMsg = messages[i + 1];
-            nextDateStr = nextMsg && nextMsg.created_at ? new Date(nextMsg.created_at).toDateString() : '';
-            
-            if (currentDateStr !== nextDateStr) {
+
+            const currentDateStr = new Date(msg.created_at).toDateString();
+            const nextMsg = sorted[i + 1];
+
+            if (!nextMsg) {
+                // Last (oldest) message — add its date label at very top of screen
                 items.push({ id: `date-${currentDateStr}`, type: 'date', date: currentDateStr });
+            } else {
+                const nextDateStr = new Date(nextMsg.created_at).toDateString();
+                if (currentDateStr !== nextDateStr) {
+                    // Day changed (going older) — insert separator for the OLDER day
+                    items.push({ id: `date-${nextDateStr}`, type: 'date', date: nextDateStr });
+                }
             }
         }
         return items;
     }, [messages]);
+
+
 
     // Scroll to a replied-to message (with fallback load from Supabase)
     const handleScrollToMessage = useCallback(async (replyMsg: any) => {

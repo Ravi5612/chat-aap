@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as Contacts from 'expo-contacts';
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Alert, DeviceEventEmitter } from 'react-native';
+import { Alert } from 'react-native';
 import { getFromCache, saveToCache } from '@/lib/database';
+import { syncDeviceContacts } from '@/services/contacts/contactSyncService';
+import { sendContactFriendRequest, cancelContactFriendRequest } from '@/services/contacts/contactRequestService';
 
 // Memory cache keyed by user ID to prevent cross-user data leaks on logout/login
 const memoryCache: Record<string, { data: any[], timestamp: number }> = {};
@@ -42,7 +43,6 @@ export const useContactSuggestions = () => {
 
         try {
             const { status: existingStatus } = await Contacts.getPermissionsAsync();
-
             setPermissionGranted(existingStatus === 'granted');
 
             if (existingStatus !== 'granted') {
@@ -50,120 +50,17 @@ export const useContactSuggestions = () => {
                 return;
             }
 
-            const { data } = await Contacts.getContactsAsync({
-                fields: [Contacts.Fields.PhoneNumbers],
-            });
-
-            if (data.length > 0) {
-                // 1. Extract and normalize phone numbers
-                const phoneNumbers = new Set<string>();
-                
-                data.forEach(contact => {
-                    if (contact.phoneNumbers) {
-                        contact.phoneNumbers.forEach(phone => {
-                            let num = phone.number?.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '');
-                            if (!num) return;
-                            
-                            // Basic normalization: prevent duplicate array entries to keep Supabase query small
-                            if (num.length === 10 && /^\d+$/.test(num)) {
-                                phoneNumbers.add(`+91${num}`);
-                            } else if (num.startsWith('0') && num.length === 11) {
-                                phoneNumbers.add(`+91${num.substring(1)}`);
-                            } else if (!num.startsWith('+') && num.length > 10) {
-                                phoneNumbers.add(`+${num}`);
-                            } else {
-                                phoneNumbers.add(num);
-                            }
-                        });
-                    }
-                });
-
-                const uniquePhones = Array.from(phoneNumbers);
-                if (uniquePhones.length === 0) {
-                    setLoading(false);
-                    return;
-                }
-
-                // Split array into chunks of 100 to avoid overly large queries
-                const chunkSize = 100;
-                const chunkPromises = [];
-                
-                for (let i = 0; i < uniquePhones.length; i += chunkSize) {
-                    const chunk = uniquePhones.slice(i, i + chunkSize);
-                    chunkPromises.push(
-                        supabase
-                            .from('profiles')
-                            .select('id, username, phone, avatar_url, email, dp_privacy, dp_selected_friends, hide_dp_in_search')
-                            .in('phone', chunk)
-                            .neq('id', currentUserId)
-                    );
-                }
-
-                const chunkResults = await Promise.all(chunkPromises);
-                let registeredProfiles: any[] = [];
-                chunkResults.forEach(({ data, error }) => {
-                    if (!error && data) {
-                        registeredProfiles = [...registeredProfiles, ...data];
-                    }
-                });
-
-                if (registeredProfiles.length === 0) {
-                    setSuggestions([]);
-                    setLoading(false);
-                    return;
-                }
-
-                const profileIds = registeredProfiles.map(p => p.id);
-
-                // 2. Fetch existing friends (bi-directional) and requests in parallel
-                const [friendshipsRes, requestsRes] = await Promise.all([
-                    supabase
-                        .from('friendships')
-                        .select('user_id, friend_id')
-                        .or(`user_id.eq.${currentUserId},friend_id.eq.${currentUserId}`),
-                    supabase
-                        .from('friend_requests')
-                        .select('sender_id, receiver_id, status')
-                        .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
-                ]);
-
-                if (friendshipsRes.error) throw friendshipsRes.error;
-                if (requestsRes.error) throw requestsRes.error;
-
-                const friendIds = new Set<string>();
-
-                // Collect ALL friend IDs where I am either user_id or friend_id
-                if (friendshipsRes.data) {
-                    friendshipsRes.data.forEach((f: any) => {
-                        if (f.user_id === currentUserId) friendIds.add(f.friend_id);
-                        if (f.friend_id === currentUserId) friendIds.add(f.user_id);
-                    });
-                }
-                
-                const sentRequestIds = new Set(requestsRes.data?.filter(r => r.sender_id === currentUserId && r.status !== 'rejected').map(r => r.receiver_id) || []);
-                const receivedRequestIds = new Set(requestsRes.data?.filter(r => r.receiver_id === currentUserId && r.status !== 'rejected').map(r => r.sender_id) || []);
-
-                const { getVisibleAvatar } = require('@/utils/privacyHelper');
-
-                const finalSuggestions = registeredProfiles
-                    .filter(p => 
-                        !friendIds.has(p.id) && 
-                        !receivedRequestIds.has(p.id)
-                    )
-                    .map(p => ({
-                        ...p,
-                        avatar_url: getVisibleAvatar(p, currentUserId, false, true),
-                        requestStatus: sentRequestIds.has(p.id) ? 'pending' : null
-                    }));
-
+            const finalSuggestions = await syncDeviceContacts(currentUserId);
+            
+            if (finalSuggestions.length > 0 || (finalSuggestions.length === 0 && suggestions.length > 0)) {
                 memoryCache[currentUserId] = {
                     data: finalSuggestions,
                     timestamp: Date.now()
                 };
-                
                 setSuggestions(finalSuggestions);
                 saveToCache('contact_suggestions', finalSuggestions);
             }
+
         } catch (error) {
             if (__DEV__) console.error("Error loading contact suggestions:", error);
         } finally {
@@ -179,8 +76,6 @@ export const useContactSuggestions = () => {
         if (!currentUserId || !currentUser) return;
         
         try {
-            // Profile verification is no longer needed via extra Supabase round-trip,
-            // we already have the local session Profile in useAuthStore.
             const senderProfile = useAuthStore.getState().profile;
             
             if (!senderProfile || !senderProfile.username) {
@@ -188,53 +83,23 @@ export const useContactSuggestions = () => {
                 return;
             }
 
-            // 2. Optimistic update UI
+            // Optimistic update UI
             setSuggestions(prev => prev.map(p => 
                 p.id === receiverId ? { ...p, requestStatus: 'pending' } : p
             ));
 
-            // 3. Insert friend request
-            const { error: requestError } = await supabase
-                .from('friend_requests')
-                .insert([{
-                    sender_id: currentUserId,
-                    receiver_id: receiverId,
-                    status: 'pending'
-                }]);
-
-            if (requestError) {
-                if (__DEV__) console.error("Friend request insert error:", requestError);
-                // Revert optimistic update
-                setSuggestions(prev => prev.map(p => 
-                    p.id === receiverId ? { ...p, requestStatus: null } : p
-                ));
-
-                if (requestError.code === '23503') { // Foreign key constraint violation
-                    // This means the receiver_id does not exist in the profiles table anymore
-                    setSuggestions(prev => prev.filter(p => p.id !== receiverId));
-                    throw new Error("This user no longer exists or their account was deleted.");
-                }
-
-                throw new Error(requestError.message);
-            }
-
-            // 4. Send Notification (ignore errors here to not block the main flow)
-            try {
-                await supabase.from('notifications').insert([{
-                    user_id: receiverId,
-                    sender_id: currentUserId,
-                    type: 'friend_request',
-                    message: `${senderProfile.username || 'A contact'} sent you a friend request.`,
-                    is_read: false
-                }]);
-            } catch (notifErr) {
-                if (__DEV__) console.warn("Notification failed to send:", notifErr);
-            }
-
-            DeviceEventEmitter.emit('friend_requests_changed');
+            await sendContactFriendRequest(currentUserId, receiverId, senderProfile);
 
         } catch (error: any) {
             if (__DEV__) console.error("Overall sendRequest error:", error);
+            // Revert optimistic update
+            setSuggestions(prev => prev.map(p => 
+                p.id === receiverId ? { ...p, requestStatus: null } : p
+            ));
+            
+            if (error.message.includes("no longer exists")) {
+                setSuggestions(prev => prev.filter(p => p.id !== receiverId));
+            }
             Alert.alert('Error', 'Failed to send friend request. ' + error.message);
         }
     }, [currentUser, currentUserId]);
@@ -248,31 +113,19 @@ export const useContactSuggestions = () => {
                 p.id === receiverId ? { ...p, requestStatus: null } : p
             ));
 
-            const { error: requestError } = await supabase
-                .from('friend_requests')
-                .delete()
-                .eq('sender_id', currentUserId)
-                .eq('receiver_id', receiverId)
-                .eq('status', 'pending');
-
-            if (requestError) {
-                if (__DEV__) console.error("Friend request cancel error:", requestError);
-                // Revert on error
-                setSuggestions(prev => prev.map(p => 
-                    p.id === receiverId ? { ...p, requestStatus: 'pending' } : p
-                ));
-                throw new Error(requestError.message);
-            }
+            await cancelContactFriendRequest(currentUserId, receiverId);
 
             // Also remove from cache
             saveToCache('contact_suggestions', suggestions.map(p => 
                 p.id === receiverId ? { ...p, requestStatus: null } : p
             ));
-
-            DeviceEventEmitter.emit('friend_requests_changed');
             
         } catch (error: any) {
             if (__DEV__) console.error("Overall cancelRequest error:", error);
+            // Revert on error
+            setSuggestions(prev => prev.map(p => 
+                p.id === receiverId ? { ...p, requestStatus: 'pending' } : p
+            ));
             Alert.alert('Error', 'Failed to cancel friend request. ' + error.message);
         }
     }, [currentUser, currentUserId, suggestions]);

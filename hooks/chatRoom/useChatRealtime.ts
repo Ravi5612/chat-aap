@@ -77,7 +77,8 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                             newMessages[existingIdx] = { ...newMessages[existingIdx], ...finalMsg };
                             return { messages: newMessages };
                         }
-                        return { messages: [finalMsg, ...state.messages] };
+                        // Append at end to keep store in ASC order (oldest → newest)
+                        return { messages: [...state.messages, finalMsg] };
                     });
 
                     const { db } = useDbStore.getState();

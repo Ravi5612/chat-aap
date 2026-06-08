@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, KeyboardAvoidingView, Platform, Text, Alert, Clipboard, Keyboard, StatusBar, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, KeyboardAvoidingView, Platform, Alert, Keyboard, StatusBar, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import * as ScreenCapture from 'expo-screen-capture';
 
 import MessageList from '@/components/chat/MessageList';
 import ChatInput from '@/components/chat/ChatInput';
@@ -16,6 +15,10 @@ import { useChatStore } from '@/store/useChatStore';
 import { useChatSync } from '@/hooks/useChatSync';
 import { useChatActions } from '@/hooks/useChatActions';
 import { useChatStatus } from '@/hooks/useChatStatus';
+import { useScreenshotPrevention } from '@/hooks/chatRoom/useScreenshotPrevention';
+import { useMessageTools } from '@/hooks/chatRoom/useMessageTools';
+import { useDisappearingMessages } from '@/hooks/chatRoom/useDisappearingMessages';
+import { useMessageContextMenu } from '@/hooks/chatRoom/useMessageContextMenu';
 
 // Subcomponents
 import ChatHeader from '@/components/chat/ChatHeader';
@@ -24,8 +27,7 @@ import ChatModals from '@/components/chat/ChatModals';
 import { UnfriendedBanner, BlockedBanner } from '@/components/chat/ChatBanners';
 import DisappearingMessagesModal from '@/components/chat/DisappearingMessagesModal';
 import ScheduledMessagesListModal from '@/components/chat/ScheduledMessagesListModal';
-import { translateMessage } from '@/services/translationService';
-import * as Speech from 'expo-speech';
+import { TypingIndicator } from '@/components/chat/TypingIndicator';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
@@ -60,55 +62,28 @@ export default function ChatScreen() {
     const chatKey = useChatStore(state => state.chatKey);
 
     const { handleStartCall } = useCallManager(currentUser, [], false);
-
-    const [replyingTo, setReplyingTo] = useState<any>(null);
-    const [editingMessage, setEditingMessage] = useState<any>(null);
     
-    // Modal states
-    const [contextMenuVisible, setContextMenuVisible] = useState(false);
-    const [selectedMessage, setSelectedMessage] = useState<any>(null);
-    const [anchorY, setAnchorY] = useState(0);
-    const [forwardModalVisible, setForwardModalVisible] = useState(false);
-    const [forwardText, setForwardText] = useState('');
+    // Extracted Modals/Tools Logic
+    const { translatedMessages, autoListenMode, toggleAutoListen, handleTranslate, handleListen } = useMessageTools();
+    const { disappearingDuration, disappearingModalVisible, setDisappearingModalVisible, handleSetDisappearingDuration } = useDisappearingMessages(currentUser, safeFriendId, friendData, handleSendMessageOriginal);
+    const {
+        contextMenuVisible, setContextMenuVisible, selectedMessage, anchorY,
+        replyingTo, setReplyingTo, editingMessage, setEditingMessage,
+        forwardModalVisible, setForwardModalVisible, forwardText,
+        infoVisible, setInfoVisible, handleMessageLongPress, handleMessageAction
+    } = useMessageContextMenu(handleDeleteMessage, handleTranslate, handleListen);
+
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
     const [viewerIsVideo, setViewerIsVideo] = useState(false);
     const [ledgerVisible, setLedgerVisible] = useState(false);
-    const [infoVisible, setInfoVisible] = useState(false);
-    const [disappearingModalVisible, setDisappearingModalVisible] = useState(false);
     const [scheduledListModalVisible, setScheduledListModalVisible] = useState(false);
-    const [translatedMessages, setTranslatedMessages] = useState<Record<string, { text: string; lang: string }>>({});
-    const [autoListenMode, setAutoListenMode] = useState(false);
-    
-    const disappearingDuration = friendData?.disappearing_duration || 0;
 
-    const handleSetDisappearingDuration = async (duration: number) => {
-        if (!currentUser?.id || !safeFriendId) return;
-        try {
-            await supabase.from('friendships').update({ disappearing_duration: duration })
-                .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${safeFriendId}),and(user_id.eq.${safeFriendId},friend_id.eq.${currentUser.id})`);
-            
-            const infoText = duration === 0 
-                ? `${currentUser.user_metadata?.username || 'User'} turned off disappearing messages.`
-                : `${currentUser.user_metadata?.username || 'User'} set disappearing messages to ${duration === 86400 ? '24 Hours' : (duration === 604800 ? '7 Days' : '30 Days')}.`;
-            
-            await handleSendMessageOriginal(infoText, undefined, undefined, 'info');
-        } catch (error) {
-            console.error('Failed to set disappearing duration', error);
-        }
-    };
-
-    const handleMessageLongPress = useCallback((msg: any, y: number) => {
-        setSelectedMessage(msg);
-        setAnchorY(y);
-        setContextMenuVisible(true);
-    }, []);
-
-    const handleImagePress = useCallback((uri: string, isVideo: boolean = false) => {
+    const handleImagePress = (uri: string, isVideo: boolean = false) => {
         setViewerImage(uri);
         setViewerIsVideo(isVideo);
         setViewerVisible(true);
-    }, []);
+    };
 
     const { wallpaper, setWallpaper, draft, handleDraftChange } = useChatSync(roomId, safeFriendId, currentUser, isGroup === 'true', messages);
     const { handleClearChat, handleBlockToggle, handleUnfriend, handleSetWallpaper } = useChatActions(currentUser, safeFriendId, roomId, friendName as string, isGroup === 'true', isBlocked, setWallpaper);
@@ -133,92 +108,6 @@ export default function ChatScreen() {
         }
     };
 
-    const handleMessageAction = (action: string) => {
-        if (!selectedMessage) return;
-        switch (action) {
-            case 'reply': setReplyingTo(selectedMessage); setEditingMessage(null); break;
-            case 'copy': Clipboard.setString(selectedMessage.message || ''); break;
-            case 'forward': setForwardText(selectedMessage.message || ''); setForwardModalVisible(true); break;
-            case 'info': setInfoVisible(true); break;
-            case 'edit': setEditingMessage(selectedMessage); setReplyingTo(null); break;
-            case 'translate': {
-                const msgId = selectedMessage.id;
-                if (translatedMessages[msgId]) {
-                    setTranslatedMessages(prev => { const n = { ...prev }; delete n[msgId]; return n; });
-                    return;
-                }
-                const rawText = selectedMessage.message || '';
-                const cleanText = rawText
-                    .replace(/\[Image\]\s*\S+/g, '')
-                    .replace(/\[Video\]\s*\S+/g, '')
-                    .replace(/\[Voice Message\]\s*\S+/g, '')
-                    .replace(/\[Document\][^|]+\|?[^|]*/g, '')
-                    .replace(/\[Contact\][^|]+\|?[^|]*/g, '')
-                    .replace(/\[Location\][^|]+\|?[^|]*/g, '')
-                    .trim();
-
-                if (!cleanText) {
-                    Alert.alert('Nothing to translate', 'This message has no text to translate.');
-                    return;
-                }
-
-                translateMessage(cleanText).then(result => {
-                    if (result) {
-                        setTranslatedMessages(prev => ({
-                            ...prev,
-                            [msgId]: { text: result.translatedText, lang: result.detectedLang }
-                        }));
-                    } else {
-                        Alert.alert('Translation Failed', 'Could not translate this message. Please try again.');
-                    }
-                });
-                break;
-            }
-            case 'listen': {
-                const textToSpeak = selectedMessage.message || '';
-                // Clean up special tags like [Image], [Voice Message] etc.
-                const cleanText = textToSpeak
-                    .replace(/\[Image\]\s*\S+/g, 'Image')
-                    .replace(/\[Video\]\s*\S+/g, 'Video')
-                    .replace(/\[Voice Message\]\s*\S+/g, 'Voice Message')
-                    .replace(/\[Document\][^|]+\|?[^|]*/g, 'Document')
-                    .replace(/\[Contact\][^|]+\|?[^|]*/g, 'Contact')
-                    .replace(/\[Location\][^|]+\|?[^|]*/g, 'Location')
-                    .trim();
-
-                if (!cleanText) {
-                    Alert.alert('Nothing to read', 'This message has no text to speak.');
-                    break;
-                }
-
-                // Detect language - Hindi characters range
-                const isHindi = /[\u0900-\u097F]/.test(cleanText);
-                const lang = isHindi ? 'hi-IN' : 'en-US';
-
-                // Stop if already speaking, else start
-                Speech.isSpeakingAsync().then(isSpeaking => {
-                    if (isSpeaking) {
-                        Speech.stop();
-                    } else {
-                        Speech.speak(cleanText, {
-                            language: lang,
-                            pitch: 1.0,
-                            rate: 0.9,
-                        });
-                    }
-                });
-                break;
-            }
-            case 'delete': 
-                Alert.alert("Delete Message", "Choose how you want to delete this message.", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Delete for Me", onPress: () => handleDeleteMessage(selectedMessage.id, false) },
-                    { text: "Delete for Everyone", style: "destructive", onPress: () => handleDeleteMessage(selectedMessage.id, true) }
-                ]); 
-                break;
-        }
-    };
-
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
         const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -227,42 +116,7 @@ export default function ChatScreen() {
         return () => { sub1.remove(); sub2.remove(); };
     }, []);
 
-    // Screenshot Prevention Logic
-    useEffect(() => {
-        let isActive = false;
-        
-        const manageScreenshot = async () => {
-            try {
-                // By default, allow screenshots unless explicitly disabled by friend
-                // Note: group chats might not have this, so we default to true if friendData is missing
-                const allowScreenshot = friendData?.friend?.allow_screenshot ?? true;
-                
-                if (!allowScreenshot && isGroup !== 'true') {
-                    console.log('[DEBUG] Preventing screen capture for this chat because friend disabled it.');
-                    await ScreenCapture.preventScreenCaptureAsync();
-                    isActive = true;
-                } else {
-                    console.log('[DEBUG] Screen capture is allowed for this chat.');
-                    await ScreenCapture.allowScreenCaptureAsync();
-                    isActive = false;
-                }
-            } catch (error) {
-                console.error('[CHAT] Screen capture logic failed:', error);
-            }
-        };
-
-        manageScreenshot();
-
-        return () => {
-            // Restore screen capture when leaving this chat
-            if (isActive) {
-                console.log('[DEBUG] Restoring screen capture on unmount.');
-                ScreenCapture.allowScreenCaptureAsync().catch(err => {
-                    console.error('[CHAT] Failed to restore screen capture:', err);
-                });
-            }
-        };
-    }, [friendData?.friend?.allow_screenshot, isGroup]);
+    useScreenshotPrevention(friendData, isGroup === 'true');
 
     if (!currentUser || (loading && messages.length === 0)) {
         return <ChatSkeleton safeTop={safeTop} safeBottom={safeBottom} />;
@@ -304,7 +158,7 @@ export default function ChatScreen() {
                 onViewScheduledMessages={() => setScheduledListModalVisible(true)}
                 disappearingDuration={disappearingDuration}
                 autoListenMode={autoListenMode}
-                onToggleAutoListen={() => setAutoListenMode(prev => !prev)}
+                onToggleAutoListen={toggleAutoListen}
             />
 
             <View style={{ flex: 1 }}>
@@ -322,13 +176,7 @@ export default function ChatScreen() {
                     autoListenMode={autoListenMode}
                 />
                 
-                {isTyping && (
-                    <View style={styles.typingIndicatorContainer}>
-                        <View style={styles.typingBubble}>
-                            <Text style={styles.typingText}>{friendName} is typing...</Text>
-                        </View>
-                    </View>
-                )}
+                {isTyping && <TypingIndicator friendName={friendName as string} />}
 
                 {isFriend === false && isGroup !== 'true' && (
                     <UnfriendedBanner safeFriendId={safeFriendId} onAddFriend={() => router.push(`/profile/${safeFriendId}` as any)} />
@@ -396,26 +244,5 @@ export default function ChatScreen() {
         </KeyboardAvoidingView>
     );
 }
-
-const styles = StyleSheet.create({
-    typingIndicatorContainer: {
-        paddingHorizontal: 16,
-        paddingBottom: 8,
-        alignItems: 'flex-start'
-    },
-    typingBubble: {
-        backgroundColor: 'rgba(255,255,255,0.7)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        borderBottomLeftRadius: 4,
-    },
-    typingText: {
-        fontSize: 12,
-        color: '#F68537',
-        fontStyle: 'italic',
-        fontWeight: 'bold'
-    }
-});
 
 export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';

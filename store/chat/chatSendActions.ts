@@ -44,8 +44,8 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
         const updatedMessages = scheduledAt ? messages : [...messages, tempMsg];
         if (!scheduledAt) {
             set((state: any) => ({
-                messages: [tempMsg, ...(state.messages || [])],
-                cache: { ...state.cache, [friendId]: { messages: [tempMsg, ...(state.messages || [])], key: state.chatKey } }
+                messages: [...(state.messages || []), tempMsg],
+                cache: { ...state.cache, [friendId]: { messages: [...(state.messages || []), tempMsg], key: state.chatKey } }
             }));    
         }
 

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState, useCallback, memo, useEffect } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View, Text } from 'react-native';
 import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,10 +15,11 @@ import { useLocationPicker } from '@/hooks/chatInput/useLocationPicker';
 import { useDocumentPicker } from '@/hooks/chatInput/useDocumentPicker';
 import CustomCameraModal from './CustomCameraModal';
 import ScheduleMessageModal from './ScheduleMessageModal';
-import {
-    ExpoSpeechRecognitionModule,
-    useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
+
+// Extracted logic hooks
+import { useVoiceTyping } from '@/hooks/chatInput/useVoiceTyping';
+import { useMessageDraft } from '@/hooks/chatInput/useMessageDraft';
+import { useChatModals } from '@/hooks/chatInput/useChatModals';
 
 // Stable no-op to avoid inline arrow function allocation
 const NOOP = () => {};
@@ -43,25 +44,30 @@ const ChatInput = memo(({
     replyingTo, onCancelReply, editingMessage, onCancelEdit, onSaveEdit,
     isMember = true, isKeyboardOpen = false, initialMessage = '', onDraftChange
 }: ChatInputProps) => {
-    const [message, setMessage] = useState(initialMessage);
     const [selectedMedia, setSelectedMedia] = useState<{ uri: string, type: 'image' | 'video' } | null>(null);
     const [isRecording, setIsRecording] = useState(false);
-    const [emojiModalVisible, setEmojiModalVisible] = useState(false);
-    const [contactModalVisible, setContactModalVisible] = useState(false);
-    const [cameraModalVisible, setCameraModalVisible] = useState(false);
-    const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
-    const [isVoiceTyping, setIsVoiceTyping] = useState(false);
-    const [voiceLang, setVoiceLang] = useState('hi-IN');
 
     const insets = useSafeAreaInsets();
     const hasMeasured = insets.top > 0 || insets.bottom > 0;
     const safeBottom = hasMeasured ? insets.bottom : (initialWindowMetrics?.insets?.bottom || 0);
 
-    const inputRef = useRef<TextInput>(null);
-    const typingTimeoutRef = useRef<any>(null);
-    const draftTimeoutRef = useRef<any>(null);
-    const lastSentTimeRef = useRef(0);
-    const lastTypingSentRef = useRef(0);
+    const {
+        emojiModalVisible, setEmojiModalVisible,
+        contactModalVisible, openContacts, closeContacts,
+        cameraModalVisible, openCamera, closeCamera,
+        scheduleModalVisible, openSchedule, closeSchedule
+    } = useChatModals();
+
+    const {
+        message, setMessage, handleChangeText, handleSubmit, inputRef
+    } = useMessageDraft({
+        initialMessage, editingMessage, replyingTo, onDraftChange, onTyping,
+        onSendMessage, onSaveEdit, setIsRecording, selectedMedia, setSelectedMedia
+    });
+
+    const {
+        isVoiceTyping, voiceLang, startVoiceTyping, stopVoiceTyping, toggleLang
+    } = useVoiceTyping(setMessage);
 
     const onMediaPicked = useCallback((uri: string | null) => {
         setSelectedMedia(uri ? { uri, type: 'image' } : null);
@@ -71,107 +77,15 @@ const ChatInput = memo(({
     const { handleLocation } = useLocationPicker(onSendMessage);
     const { handleDocument } = useDocumentPicker(onSendMessage);
 
-    useEffect(() => {
-        if (editingMessage) {
-            setMessage(editingMessage.message);
-            inputRef.current?.focus();
-        } else if (replyingTo) {
-            inputRef.current?.focus();
-        }
-    }, [editingMessage, replyingTo]);
-
-    useEffect(() => {
-        if (initialMessage) setMessage(initialMessage);
-    }, [initialMessage]);
-
-    useSpeechRecognitionEvent('start', () => setIsVoiceTyping(true));
-    useSpeechRecognitionEvent('end',   () => setIsVoiceTyping(false));
-    useSpeechRecognitionEvent('error', (event) => {
-        console.log('Voice Error:', event.error, event.message);
-        setIsVoiceTyping(false);
-    });
-    useSpeechRecognitionEvent('result', (event) => {
-        if (event.results?.length > 0) {
-            const transcript = event.results[0]?.transcript;
-            if (transcript) setMessage(prev => prev + (prev.length > 0 ? ' ' : '') + transcript);
-        }
-    });
-
-    const startVoiceTyping = useCallback(async () => {
-        try {
-            const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-            if (!result.granted) { console.warn('Voice permission not granted'); return; }
-            ExpoSpeechRecognitionModule.start({ lang: voiceLang, interimResults: true, continuous: false });
-        } catch (e) { console.error(e); }
-    }, [voiceLang]);
-
-    const stopVoiceTyping = useCallback(() => {
-        try { ExpoSpeechRecognitionModule.stop(); } catch (e) { console.error(e); }
-    }, []);
-
-    const handleSubmit = useCallback((scheduledDate?: Date) => {
-        if (!message.trim() && !selectedMedia) {
-            if (Date.now() - lastSentTimeRef.current < 500) return;
-            setIsRecording(true);
-            return;
-        }
-        if (editingMessage && onSaveEdit) {
-            onSaveEdit(message.trim());
-        } else {
-            let finalMessage = message.trim();
-            if (selectedMedia) {
-                const prefix = selectedMedia.type === 'video' ? '[Video]' : '[Image]';
-                finalMessage = `${prefix} ${selectedMedia.uri} ${message.trim()}`;
-            }
-            onSendMessage(finalMessage, scheduledDate);
-        }
-        lastSentTimeRef.current = Date.now();
-        setMessage('');
-        setSelectedMedia(null);
-        if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
-        if (onDraftChange) onDraftChange('');
-        if (onTyping) {
-            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-            onTyping(false);
-        }
-    }, [message, selectedMedia, editingMessage, onSaveEdit, onSendMessage, onDraftChange, onTyping]);
-
-    const handleChangeText = useCallback((text: string) => {
-        setMessage(text);
-        if (onDraftChange) {
-            if (draftTimeoutRef.current) clearTimeout(draftTimeoutRef.current);
-            draftTimeoutRef.current = setTimeout(() => { onDraftChange(text); }, 500);
-        }
-        if (onTyping) {
-            const now = Date.now();
-            if (now - lastTypingSentRef.current > 3000) {
-                onTyping(true);
-                lastTypingSentRef.current = now;
-            }
-            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-            typingTimeoutRef.current = setTimeout(() => {
-                onTyping(false);
-                lastTypingSentRef.current = 0;
-            }, 2000);
-        }
-    }, [onDraftChange, onTyping]);
-
-    // Stable callbacks for children — prevent re-renders of memoized child components
-    const openCamera         = useCallback(() => setCameraModalVisible(true), []);
-    const openContacts       = useCallback(() => setContactModalVisible(true), []);
-    const openSchedule       = useCallback(() => setScheduleModalVisible(true), []);
-    const closeCamera        = useCallback(() => setCameraModalVisible(false), []);
-    const closeContacts      = useCallback(() => setContactModalVisible(false), []);
-    const closeSchedule      = useCallback(() => setScheduleModalVisible(false), []);
+    // Stable callbacks for children
     const stopRecording      = useCallback(() => setIsRecording(false), []);
     const removeMedia        = useCallback(() => setSelectedMedia(null), []);
-    const toggleLang         = useCallback(() => setVoiceLang(p => p === 'hi-IN' ? 'en-US' : 'hi-IN'), []);
     const toggleEmoji        = useCallback(() => {
         if (emojiModalVisible) { setEmojiModalVisible(false); inputRef.current?.focus(); }
         else { inputRef.current?.blur(); setEmojiModalVisible(true); }
-    }, [emojiModalVisible]);
-    const closeEmoji         = useCallback(() => { setEmojiModalVisible(false); inputRef.current?.focus(); }, []);
-    const appendEmoji        = useCallback((emoji: string) => setMessage(prev => prev + emoji), []);
+    }, [emojiModalVisible, setEmojiModalVisible, inputRef]);
+    const closeEmoji         = useCallback(() => { setEmojiModalVisible(false); inputRef.current?.focus(); }, [setEmojiModalVisible, inputRef]);
+    const appendEmoji        = useCallback((emoji: string) => setMessage(prev => prev + emoji), [setMessage]);
     const onRecordingComplete = useCallback((uri: string) => { onSendMessage(`[Voice Message] ${uri}`); setIsRecording(false); }, [onSendMessage]);
     const onContactSelected  = useCallback((name: string, phone: string) => onSendMessage(`[Contact] ${name} | ${phone}`), [onSendMessage]);
     const onCameraCapture    = useCallback((media: any) => setSelectedMedia(media), []);
@@ -296,7 +210,6 @@ const ChatInput = memo(({
 
 export default ChatInput;
 
-
 const styles = StyleSheet.create({
     wrapper: { backgroundColor: 'transparent', borderTopWidth: 0, position: 'relative' },
     innerWrapper: { opacity: 1 },
@@ -329,4 +242,3 @@ const styles = StyleSheet.create({
     sendBtnRecording: { backgroundColor: '#EF4444' },
     sendIconOffset: { marginLeft: 3 },
 });
-

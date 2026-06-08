@@ -1,74 +1,27 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import React, { useEffect, useState } from 'react';
-import { AppStorage } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
-import { Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { useTrackerPassword } from '@/hooks/privacy/useTrackerPassword';
+
+import { PrivacyCard } from '@/components/privacy/PrivacyCard';
+import { PasswordVerificationModal } from '@/components/privacy/PasswordVerificationModal';
 
 export default function PrivacySafetyScreen() {
     const router = useRouter();
-    const { profile, updateProfile, user } = useAuthStore();
+    const { profile, updateProfile } = useAuthStore();
     const { blockedUserIds } = useFriendsStore();
-    const [trackerEnabled, setTrackerEnabled] = useState(false);
-    
-    // Password Modal State
-    const [showPasswordModal, setShowPasswordModal] = useState(false);
-    const [passwordInput, setPasswordInput] = useState('');
-    const [isVerifying, setIsVerifying] = useState(false);
-    const [pendingToggleValue, setPendingToggleValue] = useState<boolean | null>(null);
 
-    useEffect(() => {
-        const loadTrackerState = async () => {
-            const state = await AppStorage.getItemAsync('tracker_enabled');
-            setTrackerEnabled(state === 'true');
-        };
-        loadTrackerState();
-    }, []);
-
-    const handleToggleAttempt = (newValue: boolean) => {
-        setPendingToggleValue(newValue);
-        setPasswordInput('');
-        setShowPasswordModal(true);
-    };
-
-    const verifyPasswordAndToggle = async () => {
-        if (!passwordInput.trim() || !user?.email || pendingToggleValue === null) return;
-        
-        setIsVerifying(true);
-        try {
-            // Verify password by attempting to sign in
-            const { error } = await supabase.auth.signInWithPassword({
-                email: user.email,
-                password: passwordInput
-            });
-
-            if (error) {
-                alert('Incorrect password. Please try again.');
-                setIsVerifying(false);
-                return;
-            }
-
-            // Password correct! Proceed with toggle
-            const newValue = pendingToggleValue;
-            setTrackerEnabled(newValue);
-            await AppStorage.setItemAsync('tracker_enabled', newValue ? 'true' : 'false');
-            
-            const deviceId = await AppStorage.getItemAsync('unique_device_id');
-            if (deviceId) {
-                await supabase.from('user_devices').update({ is_tracker_enabled: newValue }).eq('user_id', user.id).eq('device_id', deviceId);
-            }
-            
-            setShowPasswordModal(false);
-        } catch (err) {
-            alert('Something went wrong verifying your password.');
-        } finally {
-            setIsVerifying(false);
-        }
-    };
+    const {
+        trackerEnabled, showPasswordModal, setShowPasswordModal,
+        passwordInput, setPasswordInput, isVerifying, pendingToggleValue, setPendingToggleValue,
+        handleToggleAttempt, verifyPasswordAndToggle
+    } = useTrackerPassword();
 
     return (
         <View style={{ flex: 1, backgroundColor: '#FFFDFB' }}>
@@ -98,319 +51,211 @@ export default function PrivacySafetyScreen() {
 
                     <Text style={styles.sectionLabel}>COMMUNITY RESCUE (SOS)</Text>
 
-                    {/* Become a Warrior */}
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
-                            <MaterialCommunityIcons name="shield-sword" size={26} color="#F68537" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Become a Warrior 🛡️</Text>
-                            <Text style={styles.tipDesc}>Opt-in to receive SOS alerts from users in danger within 5KM.</Text>
-                            {(profile?.missions_completed || 0) > 0 && (
+                    <PrivacyCard
+                        type="switch"
+                        iconName="shield-sword"
+                        iconLib="material"
+                        iconColor="#F68537"
+                        bgColor="#F6853710"
+                        title="Become a Warrior 🛡️"
+                        desc="Opt-in to receive SOS alerts from users in danger within 5KM."
+                        value={profile?.is_warrior ?? false}
+                        onValueChange={(val) => updateProfile({ is_warrior: val })}
+                        extraContent={
+                            (profile?.missions_completed || 0) > 0 && (
                                 <Text style={{ fontSize: 12, color: '#10B981', marginTop: 4, fontWeight: 'bold' }}>
                                     🎖️ Missions Completed: {profile?.missions_completed}
                                 </Text>
-                            )}
-                        </View>
-                        <Switch 
-                            value={profile?.is_warrior ?? false}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ is_warrior: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#FFEDD5' }}
-                            thumbColor={profile?.is_warrior ? '#F68537' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
+                            )
+                        }
+                    />
 
                     <Text style={styles.sectionLabel}>DISCOVERY & NOTIFICATIONS</Text>
 
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#10B98110' }]}>
-                            <MaterialCommunityIcons name="radar" size={26} color="#10B981" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Nearby Discovery</Text>
-                            <Text style={styles.tipDesc}>Get notified when other warriors are within 1KM of you.</Text>
-                        </View>
-                        <Switch 
-                            value={profile?.nearby_notifications_enabled ?? false}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ nearby_notifications_enabled: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#D1FAE5' }}
-                            thumbColor={profile?.nearby_notifications_enabled ? '#10B981' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
+                    <PrivacyCard
+                        type="switch"
+                        iconName="radar"
+                        iconLib="material"
+                        iconColor="#10B981"
+                        bgColor="#10B98110"
+                        title="Nearby Discovery"
+                        desc="Get notified when other warriors are within 1KM of you."
+                        value={profile?.nearby_notifications_enabled ?? false}
+                        onValueChange={(val) => updateProfile({ nearby_notifications_enabled: val })}
+                        trackColors={{ false: '#E5E7EB', true: '#D1FAE5' }}
+                        thumbColors={{ false: '#FFFFFF', true: '#10B981' }}
+                    />
 
                     <Text style={styles.sectionLabel}>PROFILE VISIBILITY</Text>
 
-                    <TouchableOpacity 
+                    <PrivacyCard
+                        type="link"
+                        iconName="image-outline"
+                        iconLib="ionicons"
+                        iconColor="#F68537"
+                        bgColor="#F6853710"
+                        title="Profile Photo"
+                        desc="Control who can see your picture"
                         onPress={() => router.push('/privacy-safety/profile-photo' as any)}
-                        style={styles.tipCard}
-                    >
-                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
-                            <Ionicons name="image-outline" size={26} color="#F68537" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Profile Photo</Text>
-                            <Text style={styles.tipDesc}>Control who can see your picture</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
-                    </TouchableOpacity>
+                    />
 
-                    <TouchableOpacity 
+                    <PrivacyCard
+                        type="link"
+                        iconName="document-text-outline"
+                        iconLib="ionicons"
+                        iconColor="#EC4899"
+                        bgColor="#EC489910"
+                        title="About / Bio"
+                        desc="Control who can see your about info"
                         onPress={() => router.push('/privacy-safety/about-privacy' as any)}
-                        style={styles.tipCard}
-                    >
-                        <View style={[styles.iconContainer, { backgroundColor: '#EC489910' }]}>
-                            <Ionicons name="document-text-outline" size={26} color="#EC4899" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>About / Bio</Text>
-                            <Text style={styles.tipDesc}>Control who can see your about info</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
-                    </TouchableOpacity>
+                    />
 
                     <Text style={styles.sectionLabel}>GENERAL PRIVACY SETTINGS</Text>
 
-                    {/* Find My Warrior */}
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#EF444410' }]}>
-                            <Ionicons name="location-outline" size={26} color="#EF4444" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Find My Warrior</Text>
-                            <Text style={styles.tipDesc}>Send your device location and battery status to the server securely.</Text>
-                            <Text style={{ fontSize: 12, color: '#F68537', marginTop: 8, fontWeight: 'bold' }}>
-                                To track your lost device, go to:
-                            </Text>
-                            <Text style={{ fontSize: 13, color: '#374151', marginTop: 2, fontWeight: '600' }}>
-                                🌐 www.chatwarriors.com
-                            </Text>
-                        </View>
-                        <Switch 
-                            value={trackerEnabled}
-                            onValueChange={handleToggleAttempt}
-                            trackColor={{ false: '#E5E7EB', true: '#FEE2E2' }}
-                            thumbColor={trackerEnabled ? '#EF4444' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
+                    <PrivacyCard
+                        type="switch"
+                        iconName="location-outline"
+                        iconLib="ionicons"
+                        iconColor="#EF4444"
+                        bgColor="#EF444410"
+                        title="Find My Warrior"
+                        desc="Send your device location and battery status to the server securely."
+                        value={trackerEnabled}
+                        onValueChange={handleToggleAttempt}
+                        trackColors={{ false: '#E5E7EB', true: '#FEE2E2' }}
+                        thumbColors={{ false: '#FFFFFF', true: '#EF4444' }}
+                        extraContent={
+                            <>
+                                <Text style={{ fontSize: 12, color: '#F68537', marginTop: 8, fontWeight: 'bold' }}>
+                                    To track your lost device, go to:
+                                </Text>
+                                <Text style={{ fontSize: 13, color: '#374151', marginTop: 2, fontWeight: '600' }}>
+                                    🌐 www.chatwarriors.com
+                                </Text>
+                            </>
+                        }
+                    />
 
-                    {/* Show Email */}
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
-                            <Ionicons name="mail-outline" size={26} color="#F68537" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Show Email</Text>
-                            <Text style={styles.tipDesc}>Display your email address to your friends.</Text>
-                        </View>
-                        <Switch 
-                            value={profile?.show_email ?? false}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ show_email: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#FFEDD5' }}
-                            thumbColor={profile?.show_email ? '#F68537' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
-                    
-                    {/* Show Phone */}
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#3B82F610' }]}>
-                            <Ionicons name="call-outline" size={26} color="#3B82F6" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Show Phone Number</Text>
-                            <Text style={styles.tipDesc}>Display your phone number to your friends.</Text>
-                        </View>
-                        <Switch 
-                            value={profile?.show_phone ?? false}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ show_phone: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#DBEAFE' }}
-                            thumbColor={profile?.show_phone ? '#3B82F6' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
+                    <PrivacyCard
+                        type="switch"
+                        iconName="mail-outline"
+                        iconLib="ionicons"
+                        iconColor="#F68537"
+                        bgColor="#F6853710"
+                        title="Show Email"
+                        desc="Display your email address to your friends."
+                        value={profile?.show_email ?? false}
+                        onValueChange={(val) => updateProfile({ show_email: val })}
+                    />
 
+                    <PrivacyCard
+                        type="switch"
+                        iconName="call-outline"
+                        iconLib="ionicons"
+                        iconColor="#3B82F6"
+                        bgColor="#3B82F610"
+                        title="Show Phone Number"
+                        desc="Display your phone number to your friends."
+                        value={profile?.show_phone ?? false}
+                        onValueChange={(val) => updateProfile({ show_phone: val })}
+                        trackColors={{ false: '#E5E7EB', true: '#DBEAFE' }}
+                        thumbColors={{ false: '#FFFFFF', true: '#3B82F6' }}
+                    />
 
+                    <PrivacyCard
+                        type="switch"
+                        iconName="radio-outline"
+                        iconLib="ionicons"
+                        iconColor="#10B981"
+                        bgColor="#10B98110"
+                        title="Show Online Status"
+                        desc="Let others see when you are active on ChatWarriors."
+                        value={profile?.is_online ?? true}
+                        onValueChange={(val) => updateProfile({ is_online: val })}
+                        trackColors={{ false: '#E5E7EB', true: '#D1FAE5' }}
+                        thumbColors={{ false: '#FFFFFF', true: '#10B981' }}
+                    />
 
-                    {/* Show Online Status */}
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#10B98110' }]}>
-                            <Ionicons name="radio-outline" size={26} color="#10B981" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Show Online Status</Text>
-                            <Text style={styles.tipDesc}>Let others see when you are active on ChatWarriors.</Text>
-                        </View>
-                        <Switch 
-                            value={profile?.is_online ?? true}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ is_online: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#D1FAE5' }}
-                            thumbColor={profile?.is_online ? '#10B981' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
+                    <PrivacyCard
+                        type="switch"
+                        iconName="download-outline"
+                        iconLib="ionicons"
+                        iconColor="#F59E0B"
+                        bgColor="#F59E0B10"
+                        title="Allow Status Download"
+                        desc="Allow your friends to download your status updates."
+                        value={profile?.allow_status_download ?? false}
+                        onValueChange={(val) => updateProfile({ allow_status_download: val })}
+                        trackColors={{ false: '#E5E7EB', true: '#FEF3C7' }}
+                        thumbColors={{ false: '#FFFFFF', true: '#F59E0B' }}
+                    />
 
-                    {/* Allow Status Download */}
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#F59E0B10' }]}>
-                            <Ionicons name="download-outline" size={26} color="#F59E0B" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Allow Status Download</Text>
-                            <Text style={styles.tipDesc}>Allow your friends to download your status updates.</Text>
-                        </View>
-                        <Switch 
-                            value={profile?.allow_status_download ?? false}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ allow_status_download: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#FEF3C7' }}
-                            thumbColor={profile?.allow_status_download ? '#F59E0B' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
-
-                    <View style={styles.tipCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: '#8B5CF610' }]}>
-                            <Ionicons name="scan-outline" size={26} color="#8B5CF6" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Allow Screenshots</Text>
-                            <Text style={styles.tipDesc}>Let others take screenshots of your chat. We'll still notify you.</Text>
-                        </View>
-                        <Switch 
-                            value={profile?.allow_screenshot ?? true}
-                            onValueChange={async (newValue) => {
-                                await updateProfile({ allow_screenshot: newValue });
-                            }}
-                            trackColor={{ false: '#E5E7EB', true: '#EDE9FE' }}
-                            thumbColor={profile?.allow_screenshot ? '#8B5CF6' : '#FFFFFF'}
-                            style={{ alignSelf: 'center' }}
-                        />
-                    </View>
+                    <PrivacyCard
+                        type="switch"
+                        iconName="scan-outline"
+                        iconLib="ionicons"
+                        iconColor="#8B5CF6"
+                        bgColor="#8B5CF610"
+                        title="Allow Screenshots"
+                        desc="Let others take screenshots of your chat. We'll still notify you."
+                        value={profile?.allow_screenshot ?? true}
+                        onValueChange={(val) => updateProfile({ allow_screenshot: val })}
+                        trackColors={{ false: '#E5E7EB', true: '#EDE9FE' }}
+                        thumbColors={{ false: '#FFFFFF', true: '#8B5CF6' }}
+                    />
 
                     <Text style={styles.sectionLabel}>GENERAL PRIVACY SETTINGS</Text>
 
-                    <TouchableOpacity 
+                    <PrivacyCard
+                        type="link"
+                        iconName="eye-off-outline"
+                        iconLib="ionicons"
+                        iconColor="#FFF"
+                        bgColor="#111827"
+                        title="Ninja Vault (Ghost Chats)"
+                        desc="Hide your most private conversations"
                         onPress={() => router.push('/privacy-safety/ninja-vault' as any)}
-                        style={styles.tipCard}
-                    >
-                        <View style={[styles.iconContainer, { backgroundColor: '#111827' }]}>
-                            <Ionicons name="eye-off-outline" size={26} color="#FFF" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Ninja Vault (Ghost Chats)</Text>
-                            <Text style={styles.tipDesc}>Hide your most private conversations</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
-                    </TouchableOpacity>
+                    />
 
-                    <TouchableOpacity 
+                    <PrivacyCard
+                        type="link"
+                        iconName="lock-reset"
+                        iconLib="material"
+                        iconColor="#F68537"
+                        bgColor="#F6853710"
+                        title="Change Password"
+                        desc="Update your account password or reset it via email"
                         onPress={() => router.push('/change-password')}
-                        style={styles.tipCard}
-                    >
-                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
-                            <MaterialCommunityIcons name="lock-reset" size={26} color="#F68537" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Change Password</Text>
-                            <Text style={styles.tipDesc}>Update your account password or reset it via email</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center' }} />
-                    </TouchableOpacity>
+                    />
 
-                    <TouchableOpacity 
+                    <PrivacyCard
+                        type="link"
+                        iconName="account-cancel-outline"
+                        iconLib="material"
+                        iconColor="#EF4444"
+                        bgColor="#EF444410"
+                        title="Blocked Users"
+                        desc="Manage users you have blocked from messaging you"
                         onPress={() => router.push('/blocked-users')}
-                        style={styles.tipCard}
-                    >
-                        <View style={[styles.iconContainer, { backgroundColor: '#EF444410' }]}>
-                            <MaterialCommunityIcons name="account-cancel-outline" size={26} color="#EF4444" />
-                        </View>
-                        <View style={styles.tipContent}>
-                            <Text style={styles.tipTitle}>Blocked Users</Text>
-                            <Text style={styles.tipDesc}>Manage users you have blocked from messaging you</Text>
-                        </View>
-                        <View style={styles.badgeContainer}>
-                            <Text style={styles.badgeText}>{blockedUserIds.length}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" style={{ alignSelf: 'center', marginLeft: 8 }} />
-                    </TouchableOpacity>
+                        badgeCount={blockedUserIds.length}
+                    />
 
                     <View style={{ height: 40 }} />
                 </ScrollView>
             </SafeAreaView>
 
-            {/* Password Verification Modal */}
-            <Modal
+            <PasswordVerificationModal
                 visible={showPasswordModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowPasswordModal(false)}
-            >
-                <KeyboardAvoidingView 
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-                >
-                    <View style={{ backgroundColor: 'white', width: '100%', borderRadius: 24, padding: 24, alignItems: 'center' }}>
-                        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                            <Ionicons name="lock-closed" size={32} color="#F68537" />
-                        </View>
-                        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 8, textAlign: 'center' }}>
-                            Security Check
-                        </Text>
-                        <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
-                            Please enter your ChatWarriors password to {pendingToggleValue ? 'enable' : 'disable'} the device tracker.
-                        </Text>
-
-                        <TextInput
-                            style={{ width: '100%', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 16, fontSize: 16, color: '#1F2937', marginBottom: 24 }}
-                            placeholder="Enter your password"
-                            placeholderTextColor="#9CA3AF"
-                            secureTextEntry
-                            value={passwordInput}
-                            onChangeText={setPasswordInput}
-                            autoFocus
-                        />
-
-                        <View style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
-                            <TouchableOpacity 
-                                style={{ flex: 1, padding: 16, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center' }}
-                                onPress={() => {
-                                    setShowPasswordModal(false);
-                                    setPendingToggleValue(null);
-                                }}
-                                disabled={isVerifying}
-                            >
-                                <Text style={{ fontSize: 16, fontWeight: '600', color: '#4B5563' }}>Cancel</Text>
-                            </TouchableOpacity>
-                            
-                            <TouchableOpacity 
-                                style={{ flex: 1, padding: 16, borderRadius: 16, backgroundColor: '#F68537', alignItems: 'center', opacity: (!passwordInput || isVerifying) ? 0.7 : 1 }}
-                                onPress={verifyPasswordAndToggle}
-                                disabled={!passwordInput || isVerifying}
-                            >
-                                {isVerifying ? (
-                                    <ActivityIndicator size="small" color="white" />
-                                ) : (
-                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: 'white' }}>Verify</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+                onClose={() => {
+                    setShowPasswordModal(false);
+                    setPendingToggleValue(null);
+                }}
+                passwordInput={passwordInput}
+                setPasswordInput={setPasswordInput}
+                isVerifying={isVerifying}
+                onVerify={verifyPasswordAndToggle}
+                pendingToggleValue={pendingToggleValue}
+            />
         </View>
     );
 }
@@ -426,109 +271,20 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
-    headerIcon: {
-        padding: 8,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1F2937',
-    },
-    heroSection: {
-        alignItems: 'center',
-        marginBottom: 32,
-    },
+    headerIcon: { padding: 8 },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
+    heroSection: { alignItems: 'center', marginBottom: 32 },
     heroBadge: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: '#FFEEDD',
+        width: 100, height: 100, borderRadius: 50,
+        alignItems: 'center', justifyContent: 'center',
+        marginBottom: 20, borderWidth: 1, borderColor: '#FFEEDD',
     },
-    heroTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#1F2937',
-        marginBottom: 12,
-    },
+    heroTitle: { fontSize: 24, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
     heroText: {
-        fontSize: 15,
-        color: '#6B7280',
-        textAlign: 'center',
-        lineHeight: 22,
-        paddingHorizontal: 20,
+        fontSize: 15, color: '#6B7280', textAlign: 'center', lineHeight: 22, paddingHorizontal: 20,
     },
     sectionLabel: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#9CA3AF',
-        marginBottom: 20,
-        marginTop: 10,
-        letterSpacing: 1.5,
-    },
-    tipCard: {
-        flexDirection: 'row',
-        backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
-    },
-    iconContainer: {
-        width: 52,
-        height: 52,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    tipContent: {
-        flex: 1,
-    },
-    tipTitle: {
-        fontSize: 17,
-        fontWeight: 'bold',
-        color: '#374151',
-        marginBottom: 4,
-    },
-    tipDesc: {
-        fontSize: 14,
-        color: '#6B7280',
-        lineHeight: 20,
-    },
-    blockButton: {
-        marginTop: 20,
-        backgroundColor: '#F3F4F6',
-        borderRadius: 16,
-        padding: 18,
-        alignItems: 'center',
-    },
-    blockButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#4B5563',
-    },
-    badgeContainer: {
-        backgroundColor: '#EF4444',
-        borderRadius: 10,
-        minWidth: 20,
-        height: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 6,
-        alignSelf: 'center',
-    },
-    badgeText: {
-        color: 'white',
-        fontSize: 11,
-        fontWeight: 'bold',
+        fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', marginBottom: 20, marginTop: 10, letterSpacing: 1.5,
     }
 });
 

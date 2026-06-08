@@ -1,12 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Text, TouchableOpacity, View, Animated } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter as useExpoRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
-import { Audio } from 'expo-av';
-import { useRouter as useExpoRouter } from 'expo-router';
-import * as ScreenCapture from 'expo-screen-capture';
 import { useFriendsStore } from '@/store/useFriendsStore';
 
 // Hooks
@@ -14,6 +11,9 @@ import { useStatusFetcher } from '@/hooks/useStatusFetcher';
 import { useStatusViewers } from '@/hooks/useStatusViewers';
 import { useStatusControls } from '@/hooks/useStatusControls';
 import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
+import { useStatusViewerScreenshotPrevention } from '@/hooks/status/useStatusViewerScreenshotPrevention';
+import { useStatusPlayback } from '@/hooks/status/useStatusPlayback';
+import { useStatusReply } from '@/hooks/status/useStatusReply';
 
 // Components
 import StatusRenderer from '@/components/status/StatusRenderer';
@@ -28,13 +28,9 @@ export default function StatusViewer() {
     
     const viewerVideoRef = useRef<any>(null);
     const [currentIndex, setCurrentIndex] = useState(parseInt(initialIndex as string || '0'));
-    const [replyText, setReplyText] = useState('');
     const [showViewers, setShowViewers] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const toastAnim = useRef(new Animated.Value(0)).current;
-    
-    // Background Music
-    const [bgMusic, setBgMusic] = useState<Audio.Sound | null>(null);
 
     // 1. Fetcher Hook
     const { statuses, setStatuses, loading, currentUser } = useStatusFetcher(userId as string, isArchive as string, date as string);
@@ -63,9 +59,6 @@ export default function StatusViewer() {
             return false;
         }
     })();
-
-    // Removed flawed getChatKey(userId, userId) logic.
-    // The true statusKey is now attached to the status object by useStatusFetcher.
 
     const { localImageUrl, localVoiceUrl, imageLoading } = useMessageMediaCache(
         currentStatusUI || {},
@@ -99,135 +92,14 @@ export default function StatusViewer() {
         ]).start(() => setToastMessage(''));
     };
 
-    // Video Play/Pause effect
-    useEffect(() => {
-        if (statuses[currentIndex]?.media_type === 'video' && viewerVideoRef.current) {
-            if (paused) viewerVideoRef.current.pauseAsync();
-            else viewerVideoRef.current.playAsync();
-        }
-    }, [paused, currentIndex, statuses]);
+    // Screenshot Prevention
+    useStatusViewerScreenshotPrevention(userId as string, isOwner);
 
-    // Screenshot Prevention Logic
-    useEffect(() => {
-        let isActive = false;
-        
-        const manageScreenshot = async () => {
-            if (isOwner) return; // Don't prevent screenshot on own status
-            
-            try {
-                const friends = useFriendsStore.getState().combinedItems;
-                const friendData = friends.find((f: any) => f.id === userId);
-                
-                const allowScreenshot = friendData?.friend?.allow_screenshot ?? friendData?.allow_screenshot ?? true;
-                
-                if (!allowScreenshot) {
-                    console.log('[DEBUG] Preventing screen capture for status because friend disabled it.');
-                    await ScreenCapture.preventScreenCaptureAsync();
-                    isActive = true;
-                } else {
-                    console.log('[DEBUG] Screen capture is allowed for this status.');
-                    await ScreenCapture.allowScreenCaptureAsync();
-                    isActive = false;
-                }
-            } catch (error) {
-                console.error('[STATUS] Screen capture logic failed:', error);
-            }
-        };
+    // Playback Hook (handles video pausing and bg music)
+    useStatusPlayback(statuses, currentIndex, renderedStatusUI, viewerVideoRef, paused);
 
-        manageScreenshot();
-
-        return () => {
-            if (isActive) {
-                console.log('[DEBUG] Restoring screen capture on status unmount.');
-                ScreenCapture.allowScreenCaptureAsync().catch(err => {
-                    console.error('[STATUS] Failed to restore screen capture:', err);
-                });
-            }
-        };
-    }, [userId, isOwner]);
-
-    // Handle Music playback
-    useEffect(() => {
-        let sound: Audio.Sound | null = null;
-        
-        const playMusic = async () => {
-            if (bgMusic) {
-                await bgMusic.unloadAsync();
-                setBgMusic(null);
-            }
-            if (currentStatusUI?.audio_url) {
-                try {
-                    const musicData = JSON.parse(currentStatusUI.audio_url);
-                    if (musicData?.url) {
-                        const { sound: newSound } = await Audio.Sound.createAsync(
-                            { uri: musicData.url },
-                            { shouldPlay: !paused, isLooping: true }
-                        );
-                        sound = newSound;
-                        setBgMusic(newSound);
-                    }
-                } catch(e) {}
-            }
-        };
-        
-        if (currentStatusUI) {
-            playMusic();
-        }
-
-        return () => {
-            if (sound) {
-                sound.unloadAsync().catch(() => {});
-            }
-        };
-    }, [currentIndex, statuses, currentStatusUI?.id]);
-
-    useEffect(() => {
-        if (bgMusic) {
-            if (paused) bgMusic.pauseAsync();
-            else bgMusic.playAsync();
-        }
-    }, [paused, bgMusic]);
-
-    const handleSendReply = async () => {
-        if (!replyText.trim() || !currentUser || !currentStatusUI) return;
-        try {
-            const { getChatKey, encryptText } = await import('@/utils/chatCrypto');
-            const chatKey = await getChatKey(currentUser.id, userId as string);
-            if (!chatKey) throw new Error("Encryption key not found");
-
-            const encryptedReply = await encryptText(replyText.trim(), chatKey);
-            const { useDbStore } = await import('@/store/useDbStore');
-            const { saveLocalMessage } = await import('@/lib/localDb');
-            const { db } = useDbStore.getState();
-            
-            const tempId = `temp-${Date.now()}`;
-            const tempMsg: any = {
-                id: tempId, sender_id: currentUser.id, receiver_id: userId,
-                message: replyText.trim(), message_type: 'text', status: 'pending',
-                is_read: false, status_id: currentStatusUI.id, created_at: new Date().toISOString()
-            };
-
-            if (db) saveLocalMessage(db, tempMsg);
-
-            const { data, error } = await supabase.from('messages').insert([{
-                sender_id: currentUser.id, receiver_id: userId, message: encryptedReply,
-                message_type: 'text', status: 'sent', is_read: false, status_id: currentStatusUI.id
-            }]).select().single();
-
-            if (error) throw error;
-
-            if (db && data) {
-                try { await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]); } catch (e) {}
-                saveLocalMessage(db, { ...data, message: replyText.trim() });
-            }
-
-            setReplyText('');
-            showToast('Your reply has been sent! 🚀');
-        } catch (error: any) {
-            console.error('Error sending status reply:', error);
-            Alert.alert('Error', 'Failed to send encrypted reply');
-        }
-    };
+    // Reply Hook
+    const { replyText, setReplyText, handleSendReply } = useStatusReply(currentUser, userId as string, renderedStatusUI, showToast);
 
     const handleDeleteStatus = async () => {
         if (!currentStatusUI || !isOwner) return;
@@ -237,9 +109,6 @@ export default function StatusViewer() {
                 text: 'Delete', style: 'destructive',
                 onPress: async () => {
                     try {
-                        if (currentStatusUI.storage_paths && Array.isArray(currentStatusUI.storage_paths)) {
-                            // Statuses are now on Cloudinary, no need to delete from Supabase storage
-                        }
                         const { error } = await supabase.from('statuses').delete().eq('id', currentStatusUI.id);
                         if (error) throw error;
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useMemo, memo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleSheet, AppState } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
+import { GestureDetector } from 'react-native-gesture-handler';
 import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useWindowDimensions } from 'react-native';
@@ -11,72 +11,11 @@ import { useCallActions } from '@/hooks/useCallActions';
 import { CallEndedOverlay } from './CallScreenComponents';
 import ExpoPip from 'expo-pip';
 
-const formatDuration = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-};
-
-// Memoized so re-renders from timer/state don't recreate controls
-const CallControls = memo(({ callState, callType, isMuted, isVideoOff, isSpeakerphone, isScreenSharing, onMute, onVideo, onSpeaker, onSwitchCamera, onScreenShare, onAccept, onEnd }: any) => {
-    const [showMore, setShowMore] = useState(false);
-
-    if (callState === 'incoming') {
-        return (
-            <View style={styles.controlsContainer}>
-                <TouchableOpacity onPress={onEnd} style={[styles.controlButton, styles.largeButton, styles.dangerButton]}>
-                    <Ionicons name="close" size={32} color="white" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={onAccept} style={[styles.controlButton, styles.largeButton, styles.successButton]}>
-                    <Ionicons name="call" size={32} color="white" />
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
-    return (
-        <View style={styles.controlsContainer}>
-            {callType === 'video' && (
-                <TouchableOpacity onPress={onSwitchCamera} style={styles.controlButton}>
-                    <Ionicons name="camera-reverse" size={24} color="white" />
-                </TouchableOpacity>
-            )}
-            {callType === 'video' && (
-                <TouchableOpacity onPress={onVideo} style={[styles.controlButton, isVideoOff && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
-                    <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
-                </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={onMute} style={[styles.controlButton, isMuted && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
-                <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity onPress={() => setShowMore(!showMore)} style={[styles.controlButton, showMore && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
-                <Ionicons name="ellipsis-vertical" size={24} color="white" />
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={onEnd} style={[styles.controlButton, styles.largeButton, styles.dangerButton]}>
-                <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
-            </TouchableOpacity>
-
-            {/* MORE OPTIONS MENU */}
-            {showMore && (
-                <View style={styles.moreMenuContainer}>
-                    <TouchableOpacity onPress={() => { setShowMore(false); onSpeaker(); }} style={styles.moreMenuItem}>
-                        <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={20} color={isSpeakerphone ? "#10B981" : "white"} />
-                        <Text style={styles.moreMenuText}>{isSpeakerphone ? "Speaker: ON" : "Speaker: OFF"}</Text>
-                    </TouchableOpacity>
-                    {callType === 'video' && (
-                        <TouchableOpacity onPress={() => { setShowMore(false); onScreenShare(); }} style={styles.moreMenuItem}>
-                            <Ionicons name={isScreenSharing ? "stop-circle" : "desktop"} size={20} color={isScreenSharing ? "#EF4444" : "white"} />
-                            <Text style={styles.moreMenuText}>{isScreenSharing ? "Stop Sharing" : "Share Screen"}</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            )}
-        </View>
-    );
-});
-
+// Extracted Components
+import { CallControls } from '@/components/chat/CallControls';
+import { CallTimer } from '@/components/chat/CallTimer';
+import { CallTopAvatarOverlay } from '@/components/chat/CallTopAvatarOverlay';
+import { useCallDragGesture } from '@/hooks/calls/useCallDragGesture';
 
 interface CallScreenProps {
     visible: boolean;
@@ -102,30 +41,10 @@ export default function CallScreen({
     const [showControls, setShowControls] = useState(true);
     const { isInPipMode } = ExpoPip.useIsInPip();
 
-    // Draggable PIP
-    const translateX = useSharedValue(0);
-    const translateY = useSharedValue(0);
-    const offsetX = useSharedValue(0);
-    const offsetY = useSharedValue(0);
+    const toggleSwap = useCallback(() => { if (!isGroup) setIsSwapped(p => !p); }, [isGroup]);
+    const toggleControls = useCallback(() => setShowControls(p => !p), []);
 
-    // Memoize gesture so it's not recreated every render
-    const panGesture = useMemo(() => Gesture.Pan()
-        .onUpdate((event) => {
-            translateX.value = offsetX.value + event.translationX;
-            translateY.value = offsetY.value + event.translationY;
-        })
-        .onEnd(() => {
-            offsetX.value = translateX.value;
-            offsetY.value = translateY.value;
-        }),
-    [translateX, translateY, offsetX, offsetY]);
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: withSpring(translateX.value, { damping: 15 }) },
-            { translateY: withSpring(translateY.value, { damping: 15 }) },
-        ],
-    }));
+    const { composedGesture, animatedStyle } = useCallDragGesture(toggleSwap);
 
     // Agora RTC
     const { joined, remoteUids, connectionStatus, isMuted, isVideoOff, isSpeakerphone,
@@ -176,16 +95,7 @@ export default function CallScreen({
         return isEngineReady
             ? <AgoraVideoView uid={remoteUids[0]} style={styles.fullSize} channelId={channelId} />
             : <View style={styles.darkFullSize} />;
-    }, [remoteUids, callState, friend, isGroup, isEngineReady, channelId]);
-
-    const toggleSwap = useCallback(() => { if (!isGroup) setIsSwapped(p => !p); }, [isGroup]);
-    const toggleControls = useCallback(() => setShowControls(p => !p), []);
-
-    const tapGesture = useMemo(() => Gesture.Tap().onEnd(() => {
-        runOnJS(toggleSwap)();
-    }), [toggleSwap]);
-
-    const composedGesture = useMemo(() => Gesture.Simultaneous(panGesture, tapGesture), [panGesture, tapGesture]);
+    }, [remoteUids, callState, friend, isGroup, isEngineReady, channelId, callType]);
 
     // Listen to AppState to trigger PiP automatically on background
     React.useEffect(() => {
@@ -264,13 +174,7 @@ export default function CallScreen({
 
                 {/* Top Avatar Overlay for Outgoing Video Call */}
                 {!isInPipMode && callType === 'video' && remoteUids.length === 0 && (callState === 'outgoing' || callState === 'ringing') && showControls && (
-                    <View style={styles.topAvatarOverlay} pointerEvents="none">
-                        <View style={styles.smallAvatarContainer}>
-                            <Image source={friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`} style={styles.fullImage} />
-                        </View>
-                        <Text style={styles.topFriendName}>{friend?.name || friend?.username || 'Friend'}</Text>
-                        <Text style={styles.topCallStatus}>{callState === 'outgoing' ? 'Calling...' : 'Ringing...'}</Text>
-                    </View>
+                    <CallTopAvatarOverlay friend={friend} callState={callState} />
                 )}
 
                 {/* PIP Local Preview (Hide if OS PiP is active) */}
@@ -297,10 +201,7 @@ export default function CallScreen({
 
                 {/* Timer */}
                 {!isInPipMode && callState === 'active' && (
-                    <View style={styles.timerContainer}>
-                        <View style={styles.recordingDot} />
-                        <Text style={styles.timerText}>{formatDuration(callDuration)}</Text>
-                    </View>
+                    <CallTimer duration={callDuration} />
                 )}
 
                 {/* Connection Status */}
@@ -336,7 +237,6 @@ export default function CallScreen({
         </Modal>
     );
 }
-
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#111827' },
@@ -382,77 +282,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.2)', zIndex: 80, elevation: 15, backgroundColor: '#1F2937',
     },
     pipVideo: { width: '100%', height: '100%' },
-    timerContainer: {
-        position: 'absolute', top: 60, left: 24,
-        backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 8,
-        borderRadius: 20, flexDirection: 'row', alignItems: 'center',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-    },
-    recordingDot: { width: 8, height: 8, backgroundColor: '#EF4444', borderRadius: 4, marginRight: 8 },
-    timerText: { color: 'white', fontSize: 14, fontWeight: '600' },
     statusIndicator: { position: 'absolute', top: 60, right: 24 },
     statusText: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
     controlsWrapper: { position: 'absolute', bottom: 50, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
-    controlsContainer: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
-        backgroundColor: '#F68537', paddingHorizontal: 20, paddingVertical: 12,
-        borderRadius: 40, elevation: 8, shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5,
-    },
-    controlButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-    largeButton: { width: 60, height: 60, borderRadius: 30 },
-    dangerButton: { backgroundColor: '#EF4444' },
-    successButton: { backgroundColor: '#10B981' },
-    moreMenuContainer: {
-        position: 'absolute',
-        bottom: 80,
-        right: 40,
-        backgroundColor: '#1F2937',
-        borderRadius: 12,
-        padding: 8,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
-        minWidth: 160,
-    },
-    moreMenuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        gap: 12,
-    },
-    moreMenuText: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    topAvatarOverlay: {
-        position: 'absolute',
-        top: 80,
-        left: 0,
-        right: 0,
-        alignItems: 'center',
-        zIndex: 10,
-    },
-    smallAvatarContainer: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        borderWidth: 3,
-        borderColor: '#F68537',
-        overflow: 'hidden',
-        marginBottom: 12,
-        backgroundColor: '#1F2937',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5,
-        shadowRadius: 5,
-        elevation: 8,
-    },
-    topFriendName: { fontSize: 24, fontWeight: 'bold', color: 'white', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
-    topCallStatus: { color: '#E5E7EB', fontSize: 16, marginTop: 4, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
 });
-
