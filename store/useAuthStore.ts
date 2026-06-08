@@ -87,9 +87,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         const { useFriendsStore } = require('./useFriendsStore');
         const { useChatStore } = require('./useChatStore');
+        const { clearCryptoCache } = require('@/utils/chatCrypto');
         
         useFriendsStore.getState().reset();
         useChatStore.getState().reset();
+        clearCryptoCache();
 
         // Step 1: Turant state clear karo aur login pe bhejo — koi wait nahi!
         set({ session: null, user: null, profile: null });

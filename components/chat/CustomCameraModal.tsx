@@ -1,8 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Dimensions, Image } from 'react-native';
 import { CameraView, CameraType, FlashMode } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as MediaLibrary from 'expo-media-library';
+import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+const { width } = Dimensions.get('window');
+const COLUMN_COUNT = 4;
+const IMAGE_SIZE = width / COLUMN_COUNT;
 
 export interface CustomCameraModalProps {
     visible: boolean;
@@ -15,7 +22,37 @@ const CustomCameraModal = memo(({ visible, onClose, onCapture }: CustomCameraMod
     const [flash, setFlash] = useState<FlashMode>('off');
     const [isRecording, setIsRecording] = useState(false);
     const [recordingDuration, setRecordingDuration] = useState(0);
+    const [assets, setAssets] = useState<MediaLibrary.Asset[]>([]);
+    
     const cameraRef = useRef<CameraView>(null);
+    const bottomSheetRef = useRef<BottomSheet>(null);
+    const snapPoints = useMemo(() => [180, '100%'], []);
+    const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
+
+    useEffect(() => {
+        if (visible && permissionResponse?.status === 'granted') {
+            loadAssets();
+        }
+    }, [visible, permissionResponse]);
+
+    useEffect(() => {
+        if (visible && !permissionResponse?.granted && permissionResponse?.canAskAgain) {
+            requestPermission();
+        }
+    }, [visible]);
+
+    const loadAssets = async () => {
+        try {
+            const media = await MediaLibrary.getAssetsAsync({
+                mediaType: ['photo', 'video'],
+                first: 100,
+                sortBy: ['creationTime'],
+            });
+            setAssets(media.assets);
+        } catch (error) {
+            console.log('Error fetching media:', error);
+        }
+    };
 
     // Timer effect for recording
     useEffect(() => {
@@ -80,11 +117,32 @@ const CustomCameraModal = memo(({ visible, onClose, onCapture }: CustomCameraMod
         }
     }, [isRecording, onCapture, onClose]);
 
+    const renderGalleryItem = useCallback(({ item }: { item: MediaLibrary.Asset }) => {
+        return (
+            <TouchableOpacity
+                style={styles.galleryItemContainer}
+                onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onCapture({ uri: item.uri, type: item.mediaType === 'video' ? 'video' : 'image' });
+                    onClose();
+                }}
+            >
+                <Image source={{ uri: item.uri }} style={styles.galleryItemImage} />
+                {item.mediaType === 'video' && (
+                    <View style={styles.videoBadge}>
+                        <Ionicons name="videocam" size={12} color="white" />
+                        <Text style={styles.videoDuration}>{formatTime(item.duration)}</Text>
+                    </View>
+                )}
+            </TouchableOpacity>
+        );
+    }, [onCapture, onClose, formatTime]);
+
     if (!visible) return null;
 
     return (
         <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-            <View style={styles.container}>
+            <GestureHandlerRootView style={styles.container}>
                 <CameraView
                     ref={cameraRef}
                     style={styles.camera}
@@ -130,7 +188,31 @@ const CustomCameraModal = memo(({ visible, onClose, onCapture }: CustomCameraMod
                         </View>
                     </SafeAreaView>
                 </CameraView>
-            </View>
+
+                {/* WhatsApp Style Bottom Sheet Gallery */}
+                <BottomSheet
+                    ref={bottomSheetRef}
+                    index={0}
+                    snapPoints={snapPoints}
+                    backgroundStyle={styles.bottomSheetBackground}
+                    handleIndicatorStyle={styles.bottomSheetHandle}
+                >
+                    {assets.length > 0 ? (
+                        <BottomSheetFlatList
+                            data={assets}
+                            keyExtractor={(item) => item.id}
+                            renderItem={renderGalleryItem}
+                            numColumns={COLUMN_COUNT}
+                            contentContainerStyle={styles.galleryContent}
+                            showsVerticalScrollIndicator={false}
+                        />
+                    ) : (
+                        <View style={styles.emptyGallery}>
+                            <Text style={styles.emptyText}>No photos found</Text>
+                        </View>
+                    )}
+                </BottomSheet>
+            </GestureHandlerRootView>
         </Modal>
     );
 });
@@ -149,6 +231,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'space-between',
         padding: 20,
+        paddingBottom: 190, // Leave space for the collapsed bottom sheet
     },
     topControls: {
         flexDirection: 'row',
@@ -159,7 +242,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 40,
+        marginBottom: 10,
     },
     iconButton: {
         width: 50,
@@ -221,5 +304,52 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
         fontSize: 14,
+    },
+    bottomSheetBackground: {
+        backgroundColor: '#000000',
+    },
+    bottomSheetHandle: {
+        backgroundColor: '#ffffff',
+        opacity: 0.5,
+    },
+    galleryContent: {
+        paddingBottom: 20,
+    },
+    galleryItemContainer: {
+        width: IMAGE_SIZE,
+        height: IMAGE_SIZE,
+        padding: 1,
+    },
+    galleryItemImage: {
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#333',
+    },
+    videoBadge: {
+        position: 'absolute',
+        bottom: 4,
+        right: 4,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    videoDuration: {
+        color: 'white',
+        fontSize: 10,
+        marginLeft: 4,
+        fontWeight: 'bold',
+    },
+    emptyGallery: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingTop: 40,
+    },
+    emptyText: {
+        color: '#888',
+        fontSize: 16,
     }
 });

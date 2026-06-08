@@ -94,9 +94,6 @@ export default function RootLayout() {
   };
 
   useEffect(() => {
-    // Hide the native splash screen immediately so we can see the debug logs!
-    NativeSplashScreen.hideAsync().catch(() => {});
-    
     // 1. Setup Auth Listener & Initial Session
     const setupAuth = async () => {
       const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
@@ -276,15 +273,8 @@ export default function RootLayout() {
 
   if (initializing) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Text style={{ color: '#F68537', fontSize: 24, fontWeight: 'bold', marginBottom: 20 }}>ChatWarriors</Text>
-        <Text style={{ color: '#FFFFFF', fontSize: 16, textAlign: 'center', marginBottom: 20, fontWeight: 'bold' }}>{bootStatus}</Text>
-        <View style={{ backgroundColor: '#1E293B', padding: 10, borderRadius: 10, width: '100%', maxHeight: '50%' }}>
-            <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 5 }}>Debug Logs:</Text>
-            {debugLogs.map((log, idx) => (
-                <Text key={idx} style={{ color: '#38BDF8', fontSize: 10, fontFamily: 'monospace' }}>{log}</Text>
-            ))}
-        </View>
+      <View style={{ flex: 1, backgroundColor: '#FFF5E6', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#F68537" />
       </View>
     );
   }

@@ -22,6 +22,7 @@ import HomeHeader from '@/components/home/HomeHeader';
 import HomeSkeleton from '@/components/home/HomeSkeleton';
 import ImageZoomModal from '@/components/home/ImageZoomModal';
 import HomeSuggestions from '@/components/home/HomeSuggestions';
+import SOSButton from '@/components/home/SOSButton';
 
 // Extracted Hooks
 import { useHomeMenuActions } from '@/hooks/home/useHomeMenuActions';
@@ -351,6 +352,8 @@ function HomeScreen() {
                     imageUrl={selectedImageForZoom}
                     onClose={() => setSelectedImageForZoom(null)}
                 />
+
+                <SOSButton />
             </View>
         </View>
     );

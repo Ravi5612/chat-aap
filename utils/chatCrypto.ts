@@ -41,6 +41,10 @@ const encoder = new TextEncoder();
 
 const keyCache = new Map<string, Uint8Array>();
 
+export function clearCryptoCache() {
+    keyCache.clear();
+}
+
 export async function deriveKEKFromPassword(password: string, saltStr: string): Promise<Uint8Array> {
     const pwdBytes = encoder.encode(password);
     const saltBytes = encoder.encode(saltStr);
@@ -157,8 +161,9 @@ export async function getX25519SharedSecret(friendPublicKeyBase64: string, userI
     const privateKey = await getLocalPrivateKey(userId);
     if (!privateKey) return null;
 
-    if (keyCache.has(friendPublicKeyBase64)) {
-        return keyCache.get(friendPublicKeyBase64)!;
+    const cacheKey = `x25519_pk:${userId}:${friendPublicKeyBase64}`;
+    if (keyCache.has(cacheKey)) {
+        return keyCache.get(cacheKey)!;
     }
 
     try {
@@ -172,7 +177,7 @@ export async function getX25519SharedSecret(friendPublicKeyBase64: string, userI
             dkLen: 32 // 256 bits
         });
         
-        keyCache.set(friendPublicKeyBase64, key);
+        keyCache.set(cacheKey, key);
         return key;
     } catch (e) {
         console.warn('X25519 shared secret generation failed', e);
@@ -465,7 +470,7 @@ export async function decryptText(encryptedData: any, cryptoKey: Uint8Array): Pr
         return new TextDecoder().decode(decrypted);
 
     } catch (error: any) {
-        console.warn("Decryption failed:", error.message);
+        console.warn("Decryption failed:", error?.message || String(error));
         // Fail gracefully - return placeholder, don't crash
         const errorMsg = '⚠️ Message cannot be decrypted (Keys changed)';
         if (typeof encryptedData === 'string' && encryptedData.startsWith('{')) return errorMsg;

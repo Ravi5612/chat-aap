@@ -8,12 +8,7 @@ module.exports = function (api) {
             "nativewind/babel",
         ],
         plugins: [
-            "react-native-reanimated/plugin",
-            ["module-resolver", {
-                alias: {
-                    "react-native-worklets/plugin": path.resolve(__dirname, "./plugins/fake-worklets.js")
-                }
-            }]
+            "react-native-reanimated/plugin"
         ],
     };
 }

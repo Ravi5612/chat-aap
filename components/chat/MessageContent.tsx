@@ -54,7 +54,7 @@ const MessageContent = memo(({
     const callDetails = message.call_details || {};
     
     const ledgerData = useMemo(() => {
-        if (message.message_type === 'ledger' && message.message?.startsWith('SYSTEM_LEDGER:')) {
+        if (message.message_type === 'ledger' && message?.message?.startsWith('SYSTEM_LEDGER:')) {
             try { return JSON.parse(message.message.replace('SYSTEM_LEDGER:', '')); } catch (e) { return null; }
         }
         return null;

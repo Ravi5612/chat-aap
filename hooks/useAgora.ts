@@ -32,6 +32,7 @@ export const useAgora = ({
     const [remoteUids, setRemoteUids] = useState<number[]>([]);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [isSpeakerphone, setIsSpeakerphone] = useState(callType === 'video'); // Default true for video, false for audio
     const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
     const [remoteVideoMuted, setRemoteVideoMuted] = useState(false);
@@ -264,8 +265,38 @@ export const useAgora = ({
     };
 
     const switchCamera = () => {
-        if (engine.current) {
+        if (engine.current && !isScreenSharing) {
             engine.current.switchCamera();
+        }
+    };
+
+    const toggleScreenShare = async () => {
+        if (!engine.current) return;
+        try {
+            if (isScreenSharing) {
+                await engine.current.stopScreenCapture();
+                if (callTypeRef.current === 'video') {
+                    await engine.current.updateChannelMediaOptions({
+                        publishScreenCaptureVideo: false,
+                        publishCameraTrack: true,
+                    });
+                    if (!isVideoOff) engine.current.startPreview();
+                }
+                setIsScreenSharing(false);
+            } else {
+                await engine.current.startScreenCapture({
+                    captureVideo: true,
+                    captureAudio: false,
+                    videoParams: { dimensions: { width: 1280, height: 720 }, frameRate: 15, bitrate: 1000 }
+                });
+                await engine.current.updateChannelMediaOptions({
+                    publishCameraTrack: false,
+                    publishScreenCaptureVideo: true,
+                });
+                setIsScreenSharing(true);
+            }
+        } catch (e) {
+            if (__DEV__) console.error('[CALL_ACTION] Screen share error:', e);
         }
     };
 
@@ -286,9 +317,11 @@ export const useAgora = ({
         remoteAudioMuted,
         remoteVideoMuted,
         connectionStatus,
+        isScreenSharing,
         toggleMute,
         toggleVideo,
         toggleSpeakerphone,
+        toggleScreenShare,
         switchCamera,
         leave,
         channelId: channelName.current,

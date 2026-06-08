@@ -2,15 +2,73 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { AppStorage } from '@/lib/storage';
+import { supabase } from '@/lib/supabase';
+import { Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 
 export default function PrivacySafetyScreen() {
     const router = useRouter();
-    const { profile, updateProfile } = useAuthStore();
+    const { profile, updateProfile, user } = useAuthStore();
     const { blockedUserIds } = useFriendsStore();
+    const [trackerEnabled, setTrackerEnabled] = useState(false);
+    
+    // Password Modal State
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [passwordInput, setPasswordInput] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [pendingToggleValue, setPendingToggleValue] = useState<boolean | null>(null);
+
+    useEffect(() => {
+        const loadTrackerState = async () => {
+            const state = await AppStorage.getItemAsync('tracker_enabled');
+            setTrackerEnabled(state === 'true');
+        };
+        loadTrackerState();
+    }, []);
+
+    const handleToggleAttempt = (newValue: boolean) => {
+        setPendingToggleValue(newValue);
+        setPasswordInput('');
+        setShowPasswordModal(true);
+    };
+
+    const verifyPasswordAndToggle = async () => {
+        if (!passwordInput.trim() || !user?.email || pendingToggleValue === null) return;
+        
+        setIsVerifying(true);
+        try {
+            // Verify password by attempting to sign in
+            const { error } = await supabase.auth.signInWithPassword({
+                email: user.email,
+                password: passwordInput
+            });
+
+            if (error) {
+                alert('Incorrect password. Please try again.');
+                setIsVerifying(false);
+                return;
+            }
+
+            // Password correct! Proceed with toggle
+            const newValue = pendingToggleValue;
+            setTrackerEnabled(newValue);
+            await AppStorage.setItemAsync('tracker_enabled', newValue ? 'true' : 'false');
+            
+            const deviceId = await AppStorage.getItemAsync('unique_device_id');
+            if (deviceId) {
+                await supabase.from('user_devices').update({ is_tracker_enabled: newValue }).eq('user_id', user.id).eq('device_id', deviceId);
+            }
+            
+            setShowPasswordModal(false);
+        } catch (err) {
+            alert('Something went wrong verifying your password.');
+        } finally {
+            setIsVerifying(false);
+        }
+    };
 
     return (
         <View style={{ flex: 1, backgroundColor: '#FFFDFB' }}>
@@ -36,6 +94,33 @@ export default function PrivacySafetyScreen() {
                         <Text style={styles.heroText}>
                             We're committed to keeping your data and conversations secure. Follow these tips to enhance your security.
                         </Text>
+                    </View>
+
+                    <Text style={styles.sectionLabel}>COMMUNITY RESCUE (SOS)</Text>
+
+                    {/* Become a Warrior */}
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#F6853710' }]}>
+                            <MaterialCommunityIcons name="shield-sword" size={26} color="#F68537" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Become a Warrior 🛡️</Text>
+                            <Text style={styles.tipDesc}>Opt-in to receive SOS alerts from users in danger within 5KM.</Text>
+                            {(profile?.missions_completed || 0) > 0 && (
+                                <Text style={{ fontSize: 12, color: '#10B981', marginTop: 4, fontWeight: 'bold' }}>
+                                    🎖️ Missions Completed: {profile?.missions_completed}
+                                </Text>
+                            )}
+                        </View>
+                        <Switch 
+                            value={profile?.is_warrior ?? false}
+                            onValueChange={async (newValue) => {
+                                await updateProfile({ is_warrior: newValue });
+                            }}
+                            trackColor={{ false: '#E5E7EB', true: '#FFEDD5' }}
+                            thumbColor={profile?.is_warrior ? '#F68537' : '#FFFFFF'}
+                            style={{ alignSelf: 'center' }}
+                        />
                     </View>
 
                     <Text style={styles.sectionLabel}>DISCOVERY & NOTIFICATIONS</Text>
@@ -90,6 +175,30 @@ export default function PrivacySafetyScreen() {
                     </TouchableOpacity>
 
                     <Text style={styles.sectionLabel}>GENERAL PRIVACY SETTINGS</Text>
+
+                    {/* Find My Warrior */}
+                    <View style={styles.tipCard}>
+                        <View style={[styles.iconContainer, { backgroundColor: '#EF444410' }]}>
+                            <Ionicons name="location-outline" size={26} color="#EF4444" />
+                        </View>
+                        <View style={styles.tipContent}>
+                            <Text style={styles.tipTitle}>Find My Warrior</Text>
+                            <Text style={styles.tipDesc}>Send your device location and battery status to the server securely.</Text>
+                            <Text style={{ fontSize: 12, color: '#F68537', marginTop: 8, fontWeight: 'bold' }}>
+                                To track your lost device, go to:
+                            </Text>
+                            <Text style={{ fontSize: 13, color: '#374151', marginTop: 2, fontWeight: '600' }}>
+                                🌐 www.chatwarriors.com
+                            </Text>
+                        </View>
+                        <Switch 
+                            value={trackerEnabled}
+                            onValueChange={handleToggleAttempt}
+                            trackColor={{ false: '#E5E7EB', true: '#FEE2E2' }}
+                            thumbColor={trackerEnabled ? '#EF4444' : '#FFFFFF'}
+                            style={{ alignSelf: 'center' }}
+                        />
+                    </View>
 
                     {/* Show Email */}
                     <View style={styles.tipCard}>
@@ -242,6 +351,66 @@ export default function PrivacySafetyScreen() {
                     <View style={{ height: 40 }} />
                 </ScrollView>
             </SafeAreaView>
+
+            {/* Password Verification Modal */}
+            <Modal
+                visible={showPasswordModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowPasswordModal(false)}
+            >
+                <KeyboardAvoidingView 
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+                >
+                    <View style={{ backgroundColor: 'white', width: '100%', borderRadius: 24, padding: 24, alignItems: 'center' }}>
+                        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                            <Ionicons name="lock-closed" size={32} color="#F68537" />
+                        </View>
+                        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 8, textAlign: 'center' }}>
+                            Security Check
+                        </Text>
+                        <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+                            Please enter your ChatWarriors password to {pendingToggleValue ? 'enable' : 'disable'} the device tracker.
+                        </Text>
+
+                        <TextInput
+                            style={{ width: '100%', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 16, fontSize: 16, color: '#1F2937', marginBottom: 24 }}
+                            placeholder="Enter your password"
+                            placeholderTextColor="#9CA3AF"
+                            secureTextEntry
+                            value={passwordInput}
+                            onChangeText={setPasswordInput}
+                            autoFocus
+                        />
+
+                        <View style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
+                            <TouchableOpacity 
+                                style={{ flex: 1, padding: 16, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center' }}
+                                onPress={() => {
+                                    setShowPasswordModal(false);
+                                    setPendingToggleValue(null);
+                                }}
+                                disabled={isVerifying}
+                            >
+                                <Text style={{ fontSize: 16, fontWeight: '600', color: '#4B5563' }}>Cancel</Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity 
+                                style={{ flex: 1, padding: 16, borderRadius: 16, backgroundColor: '#F68537', alignItems: 'center', opacity: (!passwordInput || isVerifying) ? 0.7 : 1 }}
+                                onPress={verifyPasswordAndToggle}
+                                disabled={!passwordInput || isVerifying}
+                            >
+                                {isVerifying ? (
+                                    <ActivityIndicator size="small" color="white" />
+                                ) : (
+                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: 'white' }}>Verify</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </View>
     );
 }

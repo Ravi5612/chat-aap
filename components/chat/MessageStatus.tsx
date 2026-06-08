@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface MessageStatusProps {
-    status: 'sending' | 'pending' | 'sent' | 'delivered' | 'read';
+    status: 'sending' | 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 }
 
 export default React.memo(function MessageStatus({ status }: MessageStatusProps) {
@@ -35,6 +35,14 @@ export default React.memo(function MessageStatus({ status }: MessageStatusProps)
         return (
             <View style={styles.container}>
                 <Ionicons name="checkmark-done" size={16} color="#10B981" />
+            </View>
+        );
+    }
+
+    if (status === 'failed') {
+        return (
+            <View style={styles.container}>
+                <Ionicons name="alert-circle" size={16} color="#EF4444" />
             </View>
         );
     }

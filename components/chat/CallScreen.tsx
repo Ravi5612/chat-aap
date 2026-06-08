@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, memo } from 'react';
 import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleSheet, AppState } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
@@ -18,7 +18,9 @@ const formatDuration = (seconds: number) => {
 };
 
 // Memoized so re-renders from timer/state don't recreate controls
-const CallControls = memo(({ callState, callType, isMuted, isVideoOff, isSpeakerphone, onMute, onVideo, onSpeaker, onSwitchCamera, onAccept, onEnd }: any) => {
+const CallControls = memo(({ callState, callType, isMuted, isVideoOff, isSpeakerphone, isScreenSharing, onMute, onVideo, onSpeaker, onSwitchCamera, onScreenShare, onAccept, onEnd }: any) => {
+    const [showMore, setShowMore] = useState(false);
+
     if (callState === 'incoming') {
         return (
             <View style={styles.controlsContainer}>
@@ -47,12 +49,30 @@ const CallControls = memo(({ callState, callType, isMuted, isVideoOff, isSpeaker
             <TouchableOpacity onPress={onMute} style={[styles.controlButton, isMuted && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
                 <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={onSpeaker} style={[styles.controlButton, isSpeakerphone && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
-                <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={24} color="white" />
+            
+            <TouchableOpacity onPress={() => setShowMore(!showMore)} style={[styles.controlButton, showMore && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                <Ionicons name="ellipsis-vertical" size={24} color="white" />
             </TouchableOpacity>
+
             <TouchableOpacity onPress={onEnd} style={[styles.controlButton, styles.largeButton, styles.dangerButton]}>
                 <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
             </TouchableOpacity>
+
+            {/* MORE OPTIONS MENU */}
+            {showMore && (
+                <View style={styles.moreMenuContainer}>
+                    <TouchableOpacity onPress={() => { setShowMore(false); onSpeaker(); }} style={styles.moreMenuItem}>
+                        <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={20} color={isSpeakerphone ? "#10B981" : "white"} />
+                        <Text style={styles.moreMenuText}>{isSpeakerphone ? "Speaker: ON" : "Speaker: OFF"}</Text>
+                    </TouchableOpacity>
+                    {callType === 'video' && (
+                        <TouchableOpacity onPress={() => { setShowMore(false); onScreenShare(); }} style={styles.moreMenuItem}>
+                            <Ionicons name={isScreenSharing ? "stop-circle" : "desktop"} size={20} color={isScreenSharing ? "#EF4444" : "white"} />
+                            <Text style={styles.moreMenuText}>{isScreenSharing ? "Stop Sharing" : "Share Screen"}</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            )}
         </View>
     );
 });
@@ -110,6 +130,7 @@ export default function CallScreen({
     // Agora RTC
     const { joined, remoteUids, connectionStatus, isMuted, isVideoOff, isSpeakerphone,
         remoteAudioMuted, remoteVideoMuted, toggleMute, toggleVideo, toggleSpeakerphone,
+        isScreenSharing, toggleScreenShare,
         switchCamera, channelId, isEngineReady
     } = useAgora({ currentUser, friend, callType, callState: callState as 'incoming' | 'outgoing' | 'active' | null, onAcceptCall, onEndCall, isGroup });
 
@@ -121,6 +142,10 @@ export default function CallScreen({
     // Memoized — only re-renders when remoteUids/callState/friend changes
     const RemoteVideoArea = useCallback(() => {
         if (remoteUids.length === 0) {
+            if (callType === 'video' && (callState === 'outgoing' || callState === 'ringing')) {
+                // Return local video full screen for video call outgoing
+                return isEngineReady ? <AgoraVideoView uid={0} style={styles.fullSize} channelId={channelId} /> : <View style={styles.darkFullSize} />;
+            }
             const avatarUri = friend?.avatar_url || friend?.img
                 || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`;
             const statusText = callState === 'outgoing' ? 'Calling...'
@@ -155,6 +180,12 @@ export default function CallScreen({
 
     const toggleSwap = useCallback(() => { if (!isGroup) setIsSwapped(p => !p); }, [isGroup]);
     const toggleControls = useCallback(() => setShowControls(p => !p), []);
+
+    const tapGesture = useMemo(() => Gesture.Tap().onEnd(() => {
+        runOnJS(toggleSwap)();
+    }), [toggleSwap]);
+
+    const composedGesture = useMemo(() => Gesture.Simultaneous(panGesture, tapGesture), [panGesture, tapGesture]);
 
     // Listen to AppState to trigger PiP automatically on background
     React.useEffect(() => {
@@ -199,7 +230,7 @@ export default function CallScreen({
                     <View style={styles.mainVideoContainer}>
                         {callType === 'video' ? (
                             <>
-                                {isSwapped && isEngineReady
+                                {isSwapped && isEngineReady && remoteUids.length > 0
                                     ? <AgoraVideoView uid={0} style={{ width, height }} channelId={channelId} />
                                     : <RemoteVideoArea />
                                 }
@@ -231,11 +262,22 @@ export default function CallScreen({
                     <CallEndedOverlay friend={friend} endReason={endReason} onRetry={retryCall} onGoToChat={goToChat} />
                 )}
 
+                {/* Top Avatar Overlay for Outgoing Video Call */}
+                {!isInPipMode && callType === 'video' && remoteUids.length === 0 && (callState === 'outgoing' || callState === 'ringing') && showControls && (
+                    <View style={styles.topAvatarOverlay} pointerEvents="none">
+                        <View style={styles.smallAvatarContainer}>
+                            <Image source={friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`} style={styles.fullImage} />
+                        </View>
+                        <Text style={styles.topFriendName}>{friend?.name || friend?.username || 'Friend'}</Text>
+                        <Text style={styles.topCallStatus}>{callState === 'outgoing' ? 'Calling...' : 'Ringing...'}</Text>
+                    </View>
+                )}
+
                 {/* PIP Local Preview (Hide if OS PiP is active) */}
-                {!isInPipMode && callType === 'video' && (callState === 'active' || callState === 'outgoing') && isEngineReady && (
-                    <GestureDetector gesture={panGesture}>
+                {!isInPipMode && callType === 'video' && callState === 'active' && remoteUids.length > 0 && isEngineReady && (
+                    <GestureDetector gesture={composedGesture}>
                         <Animated.View style={[styles.pipContainer, animatedStyle]}>
-                            <TouchableOpacity activeOpacity={0.8} onPress={toggleSwap} style={styles.flex1}>
+                            <View style={styles.flex1}>
                                 <AgoraVideoView
                                     uid={isSwapped ? (remoteUids[0] || 0) : 0}
                                     style={styles.pipVideo}
@@ -248,7 +290,7 @@ export default function CallScreen({
                                         <Ionicons name="videocam-off" size={24} color="white" />
                                     </View>
                                 )}
-                            </TouchableOpacity>
+                            </View>
                         </Animated.View>
                     </GestureDetector>
                 )}
@@ -278,10 +320,12 @@ export default function CallScreen({
                             isMuted={isMuted}
                             isVideoOff={isVideoOff}
                             isSpeakerphone={isSpeakerphone}
+                            isScreenSharing={isScreenSharing}
                             onMute={toggleMute}
                             onVideo={toggleVideo}
                             onSpeaker={toggleSpeakerphone}
                             onSwitchCamera={switchCamera}
+                            onScreenShare={toggleScreenShare}
                             onAccept={acceptCall}
                             onEnd={endCall}
                         />
@@ -359,5 +403,56 @@ const styles = StyleSheet.create({
     largeButton: { width: 60, height: 60, borderRadius: 30 },
     dangerButton: { backgroundColor: '#EF4444' },
     successButton: { backgroundColor: '#10B981' },
+    moreMenuContainer: {
+        position: 'absolute',
+        bottom: 80,
+        right: 40,
+        backgroundColor: '#1F2937',
+        borderRadius: 12,
+        padding: 8,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        minWidth: 160,
+    },
+    moreMenuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        gap: 12,
+    },
+    moreMenuText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    topAvatarOverlay: {
+        position: 'absolute',
+        top: 80,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    smallAvatarContainer: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        borderWidth: 3,
+        borderColor: '#F68537',
+        overflow: 'hidden',
+        marginBottom: 12,
+        backgroundColor: '#1F2937',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+        elevation: 8,
+    },
+    topFriendName: { fontSize: 24, fontWeight: 'bold', color: 'white', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
+    topCallStatus: { color: '#E5E7EB', fontSize: 16, marginTop: 4, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
 });
 

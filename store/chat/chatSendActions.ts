@@ -20,7 +20,7 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
         const replyMsgObj = replyToId ? messages.find(m => m.id === replyToId) : null;
         const replyObject = replyMsgObj ? {
             id: replyMsgObj.id,
-            message: replyMsgObj.message,
+            message: replyMsgObj?.message,
             sender_id: replyMsgObj.sender_id,
             created_at: replyMsgObj.created_at
         } : null;
@@ -217,6 +217,13 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
 
         } catch (error: any) {
             console.error("SendMessage Error:", error);
+            
+            // Show alert directly on screen to help debug
+            const errMsg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+            Alert.alert(
+                "Message Send Failed", 
+                `Supabase Error: ${errMsg}\n\nPlease take a screenshot of this error.`
+            );
             
             // ✅ MARK AS FAILED IN UI INSTEAD OF SPINNING FOREVER
             set((state: any) => {

@@ -282,10 +282,10 @@ export const useChatStore = create<ChatState>((set, get) => {
                         // ✅ require() moved outside forEach to avoid repeated module lookups
                         const { useAuthStore } = require('./useAuthStore');
                         const currentUserId = useAuthStore.getState().user?.id;
-                        finalMessages.forEach(msg => {
-                            saveLocalMessage(db, msg);
-                            if (currentUserId) syncLedgerExpense(db, msg, currentUserId);
-                        });
+                        for (const msg of finalMessages) {
+                            await saveLocalMessage(db, msg);
+                            if (currentUserId) await syncLedgerExpense(db, msg, currentUserId);
+                        }
                     }
                 }
 

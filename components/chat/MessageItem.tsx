@@ -218,76 +218,81 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
             <GestureDetector gesture={panGesture}>
                 <Animated.View style={[{ width: '100%', marginBottom: 12, paddingHorizontal: 16, flexDirection: 'column', alignItems: isCurrentUser ? 'flex-end' : 'flex-start' }, animatedStyle]}>
-                    <TouchableOpacity
-                        onLongPress={handleLongPress}
-                        activeOpacity={0.9}
-                        style={{ maxWidth: '85%', borderRadius: 18, paddingVertical: 4, paddingHorizontal: 2, backgroundColor: isCurrentUser ? '#F68537' : 'white', borderTopRightRadius: isCurrentUser ? 4 : 18, borderTopLeftRadius: isCurrentUser ? 18 : 4, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1 }}
-                    >
-                        {!isCurrentUser && message.group_id && <Text style={{ paddingHorizontal: 12, paddingTop: 8, fontSize: 11, fontWeight: 'bold', color: '#F68537' }}>{message.sender?.username || 'User'}</Text>}
+                    <View style={{ position: 'relative', maxWidth: '85%' }}>
+                        <TouchableOpacity
+                            onLongPress={handleLongPress}
+                            activeOpacity={0.9}
+                            style={{ width: '100%', borderRadius: 18, paddingVertical: 4, paddingHorizontal: 2, backgroundColor: isCurrentUser ? '#F68537' : 'white', borderTopRightRadius: isCurrentUser ? 4 : 18, borderTopLeftRadius: isCurrentUser ? 18 : 4, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1 }}
+                        >
+                            {!isCurrentUser && message.group_id && <Text style={{ paddingHorizontal: 12, paddingTop: 8, fontSize: 11, fontWeight: 'bold', color: '#F68537' }}>{message.sender?.username || 'User'}</Text>}
 
-                        <MessageStatusContext statusContext={message.status_context} isCurrentUser={isCurrentUser} decryptedStatusContent={decryptedStatusContent} decryptedStatusMedia={decryptedStatusMedia} />
+                            <MessageStatusContext statusContext={message.status_context} isCurrentUser={isCurrentUser} decryptedStatusContent={decryptedStatusContent} decryptedStatusMedia={decryptedStatusMedia} />
 
-                        {message.reply && message.reply.id && !message.status_context && (
-                            <TouchableOpacity onPress={(e) => { e.stopPropagation(); Haptics.selectionAsync(); onReplyClick?.(message.reply); }} activeOpacity={0.7} style={{ margin: 6, padding: 8, borderRadius: 8, borderLeftWidth: 4, backgroundColor: 'rgba(0, 0, 0, 0.05)', borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537' }}>
-                                <Text style={{ fontWeight: 'bold', fontSize: 11, color: isCurrentUser ? 'white' : '#F68537' }}>{message.reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}</Text>
-                                <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={1}>{message.reply.message || 'Media'}</Text>
+                            {message.reply && message.reply.id && !message.status_context && (
+                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); Haptics.selectionAsync(); onReplyClick?.(message.reply); }} activeOpacity={0.7} style={{ margin: 6, padding: 8, borderRadius: 8, borderLeftWidth: 4, backgroundColor: 'rgba(0, 0, 0, 0.05)', borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537' }}>
+                                    <Text style={{ fontWeight: 'bold', fontSize: 11, color: isCurrentUser ? 'white' : '#F68537' }}>{message.reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}</Text>
+                                    <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={1}>{message?.reply?.message || 'Media'}</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <MessageContent
+                                message={message} isCurrentUser={isCurrentUser} formatTime={formatTime} handleLongPress={handleLongPress} onImagePress={onImagePress}
+                                imageUrl={parsedData.imageUrl} localImageUrl={localImageUrl} imageLoading={imageLoading} uploadProgress={uploadProgress}
+                                isVoiceMessage={parsedData.isVoiceMessage} voiceUri={parsedData.voiceUri} localVoiceUrl={localVoiceUrl} textContent={parsedData.textContent}
+                                isContactMessage={parsedData.isContactMessage} contactName={parsedData.contactName} contactPhone={parsedData.contactPhone}
+                                isLocationMessage={parsedData.isLocationMessage} locationCoords={parsedData.locationCoords} locationAddress={parsedData.locationAddress}
+                                isDocumentMessage={parsedData.isDocumentMessage} documentName={parsedData.documentName} documentSize={parsedData.documentSize} documentUrl={localDocumentUrl || parsedData.documentUrl}
+                                hasImage={parsedData.hasImage}
+                                isVideoMessage={parsedData.isVideoMessage} videoUrl={finalVideoUrl}
+                            />
+                        </TouchableOpacity>
+
+                        {/* Auto-Listen Speaker Icon */}
+                        {autoListenMode && (
+                            <TouchableOpacity
+                                onPress={() => {
+                                    Haptics.selectionAsync();
+                                    const rawText = message?.message || '';
+                                    const cleanText = rawText
+                                        .replace(/\[Image\]\s*\S+/g, 'Image')
+                                        .replace(/\[Video\]\s*\S+/g, 'Video')
+                                        .replace(/\[Voice Message\]\s*\S+/g, 'Voice Message')
+                                        .replace(/\[Document\][^|]+\|?[^|]*/g, 'Document')
+                                        .replace(/\[Contact\][^|]+\|?[^|]*/g, 'Contact')
+                                        .replace(/\[Location\][^|]+\|?[^|]*/g, 'Location')
+                                        .trim();
+                                    if (!cleanText) return;
+                                    const isHindi = /[\u0900-\u097F]/.test(cleanText);
+                                    Speech.isSpeakingAsync().then(speaking => {
+                                        if (speaking) { Speech.stop(); }
+                                        else {
+                                            Speech.speak(cleanText, {
+                                                language: isHindi ? 'hi-IN' : 'en-US',
+                                                pitch: 1.0, rate: 0.9,
+                                            });
+                                        }
+                                    });
+                                }}
+                                style={{
+                                    position: 'absolute',
+                                    bottom: -10,
+                                    [isCurrentUser ? 'left' : 'right']: -10,
+                                    width: 28, height: 28, borderRadius: 14,
+                                    backgroundColor: '#F68537',
+                                    alignItems: 'center', justifyContent: 'center',
+                                    elevation: 3,
+                                    shadowColor: '#000',
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.2, shadowRadius: 3,
+                                    borderWidth: 2,
+                                    borderColor: 'white'
+                                }}
+                            >
+                                <Ionicons name="volume-high" size={14} color="white" />
                             </TouchableOpacity>
                         )}
+                    </View>
 
-                        <MessageContent
-                            message={message} isCurrentUser={isCurrentUser} formatTime={formatTime} handleLongPress={handleLongPress} onImagePress={onImagePress}
-                            imageUrl={parsedData.imageUrl} localImageUrl={localImageUrl} imageLoading={imageLoading} uploadProgress={uploadProgress}
-                            isVoiceMessage={parsedData.isVoiceMessage} voiceUri={parsedData.voiceUri} localVoiceUrl={localVoiceUrl} textContent={parsedData.textContent}
-                            isContactMessage={parsedData.isContactMessage} contactName={parsedData.contactName} contactPhone={parsedData.contactPhone}
-                            isLocationMessage={parsedData.isLocationMessage} locationCoords={parsedData.locationCoords} locationAddress={parsedData.locationAddress}
-                            isDocumentMessage={parsedData.isDocumentMessage} documentName={parsedData.documentName} documentSize={parsedData.documentSize} documentUrl={localDocumentUrl || parsedData.documentUrl}
-                            hasImage={parsedData.hasImage}
-                            isVideoMessage={parsedData.isVideoMessage} videoUrl={finalVideoUrl}
-                        />
-                    </TouchableOpacity>
-
-                    {/* Auto-Listen Speaker Icon */}
-                    {autoListenMode && (
-                        <TouchableOpacity
-                            onPress={() => {
-                                Haptics.selectionAsync();
-                                const rawText = message.message || '';
-                                const cleanText = rawText
-                                    .replace(/\[Image\]\s*\S+/g, 'Image')
-                                    .replace(/\[Video\]\s*\S+/g, 'Video')
-                                    .replace(/\[Voice Message\]\s*\S+/g, 'Voice Message')
-                                    .replace(/\[Document\][^|]+\|?[^|]*/g, 'Document')
-                                    .replace(/\[Contact\][^|]+\|?[^|]*/g, 'Contact')
-                                    .replace(/\[Location\][^|]+\|?[^|]*/g, 'Location')
-                                    .trim();
-                                if (!cleanText) return;
-                                const isHindi = /[\u0900-\u097F]/.test(cleanText);
-                                Speech.isSpeakingAsync().then(speaking => {
-                                    if (speaking) { Speech.stop(); }
-                                    else {
-                                        Speech.speak(cleanText, {
-                                            language: isHindi ? 'hi-IN' : 'en-US',
-                                            pitch: 1.0, rate: 0.9,
-                                        });
-                                    }
-                                });
-                            }}
-                            style={{
-                                position: 'absolute',
-                                bottom: -8,
-                                [isCurrentUser ? 'left' : 'right']: -8,
-                                width: 26, height: 26, borderRadius: 13,
-                                backgroundColor: '#F68537',
-                                alignItems: 'center', justifyContent: 'center',
-                                elevation: 3,
-                                shadowColor: '#F68537',
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.4, shadowRadius: 3,
-                            }}
-                        >
-                            <Ionicons name="volume-high" size={12} color="white" />
-                        </TouchableOpacity>
-                    )}
                     {message.reactions && Object.keys(message.reactions).length > 0 && (
                         <View style={{ marginTop: -10, zIndex: 20, flexDirection: 'row', gap: 4, marginRight: isCurrentUser ? 8 : 0, marginLeft: isCurrentUser ? 0 : 8 }}>
                             {(() => {

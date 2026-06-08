@@ -5,8 +5,11 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useInitialPermissions } from '@/hooks/useInitialPermissions';
+import { useDeviceTracker } from '@/hooks/useDeviceTracker';
 import CallScreen from '@/components/chat/CallScreen';
 import { useCallStore } from '@/store/useCallStore';
+import { useEmergencySystem } from '@/hooks/useEmergencySystem';
+import EmergencyReceiverModal from '@/components/home/EmergencyReceiverModal';
 import { TouchableOpacity, Text, View, StatusBar, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -98,6 +101,8 @@ export const BackgroundServices = () => {
     // 2. Global Services
     useNotifications(session?.user?.id || null);
     useGlobalRealtime(session?.user?.id || null);
+    useDeviceTracker();
+    useEmergencySystem();
 
     // 3. Call Management
     const memoizedFriends = React.useMemo(() => combinedItems || [], [combinedItems]);
@@ -119,6 +124,7 @@ export const BackgroundServices = () => {
                 notification={currentNotification} 
                 onClose={clearNotification} 
             />
+            <EmergencyReceiverModal />
             <CallScreen
                 visible={!!callSession && !isMinimized}
                 callState={callSession?.status}
