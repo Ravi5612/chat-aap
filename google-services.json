@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "913897193400",
+    "project_id": "chatwarriors-app",
+    "storage_bucket": "chatwarriors-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:913897193400:android:5d0189c37bf41f1e8dd94d",
+        "android_client_info": {
+          "package_name": "com.ravirai.chatwarriors"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCd4SXjawjZAlc08AGU-BlKJGxXQp7A5ls"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
