@@ -22,7 +22,19 @@ const flushMarkAsRead = async (get: StoreGet) => {
     try {
         const now = new Date().toISOString();
         await supabase.from('messages').update({ is_read: true, status: 'read', read_at: now }).in('id', ids);
-        // broadcast removed to save data
+        
+        if (meta.channel) {
+            meta.channel.send({
+                type: 'broadcast',
+                event: 'status_update',
+                payload: { 
+                    status: 'read', 
+                    message_ids: ids, 
+                    user_id: meta.currentUser.id, 
+                    group_id: meta.isGroup ? meta.friendId : null 
+                }
+            });
+        }
     } catch (err) {
         console.error('flushMarkAsRead error:', err);
     }

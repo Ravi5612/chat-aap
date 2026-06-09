@@ -94,7 +94,17 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                         .update({ status: 'delivered', delivered_at: now })
                         .eq('id', finalMsg.id)
                         .eq('status', 'sent')
-                        .then(() => {})
+                        .then(() => {
+                            channel.send({
+                                type: 'broadcast',
+                                event: 'status_update',
+                                payload: {
+                                    status: 'delivered',
+                                    message_ids: [finalMsg.id],
+                                    user_id: currentUser.id
+                                }
+                            });
+                        })
                         .catch(() => {});
 
                     useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
@@ -182,7 +192,7 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
             channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${currentUser.id}` }, handleUpdate);
         }
 
-        // Ephemeral Broadcast Listeners (Typing & Reactions)
+        // Ephemeral Broadcast Listeners (Typing & Reactions & Status)
         channel
             .on('broadcast', { event: 'typing' }, (payload) => {
                 const data = payload.payload || payload;
@@ -197,6 +207,41 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                 }));
                 setFlyingEmoji({ emoji, messageId: message_id, id: Date.now() });
                 setTimeout(() => setFlyingEmoji(null), 2000);
+            })
+            .on('broadcast', { event: 'status_update' }, (payload) => {
+                const { status, message_ids, user_id } = payload.payload;
+                // user_id is the person who updated the status (the receiver)
+                // If the status update comes from our friend, it means OUR messages were read/delivered by them.
+                if (user_id === friendId || isGroup) {
+                    const statusOrder = { 'sent': 1, 'delivered': 2, 'read': 3 };
+                    const newWeight = statusOrder[status as keyof typeof statusOrder] || 0;
+                    
+                    useChatStore.setState((state) => {
+                        let changed = false;
+                        const newMessages = state.messages.map(m => {
+                            // Only update our own messages
+                            if (m.sender_id !== currentUser.id) return m;
+                            
+                            // If specific messages were provided, only update those
+                            if (message_ids && message_ids.length > 0 && !message_ids.includes(m.id)) return m;
+                            
+                            const currentWeight = statusOrder[m.status as keyof typeof statusOrder] || 0;
+                            if (newWeight > currentWeight) {
+                                changed = true;
+                                return { 
+                                    ...m, 
+                                    status, 
+                                    is_read: status === 'read' ? true : m.is_read,
+                                    delivered_at: status === 'delivered' && !m.delivered_at ? new Date().toISOString() : m.delivered_at,
+                                    read_at: status === 'read' && !m.read_at ? new Date().toISOString() : m.read_at
+                                };
+                            }
+                            return m;
+                        });
+                        
+                        return changed ? { messages: newMessages } : {};
+                    });
+                }
             })
             .subscribe();
 
