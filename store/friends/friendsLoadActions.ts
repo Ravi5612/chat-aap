@@ -64,9 +64,10 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
 
         const currentItems = get().combinedItems;
         const isFirstLoad = loadedForUserId !== userId;
-        const shouldShowLoading = isFirstLoad;
+        // Only show loading skeleton if we have NO data from cache/local DB
+        const shouldShowLoading = isFirstLoad && currentItems.length === 0;
         
-        // Only set loading if it's the first time loading for this user to prevent skeleton flashing
+        // Only set loading if it's the first time loading for this user AND we have no local data
         if (shouldShowLoading) {
             set({ loading: true, error: null });
         }
