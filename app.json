@@ -32,7 +32,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
-        "backgroundColor": "#FFF5E6"
+        "backgroundColor": "#F68537"
       },
       "permissions": [
         "CAMERA",
