@@ -2,7 +2,6 @@ import React, { memo, useCallback, useMemo } from 'react';
 import MessageContextMenu from '@/components/chat/MessageContextMenu';
 import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
 import MediaViewer from '@/components/chat/MediaViewer';
-import CallScreen from '@/components/chat/CallScreen';
 import LedgerModal from '@/components/chat/LedgerModal';
 import MessageInfoModal from '@/components/chat/MessageInfoModal';
 
@@ -88,7 +87,6 @@ const ChatModals = memo(({
                 allowDownload={allowDownload}
             />
 
-            <CallScreen />
 
             <LedgerModal
                 visible={ledgerVisible}

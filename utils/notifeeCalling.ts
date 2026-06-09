@@ -41,7 +41,7 @@ export const displayIncomingCall = async (callerName: string, channelName: strin
 export const displayOutgoingCall = async (friendName: string, status: 'Calling...' | 'Ringing...' | string = 'Calling...', friendAvatar?: string) => {
   try {
     const channelId = await notifee.createChannel({
-      id: 'outgoing_calls',
+      id: 'outgoing_calls_v3',
       name: 'Outgoing Calls',
       importance: AndroidImportance.DEFAULT,
     });

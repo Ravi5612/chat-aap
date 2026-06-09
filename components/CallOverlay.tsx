@@ -18,6 +18,24 @@ export const CallOverlay = () => {
         } else if (detail.pressAction?.id === 'reject') {
           // Handle Reject
           setIncomingCall(null);
+        } else if (detail.pressAction?.id === 'end_call') {
+          // Handle Cut (Outgoing Call)
+          import('@/utils/notifeeCalling').then(({ cancelOutgoingCall }) => cancelOutgoingCall());
+          const { useCallStore } = require('@/store/useCallStore');
+          const { supabase } = require('@/lib/supabase');
+          const session = useCallStore.getState().callSession;
+          if (session?.friend?.id) {
+              const targetId = session.friend.id;
+              const endType = session.status === 'incoming' ? 'rejected' : 'end';
+              const channel = supabase.channel(`calls-signal-${targetId}`);
+              channel.subscribe(async (status: any) => {
+                  if (status === 'SUBSCRIBED') {
+                      await channel.send({ type: 'broadcast', event: 'signal', payload: { type: endType } });
+                      setTimeout(() => supabase.removeChannel(channel), 1000);
+                  }
+              });
+          }
+          useCallStore.getState().endCall();
         }
       }
     });
