@@ -213,6 +213,18 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                 require('react-native').Alert.alert('Success', 'Message scheduled successfully!');
             }
 
+            // Guaranteed Push Notification delivery (invoking Edge Function manually as a fallback for missing webhooks)
+            // The edge function has idempotency logic via push_logs, so it won't send duplicates if webhook also fires.
+            try {
+                if (!scheduledAt) {
+                    await supabase.functions.invoke('expo-push', {
+                        body: { type: 'INSERT', record: data }
+                    });
+                }
+            } catch (invokeErr) {
+                console.warn('[PUSH] Failed to invoke expo-push manually:', invokeErr);
+            }
+
             // broadcast removed to save data
 
         } catch (error: any) {
@@ -247,13 +259,20 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             const promises = friendIds.map(async (fid) => {
                 const fKey = await getChatKey(currentUser.id, fid, false);
                 const encText = await encryptText(messageText, fKey!);
-                return supabase.from('messages').insert({
+                const { data, error } = await supabase.from('messages').insert({
                     sender_id: currentUser.id,
                     receiver_id: fid,
                     message: encText,
                     status: 'sent',
                     is_read: false
-                });
+                }).select().single();
+                
+                if (!error && data) {
+                    supabase.functions.invoke('expo-push', {
+                        body: { type: 'INSERT', record: data }
+                    }).catch(e => console.warn('[PUSH] Forward push failed:', e));
+                }
+                return { data, error };
             });
             await Promise.all(promises);
         } catch (err) {
