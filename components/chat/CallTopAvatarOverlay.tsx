@@ -8,10 +8,23 @@ interface Props {
 }
 
 export const CallTopAvatarOverlay = ({ friend, callState }: Props) => {
+    let finalAvatarSource: any;
+    if (friend?.avatar_url) {
+        finalAvatarSource = { uri: friend.avatar_url };
+    } else if (friend?.img) {
+        if (typeof friend.img === 'string' && friend.img.startsWith('http')) {
+            finalAvatarSource = { uri: friend.img };
+        } else {
+            finalAvatarSource = friend.img;
+        }
+    } else {
+        finalAvatarSource = require('@/assets/images/default-avatar-male.jpg');
+    }
+
     return (
         <View style={styles.topAvatarOverlay} pointerEvents="none">
             <View style={styles.smallAvatarContainer}>
-                <Image source={friend?.avatar_url || friend?.img || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`} style={styles.fullImage} />
+                <Image source={finalAvatarSource} style={styles.fullImage} contentFit="cover" />
             </View>
             <Text style={styles.topFriendName}>{friend?.name || friend?.username || 'Friend'}</Text>
             <Text style={styles.topCallStatus}>{callState === 'outgoing' ? 'Calling...' : 'Ringing...'}</Text>

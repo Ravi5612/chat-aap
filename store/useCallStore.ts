@@ -17,6 +17,7 @@ interface CallState {
     setCallActive: () => void;
     setCallEnded: (reason: string) => void;
     endCall: () => void;
+    setCallType: (type: 'audio' | 'video') => void;
     isMinimized: boolean;
     setMinimized: (minimized: boolean) => void;
 }
@@ -37,6 +38,9 @@ export const useCallStore = create<CallState>((set) => ({
         isMinimized: false
     })),
     endCall: () => set({ callSession: null, isMinimized: false, activeStartTime: null }),
+    setCallType: (type) => set((state) => ({
+        callSession: state.callSession ? { ...state.callSession, type } : null
+    })),
     isMinimized: false,
     setMinimized: (minimized) => set({ isMinimized: minimized }),
 }));

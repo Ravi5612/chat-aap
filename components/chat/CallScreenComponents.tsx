@@ -4,9 +4,14 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import AgoraVideoView from '@/components/chat/AgoraVideoView';
 
-const getAvatarUri = (friend: any) =>
-    friend?.avatar_url || friend?.img ||
-    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`;
+const getAvatarUri = (friend: any) => {
+    if (friend?.avatar_url) return { uri: friend.avatar_url };
+    if (friend?.img) {
+        if (typeof friend.img === 'string' && friend.img.startsWith('http')) return { uri: friend.img };
+        return friend.img;
+    }
+    return require('@/assets/images/default-avatar-male.jpg');
+};
 
 // Placeholder shown when no remote video stream yet
 export const CallPlaceholder = memo(({ friend, callState, remoteUids }: { friend: any; callState: string; remoteUids: number[] }) => {

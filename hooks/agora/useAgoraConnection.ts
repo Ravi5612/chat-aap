@@ -21,7 +21,8 @@ export const useAgoraConnection = (
     setConnectionStatus: (val: string) => void,
     setRemoteAudioMuted: (val: boolean) => void,
     setRemoteVideoMuted: (val: boolean) => void,
-    setIsEngineReady: (val: boolean) => void
+    setIsEngineReady: (val: boolean) => void,
+    setAudioRoute: (val: number) => void
 ) => {
 
     const init = async (): Promise<boolean> => {
@@ -86,6 +87,10 @@ export const useAgoraConnection = (
                 onUserMuteVideo: (connection: any, rUid: number, muted: boolean) => {
                     if (__DEV__) console.log('[CALL_ACTION] Remote user mute video:', rUid, muted);
                     setRemoteVideoMuted(muted);
+                },
+                onAudioRoutingChanged: (routing: number) => {
+                    if (__DEV__) console.log('[CALL_ACTION] Audio routing changed to:', routing);
+                    setAudioRoute(routing);
                 },
                 onError: (err: any) => {
                     if (__DEV__) console.error('[CALL_ACTION] Agora Error:', err);

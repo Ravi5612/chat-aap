@@ -30,13 +30,14 @@ export const sendSignalReliably = (targetId: string, payload: any) => {
     timeoutId = setTimeout(cleanup, 8000);
 };
 
-export const sendCallPushNotification = async (recipientId: string, callerName: string, channelName: string) => {
+export const sendCallPushNotification = async (recipientId: string, callerName: string, channelName: string, callerId?: string) => {
     try {
         await supabase.functions.invoke('call-signal', {
             body: { 
                 recipient_id: recipientId, 
                 caller_name: callerName, 
-                channel_name: channelName
+                channel_name: channelName,
+                caller_id: callerId
             }
         });
     } catch (e: any) {

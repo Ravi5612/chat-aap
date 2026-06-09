@@ -111,7 +111,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
 
             let query = supabase
                 .from('messages')
-                .select('*');
+                .select('*, reply:reply_to_id(id, message, sender_id, created_at, group_id, key_version)');
 
             if (isGroup) {
                 query = query.eq('group_id', friendId);
@@ -244,7 +244,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
 
             let query = supabase
                 .from('messages')
-                .select('*');
+                .select('*, reply:reply_to_id(id, message, sender_id, created_at, group_id, key_version)');
 
             if (isGroup) {
                 query = query.eq('group_id', friendId);

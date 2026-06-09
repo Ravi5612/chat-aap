@@ -20,7 +20,7 @@ interface MediaGalleryBottomSheetProps {
 export const MediaGalleryBottomSheet = ({
     bottomSheetRef, assets, formatTime, onCapture, onClose
 }: MediaGalleryBottomSheetProps) => {
-    const snapPoints = useMemo(() => [180, '100%'], []);
+    const snapPoints = useMemo(() => [40, '100%'], []);
 
     const renderGalleryItem = useCallback(({ item }: { item: MediaLibrary.Asset }) => {
         return (

@@ -6,9 +6,32 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
   if (remoteMessage.data?.type === 'call_signal') {
     const callerName = remoteMessage.data?.callerName || 'Someone';
     const channelName = remoteMessage.data?.channelName || '';
+    const callerId = remoteMessage.data?.callerId;
     
     // Trigger Notifee Full-Screen Intent
     await displayIncomingCall(callerName as string, channelName as string);
+
+    if (callerId) {
+      try {
+        const { supabase } = require('../lib/supabase');
+        // Ensure session is loaded
+        await supabase.auth.getSession();
+        
+        const channel = supabase.channel(`calls-signal-${callerId}`);
+        channel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await channel.send({
+                    type: 'broadcast',
+                    event: 'signal',
+                    payload: { type: 'ringing' }
+                });
+                supabase.removeChannel(channel);
+            }
+        });
+      } catch (e) {
+          console.log('Failed to send background ringing signal', e);
+      }
+    }
   } else if (remoteMessage.data?.type === 'message') {
     const title = remoteMessage.data?.title || 'New Message';
     const body = remoteMessage.data?.body || 'You have a new message';

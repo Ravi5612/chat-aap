@@ -8,21 +8,24 @@ interface CallControlsProps {
     isMuted: boolean;
     isVideoOff: boolean;
     isSpeakerphone: boolean;
+    audioRoute?: number;
     isScreenSharing: boolean;
     onMute: () => void;
     onVideo: () => void;
     onSpeaker: () => void;
-    onSwitchCamera: () => void;
     onScreenShare: () => void;
     onAccept: () => void;
     onEnd: () => void;
+    onSetAudioRoute?: (route: number) => void;
+    onRequestVideoUpgrade?: () => void;
 }
 
 export const CallControls = memo(({ 
-    callState, callType, isMuted, isVideoOff, isSpeakerphone, isScreenSharing, 
-    onMute, onVideo, onSpeaker, onSwitchCamera, onScreenShare, onAccept, onEnd 
+    callState, callType, isMuted, isVideoOff, isSpeakerphone, audioRoute, isScreenSharing, 
+    onMute, onVideo, onSpeaker, onScreenShare, onAccept, onEnd, onSetAudioRoute, onRequestVideoUpgrade
 }: CallControlsProps) => {
     const [showMore, setShowMore] = useState(false);
+    const [showAudioMenu, setShowAudioMenu] = useState(false);
 
     if (callState === 'incoming') {
         return (
@@ -39,21 +42,31 @@ export const CallControls = memo(({
 
     return (
         <View style={styles.controlsContainer}>
-            {callType === 'video' && (
-                <TouchableOpacity onPress={onSwitchCamera} style={styles.controlButton}>
-                    <Ionicons name="camera-reverse" size={24} color="white" />
-                </TouchableOpacity>
-            )}
-            {callType === 'video' && (
-                <TouchableOpacity onPress={onVideo} style={[styles.controlButton, isVideoOff && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
-                    <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color="white" />
-                </TouchableOpacity>
-            )}
+            <TouchableOpacity 
+                onPress={() => {
+                    if (callType === 'audio') {
+                        if (onRequestVideoUpgrade) onRequestVideoUpgrade();
+                    } else {
+                        onVideo();
+                    }
+                }} 
+                style={[styles.controlButton, isVideoOff && { backgroundColor: 'rgba(255,255,255,0.4)' }]}
+            >
+                <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={24} color={isVideoOff ? "#EF4444" : "white"} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={onMute} style={[styles.controlButton, isMuted && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
-                <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="white" />
+                <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color={isMuted ? "#EF4444" : "white"} />
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={() => setShowMore(!showMore)} style={[styles.controlButton, showMore && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+            <TouchableOpacity onPress={() => { setShowAudioMenu(!showAudioMenu); setShowMore(false); }} style={[styles.controlButton, (audioRoute === 3 || isSpeakerphone) && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+                <Ionicons 
+                    name={audioRoute === 5 ? "bluetooth" : (audioRoute === 3 || isSpeakerphone ? "volume-high" : "phone-portrait-outline")} 
+                    size={24} 
+                    color="white" 
+                />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => { setShowMore(!showMore); setShowAudioMenu(false); }} style={[styles.controlButton, showMore && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
                 <Ionicons name="ellipsis-vertical" size={24} color="white" />
             </TouchableOpacity>
 
@@ -61,13 +74,27 @@ export const CallControls = memo(({
                 <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
             </TouchableOpacity>
 
+            {/* AUDIO ROUTING MENU */}
+            {showAudioMenu && onSetAudioRoute && (
+                <View style={[styles.moreMenuContainer, { right: 80 }]}>
+                    <TouchableOpacity onPress={() => { setShowAudioMenu(false); onSetAudioRoute(5); }} style={styles.moreMenuItem}>
+                        <Ionicons name="bluetooth" size={20} color="white" />
+                        <Text style={styles.moreMenuText}>Bluetooth</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setShowAudioMenu(false); onSetAudioRoute(3); }} style={styles.moreMenuItem}>
+                        <Ionicons name="volume-high" size={20} color="white" />
+                        <Text style={styles.moreMenuText}>Speaker</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setShowAudioMenu(false); onSetAudioRoute(1); }} style={styles.moreMenuItem}>
+                        <Ionicons name="phone-portrait-outline" size={20} color="white" />
+                        <Text style={styles.moreMenuText}>Phone</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* MORE OPTIONS MENU */}
             {showMore && (
                 <View style={styles.moreMenuContainer}>
-                    <TouchableOpacity onPress={() => { setShowMore(false); onSpeaker(); }} style={styles.moreMenuItem}>
-                        <Ionicons name={isSpeakerphone ? "volume-high" : "volume-medium"} size={20} color={isSpeakerphone ? "#10B981" : "white"} />
-                        <Text style={styles.moreMenuText}>{isSpeakerphone ? "Speaker: ON" : "Speaker: OFF"}</Text>
-                    </TouchableOpacity>
                     {callType === 'video' && (
                         <TouchableOpacity onPress={() => { setShowMore(false); onScreenShare(); }} style={styles.moreMenuItem}>
                             <Ionicons name={isScreenSharing ? "stop-circle" : "desktop"} size={20} color={isScreenSharing ? "#EF4444" : "white"} />

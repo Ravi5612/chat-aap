@@ -1,4 +1,5 @@
 import { useEffect, MutableRefObject } from 'react';
+import { Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useCallStore } from '@/store/useCallStore';
 
@@ -68,6 +69,37 @@ export const useCallSignalingListener = (
                     logCallHistory('missed');
                 }
                 useCallStore.getState().setCallSession(null);
+            } else if (payload.type === 'request_video') {
+                if (__DEV__) console.log('[CALL_ACTION] Remote user is requesting to switch to video');
+                // The remote caller's ID could be either caller_id or derived from sessionRef
+                const callerName = sessionRef.current?.friend?.name || 'User';
+                Alert.alert(
+                    'Video Call Request',
+                    `${callerName} is requesting to switch to a video call.`,
+                    [
+                        {
+                            text: 'Cancel',
+                            style: 'cancel',
+                            onPress: () => {
+                                sendSignalReliably(payload.caller_id, { type: 'reject_video', receiver_id: currentUser.id });
+                            }
+                        },
+                        {
+                            text: 'Switch',
+                            onPress: () => {
+                                sendSignalReliably(payload.caller_id, { type: 'accept_video', receiver_id: currentUser.id });
+                                useCallStore.getState().setCallType('video');
+                            }
+                        }
+                    ]
+                );
+            } else if (payload.type === 'accept_video') {
+                if (__DEV__) console.log('[CALL_ACTION] Remote user accepted video request');
+                Alert.alert('Video Call', 'User accepted video request. Switching to video...');
+                useCallStore.getState().setCallType('video');
+            } else if (payload.type === 'reject_video') {
+                if (__DEV__) console.log('[CALL_ACTION] Remote user rejected video request');
+                Alert.alert('Video Request Declined', 'The user declined to switch to video call.');
             }
         });
 

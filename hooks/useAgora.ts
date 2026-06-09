@@ -28,6 +28,7 @@ export const useAgora = ({
     const [isVideoOff, setIsVideoOff] = useState(false);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [isSpeakerphone, setIsSpeakerphone] = useState(callType === 'video'); // Default true for video, false for audio
+    const [audioRoute, setAudioRoute] = useState<number>(callType === 'video' ? 3 : 0);
     const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
     const [remoteVideoMuted, setRemoteVideoMuted] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('Initializing...');
@@ -85,7 +86,8 @@ export const useAgora = ({
         setConnectionStatus,
         setRemoteAudioMuted,
         setRemoteVideoMuted,
-        setIsEngineReady
+        setIsEngineReady,
+        setAudioRoute
     );
 
     const {
@@ -93,14 +95,16 @@ export const useAgora = ({
         toggleVideo,
         switchCamera,
         toggleScreenShare,
-        toggleSpeakerphone
+        toggleSpeakerphone,
+        setAudioRouteAction
     } = useAgoraActions(
         engine,
         callTypeRef,
         isMuted, setIsMuted,
         isVideoOff, setIsVideoOff,
         isScreenSharing, setIsScreenSharing,
-        isSpeakerphone, setIsSpeakerphone
+        isSpeakerphone, setIsSpeakerphone,
+        setAudioRoute
     );
 
     useEffect(() => {
@@ -116,6 +120,24 @@ export const useAgora = ({
             leave();
         }
     }, [callState]); // Removed 'joined' to fix infinite loop
+
+    // Handle dynamic upgrade from audio to video mid-call
+    useEffect(() => {
+        if (callType === 'video' && joined && engine.current) {
+            if (__DEV__) console.log('[CALL_ACTION] Upgrading Agora session to video');
+            engine.current.enableVideo();
+            if (!isVideoOff) {
+                engine.current.startPreview();
+            }
+            engine.current.updateChannelMediaOptions({
+                publishCameraTrack: !isVideoOff,
+                autoSubscribeVideo: true,
+            });
+            // Auto switch to speakerphone when upgrading to video
+            setIsSpeakerphone(true);
+            engine.current.setEnableSpeakerphone(true);
+        }
+    }, [callType, joined, isVideoOff]);
 
     useEffect(() => {
         return () => {
@@ -140,11 +162,13 @@ export const useAgora = ({
         remoteVideoMuted,
         connectionStatus,
         isScreenSharing,
+        audioRoute,
         toggleMute,
         toggleVideo,
         toggleSpeakerphone,
         toggleScreenShare,
         switchCamera,
+        setAudioRouteAction,
         leave,
         channelId: channelName.current,
         isEngineReady

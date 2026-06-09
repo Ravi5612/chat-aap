@@ -67,13 +67,13 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
                 members.forEach((m: any) => {
                     if (m.user_id !== currentUser.id) {
                         sendSignalReliably(m.user_id, offerPayload);
-                        sendCallPushNotification(m.user_id, currentUser.username, 'group');
+                        sendCallPushNotification(m.user_id, currentUser.username, 'group', currentUser.id);
                     }
                 });
             }
         } else {
             sendSignalReliably(friend.id, offerPayload);
-            sendCallPushNotification(friend.id, currentUser.username, 'private');
+            sendCallPushNotification(friend.id, currentUser.username, 'private', currentUser.id);
         }
     };
 

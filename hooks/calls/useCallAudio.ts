@@ -57,6 +57,8 @@ export const useCallAudio = (callSession: any, profile: any) => {
                     }
 
                     soundRef.current = sound;
+                } else {
+                    // Stop tone when connected/ended
                     if (soundRef.current) {
                         if (__DEV__) console.log('[DEBUG] CallManager: Stopping tone');
                         try {

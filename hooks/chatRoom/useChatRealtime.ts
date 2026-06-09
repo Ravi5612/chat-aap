@@ -89,22 +89,23 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                     }
 
                     const now = new Date().toISOString();
+                    
+                    // 🚀 FIRE BROADCAST INSTANTLY (Bypass DB Latency for Double Ticks)
+                    channel.send({
+                        type: 'broadcast',
+                        event: 'status_update',
+                        payload: {
+                            status: 'delivered',
+                            message_ids: [finalMsg.id],
+                            user_id: currentUser.id
+                        }
+                    });
+
                     supabase
                         .from('messages')
                         .update({ status: 'delivered', delivered_at: now })
                         .eq('id', finalMsg.id)
                         .eq('status', 'sent')
-                        .then(() => {
-                            channel.send({
-                                type: 'broadcast',
-                                event: 'status_update',
-                                payload: {
-                                    status: 'delivered',
-                                    message_ids: [finalMsg.id],
-                                    user_id: currentUser.id
-                                }
-                            });
-                        })
                         .catch(() => {});
 
                     useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
@@ -183,10 +184,10 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
             channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `group_id=eq.${friendId}` }, handleUpdate);
             channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `group_id=eq.${friendId}` }, handleDelete);
         } else {
-            // Receive messages sent to us
-            channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${currentUser.id}` }, handleInsert);
-            channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${currentUser.id}` }, handleUpdate);
-            channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${currentUser.id}` }, handleDelete);
+            // Receive messages sent to us (Filter by sender_id to avoid Supabase duplicate filter drop issue)
+            channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${friendId}` }, handleInsert);
+            channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${friendId}` }, handleUpdate);
+            channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `sender_id=eq.${friendId}` }, handleDelete);
             
             // Receive updates/read receipts for messages WE sent
             channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${currentUser.id}` }, handleUpdate);

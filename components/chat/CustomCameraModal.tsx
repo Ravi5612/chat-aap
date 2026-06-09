@@ -72,6 +72,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'black',
     },
     camera: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
     },
 });

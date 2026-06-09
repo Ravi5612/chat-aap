@@ -10,6 +10,8 @@ import { useWindowDimensions } from 'react-native';
 import { useCallActions } from '@/hooks/useCallActions';
 import { CallEndedOverlay } from './CallScreenComponents';
 import ExpoPip from 'expo-pip';
+import { sendSignalReliably } from '@/services/calls/callSignalingService';
+import { useCallStore } from '@/store/useCallStore';
 
 // Extracted Components
 import { CallControls } from '@/components/chat/CallControls';
@@ -44,11 +46,22 @@ export default function CallScreen({
     const toggleSwap = useCallback(() => { if (!isGroup) setIsSwapped(p => !p); }, [isGroup]);
     const toggleControls = useCallback(() => setShowControls(p => !p), []);
 
+    const requestVideoUpgrade = useCallback(() => {
+        if (isGroup) {
+            // Group call: directly turn on video
+            useCallStore.getState().setCallType('video');
+        } else {
+            // 1-on-1: send signal
+            sendSignalReliably(friend?.id, { type: 'request_video', caller_id: currentUser?.id, receiver_id: friend?.id });
+        }
+    }, [isGroup, friend?.id, currentUser?.id]);
+
     const { composedGesture, animatedStyle } = useCallDragGesture(toggleSwap);
 
     // Agora RTC
     const { joined, remoteUids, connectionStatus, isMuted, isVideoOff, isSpeakerphone,
         remoteAudioMuted, remoteVideoMuted, toggleMute, toggleVideo, toggleSpeakerphone,
+        setAudioRouteAction, audioRoute,
         isScreenSharing, toggleScreenShare,
         switchCamera, channelId, isEngineReady
     } = useAgora({ currentUser, friend, callType, callState: callState as 'incoming' | 'outgoing' | 'active' | null, onAcceptCall, onEndCall, isGroup });
@@ -65,8 +78,20 @@ export default function CallScreen({
                 // Return local video full screen for video call outgoing
                 return isEngineReady ? <AgoraVideoView uid={0} style={styles.fullSize} channelId={channelId} /> : <View style={styles.darkFullSize} />;
             }
-            const avatarUri = friend?.avatar_url || friend?.img
-                || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friend?.name || friend?.username || 'User')}&backgroundColor=F68537`;
+            
+            let finalAvatarSource: any;
+            if (friend?.avatar_url) {
+                finalAvatarSource = { uri: friend.avatar_url };
+            } else if (friend?.img) {
+                if (typeof friend.img === 'string' && friend.img.startsWith('http')) {
+                    finalAvatarSource = { uri: friend.img };
+                } else {
+                    finalAvatarSource = friend.img;
+                }
+            } else {
+                finalAvatarSource = require('@/assets/images/default-avatar-male.jpg');
+            }
+
             const statusText = callState === 'outgoing' ? 'Calling...'
                 : callState === 'ringing' ? 'Ringing...'
                 : callState === 'incoming' ? 'Incoming Call...'
@@ -74,7 +99,7 @@ export default function CallScreen({
             return (
                 <View style={styles.placeholderContainer}>
                     <View style={styles.avatarContainer}>
-                        <Image source={avatarUri} style={styles.fullImage} />
+                        <Image source={finalAvatarSource} style={styles.fullImage} contentFit="cover" />
                     </View>
                     <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
                     <Text style={styles.callStatus}>{statusText}</Text>
@@ -211,6 +236,13 @@ export default function CallScreen({
                     </View>
                 )}
 
+                {/* Floating Flip Camera Button */}
+                {!isInPipMode && callType === 'video' && showControls && isEngineReady && (
+                    <TouchableOpacity style={styles.flipCameraButton} onPress={switchCamera}>
+                        <Ionicons name="camera-reverse" size={24} color="#F68537" />
+                    </TouchableOpacity>
+                )}
+
                 {/* Controls */}
                 {!isInPipMode && (
                     <View style={styles.controlsWrapper}>
@@ -221,14 +253,16 @@ export default function CallScreen({
                             isMuted={isMuted}
                             isVideoOff={isVideoOff}
                             isSpeakerphone={isSpeakerphone}
+                            audioRoute={audioRoute}
                             isScreenSharing={isScreenSharing}
                             onMute={toggleMute}
                             onVideo={toggleVideo}
                             onSpeaker={toggleSpeakerphone}
-                            onSwitchCamera={switchCamera}
+                            onSetAudioRoute={setAudioRouteAction}
                             onScreenShare={toggleScreenShare}
                             onAccept={acceptCall}
                             onEnd={endCall}
+                            onRequestVideoUpgrade={requestVideoUpgrade}
                         />
                         )}
                     </View>
@@ -282,7 +316,13 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.2)', zIndex: 80, elevation: 15, backgroundColor: '#1F2937',
     },
     pipVideo: { width: '100%', height: '100%' },
-    statusIndicator: { position: 'absolute', top: 60, right: 24 },
+    statusIndicator: { position: 'absolute', top: 100, right: 20 },
     statusText: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
+    flipCameraButton: {
+        position: 'absolute', top: 50, right: 20, zIndex: 100,
+        width: 44, height: 44, borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    },
     controlsWrapper: { position: 'absolute', bottom: 50, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
 });

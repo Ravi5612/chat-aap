@@ -21,8 +21,8 @@ const flushMarkAsRead = async (get: StoreGet) => {
 
     try {
         const now = new Date().toISOString();
-        await supabase.from('messages').update({ is_read: true, status: 'read', read_at: now }).in('id', ids);
         
+        // 🚀 FIRE BROADCAST INSTANTLY (Bypass DB Latency for Blue Ticks)
         if (meta.channel) {
             meta.channel.send({
                 type: 'broadcast',
@@ -35,6 +35,10 @@ const flushMarkAsRead = async (get: StoreGet) => {
                 }
             });
         }
+
+        // Then update DB asynchronously
+        await supabase.from('messages').update({ is_read: true, status: 'read', read_at: now }).in('id', ids);
+        
     } catch (err) {
         console.error('flushMarkAsRead error:', err);
     }
@@ -48,15 +52,14 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
             const reactions = { ...(messages.find(m => m.id === messageId)?.reactions || {}) };
             reactions[emoji] = (reactions[emoji] || 0) + 1;
 
-            const { error } = await supabase.from('messages').update({ reactions }).eq('id', messageId);
-            if (error) throw error;
-
+            // 🚀 Optimistic UI Update (INSTANT)
             const newMessages = messages.map(m => m.id === messageId ? { ...m, reactions } : m);
             set((state: any) => ({
                 messages: newMessages,
                 cache: { ...state.cache, [activeChatId]: { ...state.cache[activeChatId], messages: newMessages, key: chatKey! } }
             }));
 
+            // 🚀 Broadcast Instantly (Bypass DB Latency)
             if (activeChannel) {
                 activeChannel.send({
                     type: 'broadcast',
@@ -64,8 +67,14 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
                     payload: { message_id: messageId, emoji, reactions }
                 });
             }
+
+            // Then update DB asynchronously
+            const { error } = await supabase.from('messages').update({ reactions }).eq('id', messageId);
+            if (error) throw error;
+
         } catch (err) {
             console.error("ChatStore: Reaction error:", err);
+            // In a production app, you might want to rollback the optimistic update here if there is an error
         }
     },
 
@@ -99,7 +108,23 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
             const { db } = useDbStore.getState();
 
             if (forEveryone) {
-                // 1. Update on Server (Replace content)
+                // 1. Update Local UI (INSTANT)
+                const newMessages = messages.map(m => m.id === messageId ? { ...m, message: 'SYSTEM_MSG: DELETED', file_url: null } : m);
+                set({ messages: newMessages });
+
+                // Update Cache Safely for optimistic update
+                set((state: any) => ({
+                    cache: {
+                        ...state.cache,
+                        [activeChatId]: {
+                            ...state.cache[activeChatId],
+                            messages: newMessages,
+                            key: chatKey
+                        }
+                    }
+                }));
+
+                // 2. Update on Server asynchronously
                 const encryptedDeletedText = await encryptText('SYSTEM_MSG: DELETED', chatKey);
                 const { error } = await supabase.from('messages').update({
                     message: encryptedDeletedText,
@@ -110,12 +135,7 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
 
                 if (error) throw error;
 
-                // 2. Update Local UI
-                const newMessages = messages.map(m => m.id === messageId ? { ...m, message: 'SYSTEM_MSG: DELETED', file_url: null } : m);
-                set({ messages: newMessages });
-
-                // 3. Broadcast Edit
-                // broadcast removed to save data
+                // 3. Broadcast Edit (currently commented out to save data, but relies on postgres_changes)
             } else {
                 // Delete for Me
                 if (db) {
@@ -205,7 +225,7 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
         markAsReadTimer = setTimeout(() => {
             markAsReadTimer = null;
             flushMarkAsRead(get);
-        }, 300);
+        }, 50); // Reduced from 300ms to 50ms for near-instant blue ticks
     },
 
     cleanupChat: () => {

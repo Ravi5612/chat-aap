@@ -11,7 +11,8 @@ export const useAgoraActions = (
     isScreenSharing: boolean,
     setIsScreenSharing: (val: boolean) => void,
     isSpeakerphone: boolean,
-    setIsSpeakerphone: (val: boolean) => void
+    setIsSpeakerphone: (val: boolean) => void,
+    setAudioRoute: (val: number) => void
 ) => {
     const toggleMute = () => {
         if (engine.current) {
@@ -71,11 +72,22 @@ export const useAgoraActions = (
         }
     };
 
+    const setAudioRouteAction = (route: number) => {
+        if (engine.current) {
+            engine.current.setRouteInCommunicationMode(route);
+            setAudioRoute(route);
+            // 3 = Speakerphone, 0 = Default/Earpiece, 5 = Bluetooth
+            if (route === 3) setIsSpeakerphone(true);
+            else setIsSpeakerphone(false);
+        }
+    };
+
     return {
         toggleMute,
         toggleVideo,
         switchCamera,
         toggleScreenShare,
-        toggleSpeakerphone
+        toggleSpeakerphone,
+        setAudioRouteAction
     };
 };

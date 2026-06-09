@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'space-between',
         padding: 20,
-        paddingBottom: 190, // Leave space for the collapsed bottom sheet
+        paddingBottom: 60, // Leave space for the small bottom sheet handle
     },
     topControls: {
         flexDirection: 'row',

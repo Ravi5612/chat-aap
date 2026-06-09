@@ -14,7 +14,7 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    const { recipient_id, caller_name, channel_name } = payload;
+    const { recipient_id, caller_name, channel_name, caller_id } = payload;
 
     if (!recipient_id || !channel_name) {
       throw new Error("Missing parameters");
@@ -59,7 +59,8 @@ serve(async (req) => {
         type: "call_signal",
         callerName: caller_name || "Someone",
         callerAvatar: callerAvatar,
-        channelName: channel_name
+        channelName: channel_name,
+        callerId: caller_id
       },
       priority: 'high'
     };

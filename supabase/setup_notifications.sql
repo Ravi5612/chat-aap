@@ -14,10 +14,10 @@ BEGIN
   -- Ye tabhi kaam karega jab aapne Edge Function deploy kar diya ho.
   PERFORM
     net.http_post(
-      url := 'https://sfdhmdcmevutgghzxcnm.supabase.co/functions/v1/push-notification',
+      url := 'https://qsxhaaqtzdfmtuvbkvtw.supabase.co/functions/v1/expo-push',
       headers := jsonb_build_object(
         'Content-Type', 'application/json', 
-        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmZGhtZGNtZXZ1dGdnaHp4Y25tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNTU0MjgsImV4cCI6MjA4MDkzMTQyOH0.3KjwDgASibw37aPt__8V85h22N2iGI7iFmictx-Z2VY'
+        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzeGhhYXF0emRmbXR1dmJrdnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4Nzc1MTMsImV4cCI6MjA5NTQ1MzUxM30.kRVlMc81SbIUVyWlYWCpoVKw-Ru67fvqT64tnKMWVpI'
       ),
       body := jsonb_build_object('record', row_to_json(NEW))
     );
