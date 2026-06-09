@@ -140,6 +140,11 @@ const ChatInput = memo(({
                             placeholderTextColor={isVoiceTyping ? '#F68537' : '#94A3B8'}
                             value={message}
                             onChangeText={handleChangeText}
+                            onFocus={() => {
+                                if (emojiModalVisible) {
+                                    setEmojiModalVisible(false);
+                                }
+                            }}
                             multiline
                             maxLength={1000}
                             editable={!disabled && !isVoiceTyping}

@@ -32,12 +32,29 @@ export const processRawStatuses = async (params: ProcessStatusParams) => {
         });
     }
 
-    // Get Profile
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('username, avatar_url, public_key')
-        .eq('id', userId)
-        .single();
+    // Get Profile (Try memory cache first to avoid network delay)
+    let profile: any = null;
+    try {
+        const { useFriendsStore } = require('@/store/useFriendsStore');
+        const friends = useFriendsStore.getState().combinedItems;
+        const friendData = friends.find((f: any) => f.id === userId);
+        if (friendData && friendData.friend) {
+            profile = {
+                username: friendData.name || friendData.friend.username,
+                avatar_url: friendData.avatar || friendData.friend.avatar_url,
+                public_key: friendData.friend.public_key
+            };
+        }
+    } catch(e) {}
+
+    if (!profile) {
+        const { data } = await supabase
+            .from('profiles')
+            .select('username, avatar_url, public_key')
+            .eq('id', userId)
+            .single();
+        profile = data;
+    }
 
     let allMentionedIds: string[] = [];
     accessibleStatuses.forEach((s: any) => {
