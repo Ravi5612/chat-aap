@@ -24,6 +24,7 @@ import { useAppUpdates } from '@/hooks/layout/useAppUpdates';
 import { useAppStateSync } from '@/hooks/layout/useAppStateSync';
 import { useAuthInitialization } from '@/hooks/layout/useAuthInitialization';
 import { useNavigationGuard } from '@/hooks/layout/useNavigationGuard';
+import { useAppBadgeCount } from '@/hooks/layout/useAppBadgeCount';
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
@@ -72,6 +73,9 @@ export default function RootLayout() {
 
   // Navigation Guard (Redirects based on session)
   useNavigationGuard(segments as string[], isMounted, rootNavigationState?.key);
+
+  // OS App Badge Synchronization
+  useAppBadgeCount();
 
   useEffect(() => {
     if (!initializing) {

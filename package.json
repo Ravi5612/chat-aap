@@ -92,6 +92,7 @@
     "eslint-config-expo": "~8.0.1",
     "fs-extra": "^11.3.5",
     "react-native-worklets": "^0.9.1",
+    "sharp": "^0.34.5",
     "typescript": "~5.3.3"
   },
   "private": true,

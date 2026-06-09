@@ -40,7 +40,14 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
     const senderName = title;
     
     await displayMessageNotification(senderName as string, body as string);
-    
+    // Increment App Icon Badge Count for new background message
+    try {
+        const notifee = require('@notifee/react-native').default || require('@notifee/react-native');
+        await notifee.incrementBadgeCount(1);
+    } catch (e) {
+        console.log('Failed to increment badge count', e);
+    }
+
     // Mark as delivered for TRUE double-tick in background
     const messageId = remoteMessage.data?.messageId;
     if (messageId) {
