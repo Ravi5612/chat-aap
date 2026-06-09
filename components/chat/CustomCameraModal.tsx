@@ -20,7 +20,7 @@ const CustomCameraModal = memo(({ visible, onClose, onCapture }: CustomCameraMod
     const bottomSheetRef = useRef<BottomSheet>(null);
 
     const {
-        facing, flash, isRecording, recordingDuration, cameraRef,
+        cameraMode, facing, flash, isRecording, recordingDuration, cameraRef,
         toggleFacing, toggleFlash, handleLongPress, handlePressOut, handlePress
     } = useCustomCamera(onCapture, onClose);
 
@@ -36,7 +36,7 @@ const CustomCameraModal = memo(({ visible, onClose, onCapture }: CustomCameraMod
                     style={styles.camera}
                     facing={facing}
                     flash={flash}
-                    mode="video"
+                    mode={cameraMode}
                 >
                     <CameraOverlayControls
                         onClose={onClose}

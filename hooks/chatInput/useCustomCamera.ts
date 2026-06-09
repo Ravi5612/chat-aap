@@ -6,6 +6,7 @@ export const useCustomCamera = (
     onCapture: (media: { uri: string; type: 'image' | 'video' }) => void,
     onClose: () => void
 ) => {
+    const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
     const [facing, setFacing] = useState<CameraType>('back');
     const [flash, setFlash] = useState<FlashMode>('off');
     const [isRecording, setIsRecording] = useState(false);
@@ -34,28 +35,35 @@ export const useCustomCamera = (
     const handleLongPress = useCallback(async () => {
         if (!cameraRef.current) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setIsRecording(true);
-        try {
-            const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
-            if (video && video.uri) {
-                onCapture({ uri: video.uri, type: 'video' });
-                onClose();
+        setCameraMode('video');
+        
+        // Short delay to allow CameraView to switch mode before recording
+        setTimeout(async () => {
+            setIsRecording(true);
+            try {
+                const video = await cameraRef.current?.recordAsync({ maxDuration: 60 });
+                if (video && video.uri) {
+                    onCapture({ uri: video.uri, type: 'video' });
+                    onClose();
+                }
+            } catch (error) {
+                console.error('Record error:', error);
             }
-        } catch (error) {
-            console.error('Record error:', error);
-        }
-        setIsRecording(false);
+            setIsRecording(false);
+            setCameraMode('picture');
+        }, 150);
     }, [onCapture, onClose]);
 
     const handlePressOut = useCallback(async () => {
         if (isRecording && cameraRef.current) {
             cameraRef.current.stopRecording();
             setIsRecording(false);
+            setCameraMode('picture');
         }
     }, [isRecording]);
 
     const handlePress = useCallback(async () => {
-        if (isRecording) return; // Ignore single tap if already recording
+        if (cameraMode === 'video' || isRecording) return; // Ignore single tap if recording
         if (!cameraRef.current) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         try {
@@ -67,10 +75,10 @@ export const useCustomCamera = (
         } catch (error) {
             console.error('Take picture error:', error);
         }
-    }, [isRecording, onCapture, onClose]);
+    }, [cameraMode, isRecording, onCapture, onClose]);
 
     return {
-        facing, flash, isRecording, recordingDuration, cameraRef,
+        cameraMode, facing, flash, isRecording, recordingDuration, cameraRef,
         toggleFacing, toggleFlash, handleLongPress, handlePressOut, handlePress
     };
 };
