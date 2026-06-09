@@ -81,8 +81,13 @@ const ChatInput = memo(({
     const stopRecording      = useCallback(() => setIsRecording(false), []);
     const removeMedia        = useCallback(() => setSelectedMedia(null), []);
     const toggleEmoji        = useCallback(() => {
-        if (emojiModalVisible) { setEmojiModalVisible(false); inputRef.current?.focus(); }
-        else { inputRef.current?.blur(); setEmojiModalVisible(true); }
+        if (emojiModalVisible) { 
+            setEmojiModalVisible(false); 
+            inputRef.current?.focus(); 
+        } else { 
+            inputRef.current?.blur(); 
+            setEmojiModalVisible(true); 
+        }
     }, [emojiModalVisible, setEmojiModalVisible, inputRef]);
     const closeEmoji         = useCallback(() => { setEmojiModalVisible(false); inputRef.current?.focus(); }, [setEmojiModalVisible, inputRef]);
     const appendEmoji        = useCallback((emoji: string) => setMessage(prev => prev + emoji), [setMessage]);
