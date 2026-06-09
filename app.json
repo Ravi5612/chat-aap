@@ -4,7 +4,7 @@
     "slug": "ChatWarriors",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
+    "icon": "./assets/images/circular_logo.png",
     "scheme": "chatwarriors",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
@@ -12,7 +12,7 @@
     "runtimeVersion": "1.1.0",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "no",
+      "bundleIdentifier": "com.ravirai.chatwarriors",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "ChatWarriors uses your location to help you find your lost device if you enable Device Tracker.",
@@ -31,7 +31,7 @@
       "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo.png",
+        "foregroundImage": "./assets/images/trimmed_logo.png",
         "backgroundColor": "#F68537"
       },
       "permissions": [
