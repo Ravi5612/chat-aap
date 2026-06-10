@@ -5,6 +5,8 @@ import * as Haptics from 'expo-haptics';
 import { AppStorage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import { useDbStore } from '@/store/useDbStore';
+import { clearLocalChat, saveChatClearTimestamp } from '@/lib/localDb';
 
 interface UseHomeMenuActionsProps {
     currentUser: any;
@@ -80,6 +82,14 @@ export const useHomeMenuActions = ({ currentUser, onRequireLockSetup, onRequireL
                                         .delete()
                                         .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${currentUser.id})`);
                                     if (error) throw error;
+                                    const { db } = useDbStore.getState();
+                                    if (db) {
+                                        await db.runAsync(
+                                            "UPDATE conversations SET last_message = last_message WHERE id = ?",
+                                            [friend.id]
+                                        );
+                                    }
+
                                     useFriendsStore.setState((state) => ({
                                         friends: state.friends.filter(f => f.id !== friend.id),
                                         combinedItems: state.combinedItems.map(f => f.id === friend.id ? { ...f, isUnfriended: true } : f)
@@ -104,6 +114,13 @@ export const useHomeMenuActions = ({ currentUser, onRequireLockSetup, onRequireL
                             style: "destructive",
                             onPress: async () => {
                                 try {
+                                    const now = new Date().toISOString();
+                                    const { db } = useDbStore.getState();
+                                    if (db) {
+                                        await saveChatClearTimestamp(db, friend.id, now);
+                                        await clearLocalChat(db, friend.id, friend.isGroup);
+                                    }
+
                                     useFriendsStore.setState((state) => ({
                                         combinedItems: state.combinedItems.filter(i => i.id !== friend.id)
                                     }));

@@ -37,8 +37,7 @@ export const useVaultAuth = () => {
                 }
             } catch (err) {
                 console.error("Local auth error:", err);
-                setVaultOpen(true);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert('Error', 'Authentication encountered an error.');
             }
         } else {
             setSearchQuery(text);

@@ -134,7 +134,10 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
 
             const activeChatId = get().activeChatId;
             if (activeChatId === friendId) {
-                const uniqueMessages = Array.from(new Map(finalMessages.map(m => [m.id, m])).values());
+                const existingOfflineMsgs = get().messages.filter((m: any) => m.status === 'pending' || m.status === 'failed');
+                const combined = [...finalMessages, ...existingOfflineMsgs];
+                combined.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                const uniqueMessages = Array.from(new Map(combined.map(m => [m.id, m])).values());
 
                 set({
                     messages: uniqueMessages,

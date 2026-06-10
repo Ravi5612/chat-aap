@@ -37,7 +37,24 @@ export const useNotifications = (userId: string | null) => {
         responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
             const data = response.notification.request.content.data;
             if (data?.senderId) {
-                router.push(`/chat/${data.senderId}` as any);
+                const { useFriendsStore } = require('@/store/useFriendsStore');
+                const friend = useFriendsStore.getState().combinedItems.find((f: any) => f.id === data.senderId);
+                
+                if (friend) {
+                    const img = typeof friend.img === 'string' ? friend.img : (friend.img?.uri || '');
+                    router.push({
+                        pathname: '/chat/[id]',
+                        params: {
+                            id: data.senderId,
+                            name: friend.name,
+                            isGroup: friend.isGroup ? 'true' : 'false',
+                            isLocked: friend.isLocked ? 'true' : 'false',
+                            image: img ? encodeURIComponent(img) : undefined
+                        }
+                    });
+                } else {
+                    router.push(`/chat/${data.senderId}` as any);
+                }
             }
         });
 

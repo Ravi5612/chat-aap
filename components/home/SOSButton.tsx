@@ -66,7 +66,15 @@ export default function SOSButton() {
                 return;
             }
 
-            let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            const locationPromise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000));
+            let location: any;
+            try {
+                location = await Promise.race([locationPromise, timeoutPromise]);
+            } catch (e) {
+                location = await Location.getLastKnownPositionAsync();
+                if (!location) throw new Error('Failed to get location in time.');
+            }
             
             const { data, error } = await supabase.from('emergencies').insert({
                 user_id: user.id,

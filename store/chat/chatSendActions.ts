@@ -111,12 +111,13 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                 }
             }
 
+            let localUri = '';
+            let uploadType: 'image' | 'voice' | 'document' = 'image';
+
             if (text.startsWith('[Voice Message]') || text.startsWith('[Image]') || text.startsWith('[Document]')) {
                 const isVoice = text.startsWith('[Voice Message]');
                 const isDoc = text.startsWith('[Document]');
 
-                let localUri = '';
-                let uploadType: 'image' | 'voice' | 'document' = 'image';
                 let originalName = '';
                 let docMime = '';
 
@@ -267,6 +268,10 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                     cache: { ...state.cache, [friendId]: { messages: uniqueMessages, key: state.chatKey } } 
                 };
             });
+
+            if (db) {
+                db.runAsync('UPDATE messages SET status = ? WHERE id = ?', ['failed', tempId]).catch((e: any) => console.warn('[DB] Failed to update message to failed:', e));
+            }
 
             logErrorToDB(error, 'ChatStore: Send Message', currentUser.id, currentUser.username);
         }

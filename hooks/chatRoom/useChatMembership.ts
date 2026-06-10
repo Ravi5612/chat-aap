@@ -4,7 +4,7 @@ import { useChatStore } from '@/store/useChatStore';
 
 export const useChatMembership = (friendId: string, currentUser: any, isGroup: boolean) => {
     const [isMember, setIsMember] = useState(true);
-    const { initChat } = useChatStore();
+    const initChat = useChatStore(state => state.initChat);
 
     useEffect(() => {
         if (!friendId || !currentUser) {

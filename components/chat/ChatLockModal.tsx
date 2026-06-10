@@ -177,7 +177,7 @@ const ChatLockModal = memo(({ visible, onClose, onSuccess, mode: initialMode }: 
                             storedQuestion={storedQuestion}
                             answer={answer}
                             onAnswer={setAnswer}
-                            onRecover={handleRecover}
+                            onRecover={handleVerifyForgot}
                             onBack={goToVerify}
                         />
                     )}

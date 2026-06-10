@@ -71,6 +71,8 @@ const MessageContent = memo(({
             && !isStatusMention 
             && !(hasImage && isSentPrefix) 
             && !(isVoiceMessage && isSentPrefix) 
+            && !(isDocumentMessage && isSentPrefix)
+            && !(isVideoMessage && isSentPrefix)
             && message.message_type !== 'ledger';
             
         const isDecrypting = trimmedText.startsWith('{"iv":');

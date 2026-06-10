@@ -76,11 +76,7 @@ function HomeScreen() {
     const { filteredItems, tabCounts } = useHomeFilters(combinedItems, activeTab, searchQuery, isVaultOpen);
     const { handleViewUserStatus } = useStatusActions(currentUser, loadFriends);
 
-    useEffect(() => {
-        if (currentUser && !profile) {
-            useAuthStore.getState().syncProfile();
-        }
-    }, [currentUser, profile]);
+
 
     useEffect(() => {
         loadVaultPasscode();
@@ -100,7 +96,7 @@ function HomeScreen() {
         return () => {
             subscription.remove();
         };
-    }, []);
+    }, [setSearchQuery]);
 
     const handleLongPress = useCallback((friend: any) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -148,7 +144,11 @@ function HomeScreen() {
                 <FlatList
                     style={{ flex: 1 }}
                     data={filteredItems}
-                    keyExtractor={(item, index) => item.id?.toString() || item.email?.toString() || `item-${index}`}
+                    keyExtractor={(item) => {
+                        const key = item.id?.toString() || item.email?.toString();
+                        if (!key) console.warn('[FlatList] Missing unique ID for item:', item);
+                        return key || Math.random().toString();
+                    }}
                     contentContainerStyle={{ paddingBottom: 110 }}
                     ListHeaderComponent={
                         <View>

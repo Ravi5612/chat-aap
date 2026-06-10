@@ -229,7 +229,38 @@ export const createChatUpdateActions = (set: StoreSet, get: StoreGet) => ({
     },
 
     cleanupChat: () => {
-        set({ activeChannel: null, activeChatId: null, isTyping: false, pageOffset: 0, hasMore: true, loadingMore: false });
-        if (typingTimeout) clearTimeout(typingTimeout);
+        const { activeChannel, activeChatId } = get();
+        if (typingTimeout) {
+            clearTimeout(typingTimeout);
+            typingTimeout = null;
+            if (activeChannel && activeChatId) {
+                const { user } = require('../useAuthStore').useAuthStore.getState();
+                if (user) {
+                    activeChannel.send({
+                        type: 'broadcast',
+                        event: 'typing',
+                        payload: { user_id: user.id, is_typing: false }
+                    });
+                    const { globalChannel } = (require('../useFriendsStore').useFriendsStore.getState());
+                    if (globalChannel) {
+                        globalChannel.track({
+                            userId: user.id,
+                            online_at: new Date().toISOString(),
+                            typingTo: null
+                        });
+                    }
+                }
+            }
+        }
+        set({ 
+            activeChannel: null, 
+            activeChatId: null, 
+            isTyping: false, 
+            pageOffset: 0, 
+            hasMore: true, 
+            loadingMore: false,
+            messages: [],
+            chatKey: null
+        });
     }
 });

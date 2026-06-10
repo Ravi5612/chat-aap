@@ -137,6 +137,7 @@ const FilterTabs = memo(({ activeTab, onTabChange, counts = {}, onSearchChange }
                             onChangeText={handleSearch}
                             placeholder={`Search in ${activeTab}...`}
                             style={styles.searchInput}
+                            autoFocus={true}
                         />
                     </View>
                 </View>

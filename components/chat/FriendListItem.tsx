@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { sendFriendRequest } from '@/utils/friendRequestHelper';
 interface FriendListItemProps {
     friend: any;
     onClick: (friend: any) => void;
@@ -27,32 +28,7 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
         
         setIsSending(true);
         try {
-            const { error } = await supabase
-                .from('friend_requests')
-                .insert([{
-                    sender_id: currentUserId,
-                    receiver_id: friend.id,
-                    status: 'pending'
-                }]);
-
-            if (error) {
-                if (error.code === '23505') { // unique violation
-                    setRequestSent(true);
-                    return;
-                }
-                throw error;
-            }
-
-            const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', currentUserId).single();
-
-            await supabase.from('notifications').insert([{
-                user_id: friend.id,
-                sender_id: currentUserId,
-                type: 'friend_request',
-                message: `${myProfile?.username || 'Someone'} sent you a friend request.`,
-                is_read: false
-            }]);
-
+            await sendFriendRequest(currentUserId, friend.id);
             setRequestSent(true);
             Alert.alert('Success', 'Friend request sent! ✅');
         } catch (error: any) {

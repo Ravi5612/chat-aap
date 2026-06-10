@@ -12,10 +12,7 @@ interface HomeHeaderProps {
     unreadNotificationsCount: number;
 }
 
-const IS_ANDROID = Platform.OS === 'android';
-const THEME_COLOR = '#F68537';
-const PRIMARY_COLOR = IS_ANDROID ? 'white' : THEME_COLOR;
-const SECONDARY_COLOR = IS_ANDROID ? THEME_COLOR : 'white';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const HomeHeader = memo(function HomeHeader({
     profile,
@@ -24,6 +21,13 @@ const HomeHeader = memo(function HomeHeader({
     unreadNotificationsCount
 }: HomeHeaderProps) {
     const router = useRouter();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+
+    const IS_ANDROID = Platform.OS === 'android';
+    const THEME_COLOR = '#F68537';
+    const PRIMARY_COLOR = IS_ANDROID ? (isDark ? '#E5E7EB' : 'white') : THEME_COLOR;
+    const SECONDARY_COLOR = IS_ANDROID ? THEME_COLOR : (isDark ? '#111827' : 'white');
 
     const handleProfile = React.useCallback(() => router.push('/(tabs)/profile' as any), [router]);
     const handleSearch = React.useCallback(() => router.push('/search' as any), [router]);
@@ -34,7 +38,7 @@ const HomeHeader = memo(function HomeHeader({
     // Determine the avatar source
     let avatarSource;
     if (profile?.avatar_url) {
-        avatarSource = { uri: profile.avatar_url };
+        avatarSource = typeof profile.avatar_url === 'string' ? { uri: profile.avatar_url } : profile.avatar_url;
     } else if (profile?.gender === 'female') {
         avatarSource = require('@/assets/images/default-avatar-female.jpg');
     } else {

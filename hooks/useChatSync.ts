@@ -140,46 +140,7 @@ export function useChatSync(
         }
     }, [safeFriendId, currentUser?.id]);
 
-    const syncPendingMessages = useCallback(async () => {
-        const { db } = useDbStore.getState();
-        if (db && roomId && currentUser?.id) {
-            try {
-                const pending = await db.getAllAsync<any>(
-                    'SELECT * FROM messages WHERE status = ? AND (receiver_id = ? OR group_id = ?)',
-                    ['pending', safeFriendId, safeFriendId]
-                );
 
-                if (pending.length > 0) {
-                    let syncedCount = 0;
-                    for (const msg of pending) {
-                        const ageMs = Date.now() - new Date(msg.created_at).getTime();
-                        if (ageMs < 10000) continue;
-
-                        syncedCount++;
-                        const { data, error } = await supabase
-                            .from('messages')
-                            .insert([{
-                                sender_id: msg.sender_id,
-                                receiver_id: msg.receiver_id,
-                                group_id: msg.group_id,
-                                message: msg.message,
-                                status: 'sent',
-                                created_at: msg.created_at
-                            }])
-                            .select()
-                            .single();
-                        
-                        if (!error && data) {
-                            await db.runAsync('DELETE FROM messages WHERE id = ?', [msg.id]);
-                            await saveLocalMessage(db, { ...data, status: 'sent' });
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('[OFFLINE] Sync failed:', error);
-            }
-        }
-    }, [roomId, safeFriendId, currentUser?.id]);
 
     useEffect(() => {
         setWallpaper(null);
@@ -190,17 +151,10 @@ export function useChatSync(
     }, [roomId, loadWallpaper, loadDraft, markMessagesAsReadLocally, syncDeliveredReceipts]);
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            syncReadReceipts();
-        }, 10000);
-        return () => clearInterval(interval);
+        syncReadReceipts();
     }, [syncReadReceipts]);
 
-    useEffect(() => {
-        syncPendingMessages();
-        const interval = setInterval(syncPendingMessages, 8000);
-        return () => clearInterval(interval);
-    }, [syncPendingMessages]);
+
 
     useEffect(() => {
         if (messages.length > 0) {

@@ -9,7 +9,6 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
     const [viewingStatus, setViewingStatus] = useState<any>(null);
     const [statusIndex, setStatusIndex] = useState(0);
     const [showAddStatus, setShowAddStatus] = useState(false);
-    const [uploadingStatus, setUploadingStatus] = useState(false);
     const [statusViewers, setStatusViewers] = useState<any[]>([]);
 
     const handleFetchViewers = useCallback(async (statusId: string) => {
@@ -43,38 +42,7 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
         }
     }, []);
 
-    const handleAddStatus = useCallback(async ({ type, content, bgcolor, file }: any) => {
-        if (!currentUser) return;
-        setUploadingStatus(true);
-        try {
-            let mediaUrl = null;
-            if (file) {
-                const ext = file.split('.').pop()?.toLowerCase() || 'jpg';
-                const folder = type === 'video' ? 'status_videos' : 'status_images';
-                mediaUrl = await uploadChatMessageMedia(file, 'chat_media', folder, type);
-                if (!mediaUrl) throw new Error("Failed to upload media");
-            }
 
-            const { error } = await supabase.from('statuses').insert([{
-                user_id: currentUser.id,
-                content,
-                media_type: type,
-                media_url: mediaUrl,
-                background_color: bgcolor
-                // Removed client-side expires_at computation. Rely on Postgres defaults or trigger.
-            }]);
-
-            if (error) throw error;
-            Alert.alert('Success', 'Status added! 🎉');
-            setShowAddStatus(false);
-            loadFriends?.();
-        } catch (error: any) {
-            if (__DEV__) console.error("Status Upload Error:", error);
-            Alert.alert('Error', error.message || 'Failed to add status');
-        } finally {
-            setUploadingStatus(false);
-        }
-    }, [currentUser, loadFriends]);
 
     const handleViewUserStatus = useCallback(async (data: any) => {
         if (!currentUser) return;
@@ -143,12 +111,10 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
         viewingStatus,
         statusIndex,
         showAddStatus,
-        uploadingStatus,
         statusViewers,
         setViewingStatus,
         setStatusIndex,
         setShowAddStatus: setShowAddStatusProxy,
-        handleAddStatus,
         handleViewUserStatus,
         handleViewMyStatus,
         handleFetchViewers,

@@ -94,11 +94,17 @@ export default function ChatScreen() {
         if (iAmBlocked) return Alert.alert("Blocked", "You are blocked by this user.");
 
         const replyId = replyingTo?.id;
-        setReplyingTo(null);
+        const oldDraft = draft;
         handleDraftChange('');
 
-        try { await handleSendMessageOriginal(text, replyId, disappearingDuration, undefined, scheduledAt); } 
-        catch (error) { console.error('[CHAT] Send failed:', error); }
+        try { 
+            await handleSendMessageOriginal(text, replyId, disappearingDuration, undefined, scheduledAt); 
+            setReplyingTo(null);
+        } 
+        catch (error) { 
+            console.error('[CHAT] Send failed:', error); 
+            handleDraftChange(oldDraft);
+        }
     };
 
     const onSaveEdit = (text: string) => {

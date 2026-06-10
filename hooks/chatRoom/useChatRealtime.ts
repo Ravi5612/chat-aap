@@ -8,10 +8,12 @@ import { saveLocalMessage, syncLedgerExpense, markMessageDeliveredLocally } from
 const processedMessageIds = new Set<string>();
 
 export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boolean) => {
-    const { chatKey, loadMessages, cleanupChat, setFlyingEmoji } = useChatStore();
+    const loadMessages = useChatStore(state => state.loadMessages);
+    const cleanupChat = useChatStore(state => state.cleanupChat);
+    const setFlyingEmoji = useChatStore(state => state.setFlyingEmoji);
 
     useEffect(() => {
-        if (!friendId || !currentUser || !chatKey) return;
+        if (!friendId || !currentUser) return;
 
         const channelName = isGroup 
             ? `group-chat-${friendId}-${currentUser.id}` 

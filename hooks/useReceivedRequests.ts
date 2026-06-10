@@ -91,13 +91,6 @@ export const useReceivedRequests = () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            const { error: updateError } = await supabase
-                .from('friend_requests')
-                .update({ status: 'accepted' })
-                .eq('id', requestId);
-
-            if (updateError) throw updateError;
-
             const { error: err1 } = await supabase.from('friendships').insert(
                 { user_id: user.id, friend_id: senderId }
             );
@@ -106,7 +99,15 @@ export const useReceivedRequests = () => {
                 throw new Error("Failed to add friend: " + err1.message);
             }
 
-            const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single();
+            const { error: updateError } = await supabase
+                .from('friend_requests')
+                .update({ status: 'accepted' })
+                .eq('id', requestId);
+
+            if (updateError) throw updateError;
+
+            const { useAuthStore } = require('@/store/useAuthStore');
+            const myProfile = useAuthStore.getState().profile;
 
             const { error: notifErr } = await supabase.from('notifications').insert([
                 {

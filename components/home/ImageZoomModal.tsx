@@ -34,7 +34,7 @@ export default React.memo(function ImageZoomModal({ imageUrl, onClose }: ImageZo
                 )}
                 <View style={styles.imageContainer}>
                     <Image
-                        source={{ uri: imageUrl }}
+                        source={typeof imageUrl === 'string' ? { uri: imageUrl } : imageUrl as any}
                         style={styles.image}
                         contentFit="cover"
                         cachePolicy="memory-disk"

@@ -62,8 +62,8 @@ export const useMessageList = (messages: any[], currentUser: any) => {
             } else {
                 const nextDateStr = new Date(nextMsg.created_at).toDateString();
                 if (currentDateStr !== nextDateStr) {
-                    // Day changed (going older) — insert separator for the OLDER day
-                    items.push({ id: `date-${nextDateStr}`, type: 'date', date: nextDateStr });
+                    // Day changed (going older) — insert separator for the CURRENT day before moving to older
+                    items.push({ id: `date-${currentDateStr}`, type: 'date', date: currentDateStr });
                 }
             }
         }

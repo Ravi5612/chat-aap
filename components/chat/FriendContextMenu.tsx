@@ -37,84 +37,32 @@ const FriendContextMenu = memo(({ visible, friend, onClose, onAction }: FriendCo
 
                             {/* Actions */}
                             <View style={styles.actionList}>
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction('profile')}
-                                >
-                                    <Ionicons name="person-outline" size={20} color="#4B5563" />
-                                    <Text style={styles.actionText}>View Profile</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction('group')}
-                                >
-                                    <Ionicons name="people-outline" size={20} color="#4B5563" />
-                                    <Text style={styles.actionText}>{friend.isGroup ? 'Manage Members' : 'Create Group with User'}</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction('favorite')}
-                                >
-                                    <Ionicons name={friend.isFavourite ? "star" : "star-outline"} size={20} color={friend.isFavourite ? "#FBBF24" : "#4B5563"} />
-                                    <Text style={styles.actionText}>{friend.isFavourite ? 'Remove from Favourites' : 'Add to Favourites'}</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction('archive')}
-                                >
-                                    <Ionicons name="archive-outline" size={20} color="#4B5563" />
-                                    <Text style={styles.actionText}>{friend.isArchived ? 'Unarchive Chat' : 'Archive Chat'}</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction(friend.isLocked ? 'unlock' : 'lock')}
-                                >
-                                    <Ionicons name={friend.isLocked ? "lock-open-outline" : "lock-closed-outline"} size={20} color="#4B5563" />
-                                    <Text style={styles.actionText}>{friend.isLocked ? 'Unlock Chat' : 'Lock Chat'}</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction(friend.isHidden ? 'unhide' : 'hide')}
-                                >
-                                    <Ionicons name={friend.isHidden ? "eye-outline" : "eye-off-outline"} size={20} color="#4B5563" />
-                                    <Text style={styles.actionText}>{friend.isHidden ? 'Unhide Chat' : 'Hide Chat (Ninja Vault)'}</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction(friend.isBlocked ? 'unblock' : 'block')}
-                                >
-                                    <Ionicons name={friend.isBlocked ? "checkmark-circle-outline" : "ban-outline"} size={20} color={friend.isBlocked ? "#10B981" : "#EF4444"} />
-                                    <Text style={[styles.actionText, friend.isBlocked ? styles.colorGreen : styles.colorRed]}>
-                                        {friend.isBlocked ? 'Unblock User' : 'Block User'}
-                                    </Text>
-                                </TouchableOpacity>
-
-
-                                <View style={styles.divider} />
-
-                                {(!friend.isGroup && !friend.isUnfriended) && (
-                                    <TouchableOpacity
-                                        style={styles.actionItem}
-                                        onPress={() => handleMenuAction('unfriend')}
-                                    >
-                                        <Ionicons name="person-remove-outline" size={20} color="#EF4444" />
-                                        <Text style={[styles.actionText, styles.colorRed]}>Unfriend</Text>
-                                    </TouchableOpacity>
-                                )}
-
-                                <TouchableOpacity
-                                    style={styles.actionItem}
-                                    onPress={() => handleMenuAction('delete')}
-                                >
-                                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                                    <Text style={[styles.actionText, styles.colorRed]}>Delete Chat</Text>
-                                </TouchableOpacity>
+                                {[
+                                    { id: 'profile', icon: 'person-outline', label: 'View Profile', action: 'profile' },
+                                    { id: 'group', icon: 'people-outline', label: friend.isGroup ? 'Manage Members' : 'Create Group with User', action: 'group' },
+                                    { id: 'favorite', icon: friend.isFavourite ? "star" : "star-outline", color: friend.isFavourite ? "#FBBF24" : undefined, label: friend.isFavourite ? 'Remove from Favourites' : 'Add to Favourites', action: 'favorite' },
+                                    { id: 'archive', icon: 'archive-outline', label: friend.isArchived ? 'Unarchive Chat' : 'Archive Chat', action: 'archive' },
+                                    { id: 'lock', icon: friend.isLocked ? "lock-open-outline" : "lock-closed-outline", label: friend.isLocked ? 'Unlock Chat' : 'Lock Chat', action: friend.isLocked ? 'unlock' : 'lock' },
+                                    { id: 'hide', icon: friend.isHidden ? "eye-outline" : "eye-off-outline", label: friend.isHidden ? 'Unhide Chat' : 'Hide Chat (Ninja Vault)', action: friend.isHidden ? 'unhide' : 'hide' },
+                                    { id: 'block', icon: friend.isBlocked ? "checkmark-circle-outline" : "ban-outline", color: friend.isBlocked ? "#10B981" : "#EF4444", textStyle: friend.isBlocked ? styles.colorGreen : styles.colorRed, label: friend.isBlocked ? 'Unblock User' : 'Block User', action: friend.isBlocked ? 'unblock' : 'block' },
+                                    { id: 'divider', isDivider: true },
+                                    ...((!friend.isGroup && !friend.isUnfriended) ? [{ id: 'unfriend', icon: 'person-remove-outline', color: '#EF4444', textStyle: styles.colorRed, label: 'Unfriend', action: 'unfriend' }] : []),
+                                    { id: 'delete', icon: 'trash-outline', color: '#EF4444', textStyle: styles.colorRed, label: 'Delete Chat', action: 'delete' }
+                                ].map((item: any) => {
+                                    if (item.isDivider) {
+                                        return <View key={item.id} style={styles.divider} />;
+                                    }
+                                    return (
+                                        <TouchableOpacity
+                                            key={item.id}
+                                            style={styles.actionItem}
+                                            onPress={() => handleMenuAction(item.action)}
+                                        >
+                                            <Ionicons name={item.icon} size={20} color={item.color || "#4B5563"} />
+                                            <Text style={[styles.actionText, item.textStyle]}>{item.label}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             </View>
 
                             {/* Close Button */}
