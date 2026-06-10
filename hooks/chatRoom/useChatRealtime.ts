@@ -108,7 +108,7 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                         .update({ status: 'delivered', delivered_at: now })
                         .eq('id', finalMsg.id)
                         .eq('status', 'sent')
-                        .catch(() => {});
+                        .then(() => {});
 
                     useChatStore.getState().markAsRead(finalMsg.id, currentUser, friendId, isGroup);
                 } catch (e) {
@@ -153,7 +153,7 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                     }
 
                     const newMessages = [...state.messages];
-                    newMessages[idx] = {
+                    const updatedMsgObj = {
                         ...msg,
                         status: isStatusUpdate ? newStatus : msg.status,
                         is_read: isStatusUpdate ? updatedMsg.is_read : msg.is_read,
@@ -165,7 +165,15 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                     };
                     
                     if (decryptedText === 'SYSTEM_MSG: DELETED') {
-                        newMessages[idx].file_url = null;
+                        updatedMsgObj.file_url = null;
+                    }
+
+                    newMessages[idx] = updatedMsgObj;
+
+                    // Sync updated message status/edits to Local SQLite
+                    const { db } = useDbStore.getState();
+                    if (db) {
+                        saveLocalMessage(db, updatedMsgObj).catch(() => {});
                     }
 
                     return { messages: newMessages };
@@ -221,6 +229,7 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                     
                     useChatStore.setState((state) => {
                         let changed = false;
+                        const messagesToSave: any[] = [];
                         const newMessages = state.messages.map(m => {
                             // Only update our own messages
                             if (m.sender_id !== currentUser.id) return m;
@@ -231,18 +240,28 @@ export const useChatRealtime = (friendId: string, currentUser: any, isGroup: boo
                             const currentWeight = statusOrder[m.status as keyof typeof statusOrder] || 0;
                             if (newWeight > currentWeight) {
                                 changed = true;
-                                return { 
+                                const updatedM = { 
                                     ...m, 
                                     status, 
                                     is_read: status === 'read' ? true : m.is_read,
                                     delivered_at: status === 'delivered' && !m.delivered_at ? new Date().toISOString() : m.delivered_at,
                                     read_at: status === 'read' && !m.read_at ? new Date().toISOString() : m.read_at
                                 };
+                                messagesToSave.push(updatedM);
+                                return updatedM;
                             }
                             return m;
                         });
                         
-                        return changed ? { messages: newMessages } : {};
+                        if (changed) {
+                            // Sync all status updates to Local SQLite
+                            const { db } = useDbStore.getState();
+                            if (db) {
+                                messagesToSave.forEach(msgToSave => saveLocalMessage(db, msgToSave).catch(() => {}));
+                            }
+                            return { messages: newMessages };
+                        }
+                        return {};
                     });
                 }
             })

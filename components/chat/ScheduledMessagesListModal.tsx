@@ -60,7 +60,11 @@ export default React.memo(function ScheduledMessagesListModal({ visible, onClose
                 const decrypted = await Promise.all(data.map(async (msg) => {
                     let decryptedMsg = msg.message;
                     try {
-                        decryptedMsg = await decryptText(msg.message, chatKey);
+                        if (chatKey) {
+                            decryptedMsg = await decryptText(msg.message, chatKey);
+                        } else {
+                            decryptedMsg = '[Encrypted Message]';
+                        }
                     } catch(e) {
                         console.warn("Failed to decrypt scheduled message", e);
                     }

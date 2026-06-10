@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, Platform, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, StyleSheet, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { PRIMARY_COLOR, SECONDARY_COLOR } from '@/constants/Colors';
 import { GlassHeader } from '@/components/ui/GlassHeader';
 import { useRouter } from 'expo-router';
 

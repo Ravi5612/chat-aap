@@ -20,7 +20,6 @@ export const useStatusMusic = (selectedMusic: any) => {
                     await Audio.setAudioModeAsync({
                         playsInSilentModeIOS: true,
                         staysActiveInBackground: false,
-                        shouldRouteThroughEarpiece: false,
                     });
                     const { sound } = await Audio.Sound.createAsync(
                         { uri: selectedMusic.url },

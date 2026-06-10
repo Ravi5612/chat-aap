@@ -3,7 +3,7 @@ import { CameraView, CameraType, FlashMode } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 
 export const useCustomCamera = (
-    onCapture: (media: { uri: string; type: 'image' | 'video' }) => void,
+    onCapture: (media: { uri: string; type: 'image' | 'video' }[]) => void,
     onClose: () => void
 ) => {
     const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
@@ -43,7 +43,7 @@ export const useCustomCamera = (
             try {
                 const video = await cameraRef.current?.recordAsync({ maxDuration: 60 });
                 if (video && video.uri) {
-                    onCapture({ uri: video.uri, type: 'video' });
+                    onCapture([{ uri: video.uri, type: 'video' }]);
                     onClose();
                 }
             } catch (error) {
@@ -69,7 +69,7 @@ export const useCustomCamera = (
         try {
             const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
             if (photo && photo.uri) {
-                onCapture({ uri: photo.uri, type: 'image' });
+                onCapture([{ uri: photo.uri, type: 'image' }]);
                 onClose();
             }
         } catch (error) {

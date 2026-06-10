@@ -34,14 +34,14 @@ export async function fetchAndFormatFriendsData(
     }
 
     // Process Status Info
-    const statusInfoMap = await processStatuses(filteredStatuses, viewsData, friendships, myProfile, userId, db);
+    const statusInfoMap = await processStatuses(filteredStatuses || [], viewsData || [], friendships, myProfile, userId, db);
 
     // Process Unread Counts
     const userGroupIds = new Set(groupData?.map((m: any) => m.group_id) || []);
-    const unreadCountsMap = calculateUnreadCounts(unreadData, userGroupIds);
+    const unreadCountsMap = calculateUnreadCounts(unreadData || [], userGroupIds);
 
     // Process Last Activity
-    const { lastActivityMap, recentChatUserIds } = calculateLastActivity(recentMsgsData, userId);
+    const { lastActivityMap, recentChatUserIds } = calculateLastActivity(recentMsgsData || [], userId);
 
     // Find missing profiles
     const missingProfiles = await fetchMissingProfiles(recentChatUserIds, friendIds, userId);
@@ -55,7 +55,7 @@ export async function fetchAndFormatFriendsData(
     const formattedGroups = formatGroupsList(groupData, localConv, unreadCountsMap, lastActivityMap);
 
     // My Statuses
-    const groupedMyStatus = await processMyStatuses(myAllStatuses, myProfile, userId);
+    const groupedMyStatus = await processMyStatuses(myAllStatuses || [], myProfile, userId);
 
     const isConnected = currentUserId ? !!onlineUsers[currentUserId] : false;
 

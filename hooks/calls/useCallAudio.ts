@@ -25,7 +25,7 @@ export const useCallAudio = (callSession: any, profile: any) => {
                         await Audio.setAudioModeAsync({
                             playsInSilentModeIOS: true,
                             staysActiveInBackground: true,
-                            shouldRouteThroughEarpieceAndroid: false,
+                            playThroughEarpieceAndroid: false,
                             shouldDuckAndroid: true,
                         });
                         isAudioModeConfigured = true;

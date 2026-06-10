@@ -13,7 +13,7 @@ import { MediaGalleryBottomSheet } from './MediaGalleryBottomSheet';
 export interface CustomCameraModalProps {
     visible: boolean;
     onClose: () => void;
-    onCapture: (media: { uri: string; type: 'image' | 'video' }) => void;
+    onCapture: (media: { uri: string; type: 'image' | 'video' }[]) => void;
 }
 
 const CustomCameraModal = memo(({ visible, onClose, onCapture }: CustomCameraModalProps) => {

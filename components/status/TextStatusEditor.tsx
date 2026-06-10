@@ -38,7 +38,7 @@ export const TextStatusEditor: React.FC<Props> = ({
             <View style={[styles.footer, { paddingBottom }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 15 }}>
                     <TouchableOpacity onPress={() => { if (showEmojiPicker) { setShowEmojiPicker(false); textInputRef.current?.focus(); } else { Keyboard.dismiss(); setShowEmojiPicker(true); } }} style={{ backgroundColor: 'rgba(255,255,255,0.15)', padding: 10, borderRadius: 20 }}>
-                        <Ionicons name={showEmojiPicker ? "keyboard-outline" : "happy-outline"} size={24} color="white" />
+                        <Ionicons name={showEmojiPicker ? "keypad-outline" : "happy-outline"} size={24} color="white" />
                     </TouchableOpacity>
                 </View>
                 <Text style={styles.footerLabel}>Choose Background</Text>

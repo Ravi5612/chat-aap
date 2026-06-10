@@ -141,7 +141,7 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                         uploadType,
                         currentUser.id,
                         (percent) => {
-                            set((state) => ({
+                            set((state: any) => ({
                                 uploadProgress: { ...state.uploadProgress, [tempId]: percent }
                             }));
                         },
@@ -225,7 +225,7 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                 }
             } else {
                 // For scheduled messages, just clean up upload progress and notify success
-                set((state) => {
+                set((state: any) => {
                     const newProgress = { ...state.uploadProgress };
                     delete newProgress[tempId];
                     return { uploadProgress: newProgress };

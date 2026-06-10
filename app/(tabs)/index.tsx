@@ -13,6 +13,7 @@ import { useSentRequests } from '@/hooks/useSentRequests';
 import * as Haptics from 'expo-haptics';
 import ChatLockModal from '@/components/chat/ChatLockModal';
 import { useFriends } from '@/hooks/useFriends';
+import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 
 // Extracted UI Components
 import HomeHeader from '@/components/home/HomeHeader';
@@ -134,78 +135,100 @@ function HomeScreen() {
     return (
         <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
             <View style={{ flex: 1, backgroundColor: '#EBD8B7' }}>
-                <HomeHeader
-                    profile={profile}
-                    pendingSentCount={pendingSentCount}
-                    pendingReceivedCount={pendingReceivedCount}
-                    unreadNotificationsCount={getCounts?.unread ?? 0}
-                />
+                <ComponentErrorBoundary fallbackName="HomeHeader">
+                    <HomeHeader
+                        profile={profile}
+                        pendingSentCount={pendingSentCount}
+                        pendingReceivedCount={pendingReceivedCount}
+                        unreadNotificationsCount={getCounts?.unread ?? 0}
+                    />
+                </ComponentErrorBoundary>
 
-                <FlatList
-                    style={{ flex: 1 }}
-                    data={filteredItems}
-                    keyExtractor={(item) => {
-                        const key = item.id?.toString() || item.email?.toString();
-                        if (!key) console.warn('[FlatList] Missing unique ID for item:', item);
-                        return key || Math.random().toString();
-                    }}
-                    contentContainerStyle={{ paddingBottom: 110 }}
-                    ListHeaderComponent={
-                        <View>
-                            {isVaultOpen ? (
-                                <NinjaVaultHeader onClose={() => setSearchQuery('')} />
-                            ) : (
-                                <FilterTabs
-                                    activeTab={activeTab}
-                                    onTabChange={setActiveTab}
-                                    counts={tabCounts}
-                                    onSearchChange={handleSearchChange}
-                                />
-                            )}
-                            {!isVaultOpen && activeTab === 'all' && !searchQuery && (showContactSuggestions || showNearbySuggestions) && (
-                                <HomeSuggestions
-                                    showContactSuggestions={showContactSuggestions}
-                                    showNearbySuggestions={showNearbySuggestions}
-                                    suggestionTab={suggestionTab}
-                                    suggestionsExpanded={suggestionsExpanded}
-                                    onSetSuggestionTab={setSuggestionTab}
-                                    onToggleExpanded={toggleSuggestionsExpanded}
-                                />
-                            )}
-                        </View>
-                    }
-                    renderItem={renderItem}
-                    ListEmptyComponent={<EmptyChatState loading={loading} searchQuery={searchQuery} />}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />}
-                    initialNumToRender={15}
-                    maxToRenderPerBatch={10}
-                    windowSize={10}
-                    removeClippedSubviews={true}
-                />
+                <ComponentErrorBoundary fallbackName="FlatList">
+                    <FlatList
+                        style={{ flex: 1 }}
+                        data={filteredItems}
+                        keyExtractor={(item) => {
+                            const key = item.id?.toString() || item.email?.toString();
+                            if (!key) console.warn('[FlatList] Missing unique ID for item:', item);
+                            return key || Math.random().toString();
+                        }}
+                        contentContainerStyle={{ paddingBottom: 110 }}
+                        ListHeaderComponent={
+                            <View>
+                                {isVaultOpen ? (
+                                    <ComponentErrorBoundary fallbackName="NinjaVaultHeader">
+                                        <NinjaVaultHeader onClose={() => setSearchQuery('')} />
+                                    </ComponentErrorBoundary>
+                                ) : (
+                                    <ComponentErrorBoundary fallbackName="FilterTabs">
+                                        <FilterTabs
+                                            activeTab={activeTab}
+                                            onTabChange={setActiveTab}
+                                            counts={tabCounts}
+                                            onSearchChange={handleSearchChange}
+                                        />
+                                    </ComponentErrorBoundary>
+                                )}
+                                {!isVaultOpen && activeTab === 'all' && !searchQuery && (showContactSuggestions || showNearbySuggestions) && (
+                                    <ComponentErrorBoundary fallbackName="HomeSuggestions">
+                                        <HomeSuggestions
+                                            showContactSuggestions={showContactSuggestions}
+                                            showNearbySuggestions={showNearbySuggestions}
+                                            suggestionTab={suggestionTab}
+                                            suggestionsExpanded={suggestionsExpanded}
+                                            onSetSuggestionTab={setSuggestionTab}
+                                            onToggleExpanded={toggleSuggestionsExpanded}
+                                        />
+                                    </ComponentErrorBoundary>
+                                )}
+                            </View>
+                        }
+                        renderItem={renderItem}
+                        ListEmptyComponent={
+                            <ComponentErrorBoundary fallbackName="EmptyChatState">
+                                <EmptyChatState loading={loading} searchQuery={searchQuery} />
+                            </ComponentErrorBoundary>
+                        }
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />}
+                        initialNumToRender={15}
+                        maxToRenderPerBatch={10}
+                        windowSize={10}
+                        removeClippedSubviews={true}
+                    />
+                </ComponentErrorBoundary>
 
-                <FriendContextMenu
-                    visible={menuVisible}
-                    friend={selectedFriendForMenu}
-                    onClose={() => setMenuVisible(false)}
-                    onAction={handleMenuAction}
-                />
+                <ComponentErrorBoundary fallbackName="FriendContextMenu">
+                    <FriendContextMenu
+                        visible={menuVisible}
+                        friend={selectedFriendForMenu}
+                        onClose={() => setMenuVisible(false)}
+                        onAction={handleMenuAction}
+                    />
+                </ComponentErrorBoundary>
 
-                <ChatLockModal
-                    visible={lockModalVisible}
-                    mode={lockModalMode}
-                    onClose={() => {
-                        setLockModalVisible(false);
-                        setPendingLockedFriend(null);
-                    }}
-                    onSuccess={handleLockModalSuccess}
-                />
+                <ComponentErrorBoundary fallbackName="ChatLockModal">
+                    <ChatLockModal
+                        visible={lockModalVisible}
+                        mode={lockModalMode}
+                        onClose={() => {
+                            setLockModalVisible(false);
+                            setPendingLockedFriend(null);
+                        }}
+                        onSuccess={handleLockModalSuccess}
+                    />
+                </ComponentErrorBoundary>
 
-                <ImageZoomModal
-                    imageUrl={selectedImageForZoom}
-                    onClose={() => setSelectedImageForZoom(null)}
-                />
+                <ComponentErrorBoundary fallbackName="ImageZoomModal">
+                    <ImageZoomModal
+                        imageUrl={selectedImageForZoom}
+                        onClose={() => setSelectedImageForZoom(null)}
+                    />
+                </ComponentErrorBoundary>
 
-                <SOSButton />
+                <ComponentErrorBoundary fallbackName="SOSButton">
+                    <SOSButton />
+                </ComponentErrorBoundary>
             </View>
         </View>
     );

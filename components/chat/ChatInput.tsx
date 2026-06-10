@@ -93,7 +93,17 @@ const ChatInput = memo(({
     const appendEmoji        = useCallback((emoji: string) => setMessage(prev => prev + emoji), [setMessage]);
     const onRecordingComplete = useCallback((uri: string) => { onSendMessage(`[Voice Message] ${uri}`); setIsRecording(false); }, [onSendMessage]);
     const onContactSelected  = useCallback((name: string, phone: string) => onSendMessage(`[Contact] ${name} | ${phone}`), [onSendMessage]);
-    const onCameraCapture    = useCallback((media: any) => setSelectedMedia(media), []);
+    const onCameraCapture    = useCallback((mediaArray: any[]) => {
+        if (!mediaArray || mediaArray.length === 0) return;
+        if (mediaArray.length === 1) {
+            setSelectedMedia(mediaArray[0]);
+        } else {
+            mediaArray.forEach(m => {
+                const prefix = m.type === 'video' ? '[Video]' : '[Image]';
+                onSendMessage(`${prefix} ${m.uri}`);
+            });
+        }
+    }, [onSendMessage]);
     const onScheduleSubmit   = useCallback((date: Date) => handleSubmit(date), [handleSubmit]);
     const handleSendPress    = useCallback(() => handleSubmit(), [handleSubmit]);
     const handleLongPress    = useCallback(() => { if (!message.trim() && !selectedMedia) startVoiceTyping(); }, [message, selectedMedia, startVoiceTyping]);

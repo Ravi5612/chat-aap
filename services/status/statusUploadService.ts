@@ -146,6 +146,7 @@ export const processStatusUpload = async (params: StatusUploadParams) => {
         if (mentionedFriends && mentionedFriends.length > 0 && insertedStatus?.id) {
             const mentionsToInsert = await Promise.all(mentionedFriends.map(async (friend) => {
                 const dmKey = await getChatKey(user.id, friend.id);
+                if (!dmKey) return null;
                 const mentionMsg = `[StatusMention] ${insertedStatus.id}`;
                 const encryptedMsg = await encryptText(mentionMsg, dmKey);
                 return {
@@ -158,8 +159,10 @@ export const processStatusUpload = async (params: StatusUploadParams) => {
                 };
             }));
             
-            if (mentionsToInsert.length > 0) {
-                const { error: mentionError } = await supabase.from('messages').insert(mentionsToInsert);
+            const validMentions = mentionsToInsert.filter(Boolean) as any[];
+            
+            if (validMentions.length > 0) {
+                const { error: mentionError } = await supabase.from('messages').insert(validMentions);
                 if (mentionError) console.error('Failed to send status mention DMs:', mentionError);
             }
         }

@@ -1,6 +1,38 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+const PendingStatus = () => {
+    const spinValue = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.timing(spinValue, {
+                toValue: 1,
+                duration: 1000,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            })
+        ).start();
+    }, [spinValue]);
+
+    const spin = spinValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+    });
+
+    return (
+        <View style={styles.pendingContainer}>
+            <Ionicons name="time-outline" size={10} color="#94a3b8" style={{ position: 'absolute' }} />
+            <Animated.View
+                style={[
+                    styles.spinnerRing,
+                    { transform: [{ rotate: spin }] }
+                ]}
+            />
+        </View>
+    );
+};
 
 interface MessageStatusProps {
     status: 'sending' | 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
@@ -10,7 +42,7 @@ export default React.memo(function MessageStatus({ status }: MessageStatusProps)
     if (status === 'sending' || status === 'pending') {
         return (
             <View style={styles.container}>
-                <Ionicons name="time-outline" size={14} color="#94a3b8" />
+                <PendingStatus />
             </View>
         );
     }
@@ -62,5 +94,19 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center'
+    },
+    pendingContainer: {
+        width: 16,
+        height: 16,
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    spinnerRing: {
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        borderWidth: 1.5,
+        borderColor: '#94a3b8',
+        borderTopColor: 'transparent',
     }
 });

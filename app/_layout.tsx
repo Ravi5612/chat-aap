@@ -27,6 +27,10 @@ import { useNavigationGuard } from '@/hooks/layout/useNavigationGuard';
 import { useAppBadgeCount } from '@/hooks/layout/useAppBadgeCount';
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    NativeSplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   return (
     <View style={{ flex: 1, backgroundColor: '#FFF5E6', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>

@@ -61,13 +61,14 @@ export const useMessageSync = (userId: string | null, profileRef: MutableRefObje
                         if (friend) senderName = friend.friend.username;
                     }
 
-                    // Note: getChatKey is ALREADY cached in memory inside chatCrypto.ts 
                     const chatKey = await getChatKey(userId, payload.new.sender_id);
                     let content = '[Encrypted Message]';
-                    try {
-                        content = await decryptText(payload.new.message, chatKey);
-                    } catch (e) {
-                        if (__DEV__) console.warn('[DEBUG] GlobalRealtime: Decryption failed');
+                    if (chatKey) {
+                        try {
+                            content = await decryptText(payload.new.message, chatKey);
+                        } catch (e) {
+                            if (__DEV__) console.warn('[DEBUG] GlobalRealtime: Decryption failed');
+                        }
                     }
 
                 } catch (err) {

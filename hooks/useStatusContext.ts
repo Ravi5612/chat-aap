@@ -35,10 +35,15 @@ export function useStatusContext(statusContext: any) {
                 let mediaUrl = statusContext.media_url || '';
 
                 if (content && content.trim().startsWith('{')) {
-                    try { content = await decryptText(content, statusKey); } catch (e) { content = '🔒 Status'; }
-                }
-                if (mediaUrl && mediaUrl.trim().startsWith('{')) {
-                    try { mediaUrl = await decryptText(mediaUrl, statusKey); } catch (e) { mediaUrl = ''; }
+                    if (statusKey) {
+                        try { content = await decryptText(content, statusKey); } catch (e) { content = '🔒 Status'; }
+                        if (mediaUrl) {
+                            try { mediaUrl = await decryptText(mediaUrl, statusKey); } catch (e) { mediaUrl = ''; }
+                        }
+                    } else {
+                        content = '🔒 Status';
+                        mediaUrl = '';
+                    }
                 }
 
                 setDecryptedStatusContent(content);

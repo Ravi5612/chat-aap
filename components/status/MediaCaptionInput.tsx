@@ -33,7 +33,7 @@ export const MediaCaptionInput: React.FC<Props> = ({
             )}
             <View style={styles.inputWrapper}>
                 <TouchableOpacity onPress={() => { if (showEmojiPicker) { setShowEmojiPicker(false); mediaInputRef.current?.focus(); } else { Keyboard.dismiss(); setShowEmojiPicker(true); } }} style={styles.iconBtn}>
-                    <Ionicons name={showEmojiPicker ? "keyboard-outline" : "happy-outline"} size={24} color="white" />
+                    <Ionicons name={showEmojiPicker ? "keypad-outline" : "happy-outline"} size={24} color="white" />
                 </TouchableOpacity>
                 <TextInput
                     ref={mediaInputRef}
