@@ -126,7 +126,8 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                 >
                     {friend.img ? (
                         <Image
-                            source={friend.img}
+                            source={{ uri: friend.img }}
+                            cachePolicy="memory-disk"
                             style={[
                                 styles.avatar,
                                 {
