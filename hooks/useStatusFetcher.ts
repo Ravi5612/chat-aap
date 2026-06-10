@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useFriendsStore } from '@/store/useFriendsStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { 
     processRawStatuses, 
     fetchLocalStatuses, 
@@ -11,10 +12,15 @@ import {
 export function useStatusFetcher(userId: string | undefined, isArchive: string | undefined, date: string | undefined) {
     const [statuses, setStatuses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [currentUser, setCurrentUser] = useState<any>(useAuthStore.getState().user);
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
+        const user = useAuthStore.getState().user;
+        if (user) {
+            setCurrentUser(user);
+        } else {
+            supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
+        }
     }, []);
 
     useEffect(() => {
