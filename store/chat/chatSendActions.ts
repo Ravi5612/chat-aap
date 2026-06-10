@@ -1,5 +1,6 @@
 import { saveToCache } from '@/lib/database';
 import { saveLocalMessage, syncLedgerExpense } from '@/lib/localDb';
+import { saveMediaCache } from '@/lib/localDb/media';
 import { supabase } from '@/lib/supabase';
 import { encryptText, getChatKey, getOrCreateMySenderKey, distributeSenderKey } from '@/utils/chatCrypto';
 import { logErrorToDB } from '@/utils/errorLogger';
@@ -181,7 +182,25 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             if (error) throw error;
 
             if (!scheduledAt) {
-                const finalMsg = { ...data, message: messageToEncrypt, reply: replyObject, reply_to_id: replyToId };
+                const finalMsg = { 
+                    ...data, 
+                    message: messageToEncrypt, 
+                    file_url: fileData?.url || null, // FIX 1: Pass the raw URL, not the encrypted JSON string
+                    reply: replyObject, 
+                    reply_to_id: replyToId 
+                };
+
+                // FIX 2: Cache the local file using the remote URL as the key, so we don't re-download what we just uploaded!
+                if (fileData?.url && localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
+                    if (db) {
+                        try {
+                            await saveMediaCache(db, fileData.url, localUri, uploadType);
+                        } catch (e) {
+                            console.error('Failed to cache uploaded media:', e);
+                        }
+                    }
+                }
+
                 set((state: any) => {
                     const newMessages = state.messages.map((m: any) => m.id === tempId ? finalMsg : m);
                     saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
