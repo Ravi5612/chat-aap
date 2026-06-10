@@ -124,20 +124,22 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                     onPress={handleImagePress}
                     style={({ pressed }) => [styles.avatarPressable, { opacity: pressed ? 0.8 : 1 }]}
                 >
-                    {friend.img ? (
-                        <Image
-                            source={{ uri: friend.img }}
-                            cachePolicy="memory-disk"
-                            style={[
-                                styles.avatar,
-                                {
-                                    borderWidth: hasStatus ? 2 : 0,
-                                    borderColor: ringColor,
-                                    padding: hasStatus ? 2 : 0
-                                }
-                            ]}
-                        />
-                    ) : null}
+                    <Image
+                        source={
+                            friend.img ? { uri: friend.img }
+                            : (friend.gender === 'female' 
+                                ? require('@/assets/images/default-avatar-female.jpg') 
+                                : require('@/assets/images/default-avatar-male.jpg'))
+                        }
+                        style={[
+                            styles.avatar,
+                            {
+                                borderWidth: hasStatus ? 2 : 0,
+                                borderColor: ringColor,
+                                padding: hasStatus ? 2 : 0
+                            }
+                        ]}
+                    />
 
                     {isOnline && <View style={styles.onlineDot} />}
 
