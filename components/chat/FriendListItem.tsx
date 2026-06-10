@@ -126,10 +126,11 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                 >
                     <Image
                         source={
-                            friend.img ? { uri: friend.img }
-                            : (friend.gender === 'female' 
-                                ? require('@/assets/images/default-avatar-female.jpg') 
-                                : require('@/assets/images/default-avatar-male.jpg'))
+                            friend.img 
+                                ? (typeof friend.img === 'string' ? { uri: friend.img } : friend.img)
+                                : (friend.gender === 'female' 
+                                    ? require('@/assets/images/default-avatar-female.jpg') 
+                                    : require('@/assets/images/default-avatar-male.jpg'))
                         }
                         style={[
                             styles.avatar,

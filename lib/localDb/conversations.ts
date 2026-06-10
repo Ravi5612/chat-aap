@@ -9,7 +9,7 @@ export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any
                 conv.id,
                 conv.name || 'Unknown',
                 conv.email || null,
-                conv.img || null,
+                typeof conv.img === 'string' ? conv.img : (conv.img?.uri || null),
                 conv.last_message || '',
                 conv.lastActivity || '0',
                 conv.unreadCount || 0,
@@ -34,7 +34,7 @@ export const getLocalConversations = async (db: SQLite.SQLiteDatabase) => {
         return results.map(row => ({
             ...row,
             email: row.email,
-            img: row.avatar,
+            img: row.avatar === '[object Object]' ? null : row.avatar,
             unreadCount: row.unread_count,
             isGroup: row.is_group === 1,
             isLocked: row.is_locked === 1,

@@ -82,7 +82,7 @@ const ChatHeader = memo(({
 
     // Memoized — only recalculates when friendImage/friendName/isGroup/gender change
     const avatarSource = useMemo(() => {
-        if (friendImage) return friendImage;
+        if (friendImage) return typeof friendImage === 'string' ? { uri: friendImage } : friendImage;
         if (isGroup) return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(friendName || 'Group')}&backgroundColor=F68537`;
         if (gender === 'female') return require('@/assets/images/default-avatar-female.jpg');
         if (gender === 'other') return require('@/assets/images/default-avatar-other.png');
