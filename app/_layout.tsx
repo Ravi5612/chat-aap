@@ -85,9 +85,22 @@ export default function RootLayout() {
     }
   }, [initializing]);
 
+  // Safety net: if initializing is stuck for 10s, force it to false
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      if (useAuthStore.getState().initializing) {
+        console.warn('[Layout] Init timeout safety triggered - forcing initializing=false');
+        useAuthStore.getState().setInitializing(false);
+      }
+    }, 10000);
+    return () => clearTimeout(safetyTimer);
+  }, []);
+
   if (initializing) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#FFF5E6' }} />
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#F68537', fontSize: 18, fontWeight: 'bold' }}>Loading...</Text>
+      </View>
     );
   }
 

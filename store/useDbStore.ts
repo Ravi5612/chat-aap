@@ -27,7 +27,7 @@ export const useDbStore = create<DbState>((set, get) => ({
                 return;
             }
             try {
-                // Add a 5-second timeout to prevent infinite hang if SQLite deadlocks
+                // 8-second timeout to prevent infinite hang if SQLite deadlocks
                 let timer: ReturnType<typeof setTimeout>;
                 let isSettled = false;
                 
@@ -35,9 +35,9 @@ export const useDbStore = create<DbState>((set, get) => ({
                     timer = setTimeout(() => {
                         if (!isSettled) {
                             isSettled = true;
-                            reject(new Error('Database initialization timeout'));
+                            reject(new Error('Database initialization timeout after 8s'));
                         }
-                    }, 5000);
+                    }, 8000);
                 });
                 
                 const db = await Promise.race([
@@ -57,9 +57,7 @@ export const useDbStore = create<DbState>((set, get) => ({
                 
                 set({ db: db as SQLite.SQLiteDatabase, isInitialized: true, error: null });
             } catch (error: any) {
-                if (__DEV__) {
-                    console.error('DbStore: Initialization failed or timed out', error);
-                }
+                console.error('DbStore: Initialization failed or timed out', error);
                 
                 // Attempt to delete the corrupted database file so it recovers next time
                 try {
@@ -70,7 +68,10 @@ export const useDbStore = create<DbState>((set, get) => ({
                 } catch(e) {}
 
                 // Even on error, mark as initialized so the app doesn't hang
-                set({ isInitialized: true, error: error.message || 'Initialization failed' });
+                set({ db: null, isInitialized: true, error: error.message || 'Initialization failed' });
+            } finally {
+                // Always reset initPromise so a future retry can work
+                initPromise = null;
             }
         })();
 
