@@ -35,8 +35,23 @@ export const useAuthInitialization = () => {
 
                         const { db } = useDbStore.getState();
                         if (db) {
-                            const { getLocalConversations } = require('@/lib/localDb');
-                            const localConv = await getLocalConversations(db);
+                            const { getLocalConversations, getLocalStatuses } = require('@/lib/localDb');
+                            const [localConv, localStatuses] = await Promise.all([
+                                getLocalConversations(db),
+                                getLocalStatuses(db)
+                            ]);
+                            
+                            let localStatusInfo: Record<string, any> = {};
+                            if (localStatuses && localStatuses.length > 0) {
+                                localStatuses.forEach((s: any) => {
+                                    if (s.is_deleted === 1 || s.is_deleted === true || s.is_deleted === '1') return;
+                                    if (!localStatusInfo[s.user_id]) {
+                                        localStatusInfo[s.user_id] = { count: 0, viewedCount: 0 };
+                                    }
+                                    localStatusInfo[s.user_id].count++;
+                                });
+                            }
+
                             if (localConv && localConv.length > 0) {
                                 const filteredLocalConv = localConv.filter((c: any) => c.id !== cachedSession.user.id);
                                 useFriendsStore.setState({ 
@@ -44,8 +59,11 @@ export const useAuthInitialization = () => {
                                     friends: filteredLocalConv.filter((c: any) => c.isFriend),
                                     groups: filteredLocalConv.filter((c: any) => c.isGroup),
                                     lockedChatIds: filteredLocalConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
+                                    statusInfo: localStatusInfo,
                                     loading: false
                                 });
+                            } else if (Object.keys(localStatusInfo).length > 0) {
+                                useFriendsStore.setState({ statusInfo: localStatusInfo });
                             }
                         }
 

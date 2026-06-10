@@ -44,10 +44,24 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
 
         // SILENT LOCAL LOAD FIRST
         if (db && existingItems.length === 0) {
-            const [localConv, localBlocked] = await Promise.all([
+            const { getLocalStatuses } = require('@/lib/localDb');
+            const [localConv, localBlocked, localStatuses] = await Promise.all([
                 getLocalConversations(db),
-                getLocalBlocks(db, userId)
+                getLocalBlocks(db, userId),
+                getLocalStatuses(db)
             ]);
+
+            let localStatusInfo: Record<string, any> = {};
+            if (localStatuses && localStatuses.length > 0) {
+                localStatuses.forEach((s: any) => {
+                    if (s.is_deleted === 1 || s.is_deleted === true || s.is_deleted === '1') return;
+                    if (!localStatusInfo[s.user_id]) {
+                        localStatusInfo[s.user_id] = { count: 0, viewedCount: 0 };
+                    }
+                    localStatusInfo[s.user_id].count++;
+                });
+                set({ statusInfo: localStatusInfo });
+            }
 
             if (localConv && localConv.length > 0) {
                 const filteredLocalConv = localConv.filter((c: any) => c.id !== userId);
