@@ -10,7 +10,12 @@ let _dbInstance: SQLite.SQLiteDatabase | null = null;
 export const getDb = () => {
   if (Platform.OS === 'web') return null;
   if (!_dbInstance) {
-    _dbInstance = SQLite.openDatabaseSync(DB_NAME);
+    try {
+      _dbInstance = SQLite.openDatabaseSync(DB_NAME);
+    } catch (e) {
+      console.error('[SQLite] Failed to open database:', e);
+      return null;
+    }
   }
   return _dbInstance;
 };
@@ -18,24 +23,30 @@ export const getDb = () => {
 // Initialize tables
 export const setupDatabase = () => {
   const db = getDb();
+  if (!db) return; // ← null guard: web or open failure
   
-  // Note: This only initializes the generic app_cache table. 
-  // Main app tables (messages, profiles) are handled separately via useDbStore -> initDatabase.
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS app_cache (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-  `);
+  try {
+    // Note: This only initializes the generic app_cache table. 
+    // Main app tables (messages, profiles) are handled separately via useDbStore -> initDatabase.
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS app_cache (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
 
-  if (__DEV__) console.log('[SQLite Cache] Database initialized successfully');
+    if (__DEV__) console.log('[SQLite Cache] Database initialized successfully');
+  } catch (e) {
+    console.error('[SQLite Cache] Failed to initialize database:', e);
+  }
 };
 
 // Save any JSON data to cache
 export const saveToCache = (key: string, data: any) => {
   try {
     const db = getDb();
+    if (!db) return; // ← null guard
     const timestamp = Date.now();
     const jsonValue = JSON.stringify(data);
     
@@ -57,6 +68,7 @@ export const saveToCache = (key: string, data: any) => {
 export const getFromCache = (key: string) => {
   try {
     const db = getDb();
+    if (!db) return null; // ← null guard
     const row: any = db.getFirstSync(`SELECT value, updated_at FROM app_cache WHERE key = ?`, [key]);
     
     if (row && row.value) {
@@ -79,9 +91,11 @@ export const getFromCache = (key: string) => {
 export const clearAllCache = () => {
   try {
     const db = getDb();
+    if (!db) return; // ← null guard
     db.runSync(`DELETE FROM app_cache`);
     if (__DEV__) console.log('[SQLite Cache] Successfully cleared all cache for logout');
   } catch (error) {
     if (__DEV__) console.error(`[SQLite Cache] Error clearing cache:`, error);
   }
 };
+

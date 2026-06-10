@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/useAuthStore';
-
 export const sendFriendRequest = async (currentUserId: string, targetFriendId: string) => {
+    const { useAuthStore } = require('@/store/useAuthStore');
     const { error } = await supabase
         .from('friend_requests')
         .insert([{
