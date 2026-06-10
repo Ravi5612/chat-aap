@@ -224,7 +224,6 @@ export default function ChatScreen() {
                 friendName={friendName as string}
                 infoVisible={infoVisible}
                 setInfoVisible={setInfoVisible}
-                allowDownload={friendData?.friend?.allow_status_download ?? true}
             />
 
             <DisappearingMessagesModal
