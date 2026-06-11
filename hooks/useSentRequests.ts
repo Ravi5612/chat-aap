@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Alert, DeviceEventEmitter } from 'react-native';
 import { getFromCache, saveToCache } from '@/lib/database';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export const useSentRequests = () => {
+    const { user } = useAuthStore();
     const [sentRequests, setSentRequests] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -11,7 +13,6 @@ export const useSentRequests = () => {
         let channel: any;
 
         const init = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
             loadSentRequests();
@@ -40,21 +41,21 @@ export const useSentRequests = () => {
             if (channel) supabase.removeChannel(channel);
             eventSub.remove();
         };
-    }, []);
+    }, [user?.id]);
 
     const loadSentRequests = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+        if (!user) return;
 
-            // Load from cache instantly
-            try {
-                const cached = getFromCache(`sent_requests_${user.id}`);
-                if (cached) {
-                    setSentRequests(cached);
-                    setLoading(false);
-                }
-            } catch(e) {}
+        // Load from cache instantly
+        try {
+            const cached = getFromCache(`sent_requests_${user.id}`);
+            if (cached) {
+                setSentRequests(cached);
+                setLoading(false);
+            }
+        } catch(e) {}
+
+        try {
 
             const { data, error } = await supabase
                 .from('friend_requests')
