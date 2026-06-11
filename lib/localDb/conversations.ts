@@ -41,6 +41,7 @@ export const getLocalConversations = async (db: SQLite.SQLiteDatabase) => {
             isFavorite: row.is_favorite === 1,
             isArchived: row.is_archived === 1,
             isUnfriended: row.is_unfriended === 1,
+            isFriend: row.is_unfriended !== 1,
             isHidden: row.is_hidden === 1,
             lastActivity: row.last_message_at
         }));

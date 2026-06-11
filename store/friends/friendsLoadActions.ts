@@ -67,6 +67,8 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
                 const filteredLocalConv = localConv.filter((c: any) => c.id !== userId);
                 set({ 
                     combinedItems: filteredLocalConv,
+                    friends: filteredLocalConv.filter((c: any) => !c.isGroup),
+                    groups: filteredLocalConv.filter((c: any) => c.isGroup),
                     lockedChatIds: filteredLocalConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
                     loading: false 
                 });
