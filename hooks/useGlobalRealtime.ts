@@ -4,7 +4,7 @@ import { useMessageSync } from './realtime/useMessageSync';
 import { usePresenceSync } from './realtime/usePresenceSync';
 
 export const useGlobalRealtime = (userId: string | null) => {
-    const { profile } = useAuthStore();
+    const profile = useAuthStore(state => state.profile);
 
     // Use a ref for the latest profile to avoid re-subscribing too often
     // and to ensure the latest tone is used in the callback.

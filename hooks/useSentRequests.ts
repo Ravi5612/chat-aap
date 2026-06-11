@@ -5,7 +5,7 @@ import { getFromCache, saveToCache } from '@/lib/database';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export const useSentRequests = () => {
-    const { user } = useAuthStore();
+    const user = useAuthStore(state => state.user);
     const [sentRequests, setSentRequests] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 

@@ -9,7 +9,8 @@ import { DP_Privacy } from '@/utils/privacyHelper';
 
 export default function ProfilePhotoPrivacyScreen() {
     const router = useRouter();
-    const { profile, updateProfile } = useAuthStore();
+    const profile = useAuthStore(state => state.profile);
+    const updateProfile = useAuthStore(state => state.updateProfile);
     
     // Local state for instant UI updates
     const [privacy, setPrivacy] = useState<DP_Privacy>(profile?.dp_privacy || 'everyone');

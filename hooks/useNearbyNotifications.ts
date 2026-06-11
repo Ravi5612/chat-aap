@@ -21,8 +21,9 @@ const NEARBY_RADIUS_KM = 1.0; // 1 km circle (accurate)
 const NOTIFY_COOLDOWN_MS = 3600000; // 1 hour
 
 export const useNearbyNotifications = () => {
-    const { user: currentUser, profile } = useAuthStore();
-    const { currentLocation } = useLocationStore();
+    const currentUser = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
+    const currentLocation = useLocationStore(state => state.currentLocation);
 
     // Refs — stable across renders, no re-trigger of useEffect
     const lastNotifiedIds = useRef<Set<string>>(new Set());

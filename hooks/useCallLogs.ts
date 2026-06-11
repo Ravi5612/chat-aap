@@ -14,7 +14,7 @@ import {
 export type { CallLog, Profile };
 
 export const useCallLogs = () => {
-    const { user: currentUser } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
     const [logs, setLogs] = useState<CallLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);

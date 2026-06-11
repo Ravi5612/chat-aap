@@ -56,7 +56,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 }
 
 export default function RootLayout() {
-  const { initializing } = useAuthStore();
+  const initializing = useAuthStore(state => state.initializing);
   
   // Activate Nearby Tracking & Notifications
   useNearbyNotifications();

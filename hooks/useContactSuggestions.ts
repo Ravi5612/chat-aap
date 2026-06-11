@@ -11,7 +11,7 @@ const memoryCache: Record<string, { data: any[], timestamp: number }> = {};
 const CACHE_DURATION = 1000 * 60 * 5; // 5 minutes
 
 export const useContactSuggestions = () => {
-    const { user: currentUser } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
     const currentUserId = currentUser?.id || '';
 
     // Initialize state from memory cache if available for this specific user

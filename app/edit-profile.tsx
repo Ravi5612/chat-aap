@@ -14,7 +14,10 @@ import { getPendingProfileSync } from '@/lib/localDb';
 
 export default function EditProfileScreen() {
     const router = useRouter();
-    const { profile, updateProfile, syncProfile, syncPendingProfile } = useAuthStore();
+    const profile = useAuthStore(state => state.profile);
+    const updateProfile = useAuthStore(state => state.updateProfile);
+    const syncProfile = useAuthStore(state => state.syncProfile);
+    const syncPendingProfile = useAuthStore(state => state.syncPendingProfile);
     const [loading, setLoading] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
 

@@ -7,8 +7,11 @@ import { useAuthStore } from '@/store/useAuthStore';
 const VIBRATION_PATTERN = [0, 1000, 500, 1000, 500, 1000, 500, 1000];
 
 export const useEmergencyReceiver = () => {
-    const { user } = useAuthStore();
-    const { activeEmergency, isVibrating, stopVibration, setActiveEmergency } = useEmergencyStore();
+    const user = useAuthStore(state => state.user);
+    const activeEmergency = useEmergencyStore(state => state.activeEmergency);
+    const isVibrating = useEmergencyStore(state => state.isVibrating);
+    const stopVibration = useEmergencyStore(state => state.stopVibration);
+    const setActiveEmergency = useEmergencyStore(state => state.setActiveEmergency);
     const [isHelping, setIsHelping] = useState(false);
 
     useEffect(() => {

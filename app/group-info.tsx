@@ -18,7 +18,7 @@ export default function GroupInfoScreen() {
     const { groupId, groupName, groupImage } = params;
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { user: currentUser } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
 
     const [addModalVisible, setAddModalVisible] = useState(false);
 

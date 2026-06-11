@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 
 export const useChangePassword = () => {
     const router = useRouter();
-    const { user } = useAuthStore();
+    const user = useAuthStore(state => state.user);
     const [loading, setLoading] = useState(false);
 
     // Normal flow fields

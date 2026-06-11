@@ -5,7 +5,11 @@ import { useRouter } from 'expo-router';
 
 export const useGroupMembers = (groupId: string, currentUser: any) => {
     const router = useRouter();
-    const { fetchGroupMembers, addGroupMember, removeGroupMember, makeGroupAdmin, leaveGroup } = useFriendsStore();
+    const fetchGroupMembers = useFriendsStore(state => state.fetchGroupMembers);
+    const addGroupMember = useFriendsStore(state => state.addGroupMember);
+    const removeGroupMember = useFriendsStore(state => state.removeGroupMember);
+    const makeGroupAdmin = useFriendsStore(state => state.makeGroupAdmin);
+    const leaveGroup = useFriendsStore(state => state.leaveGroup);
 
     const [members, setMembers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);

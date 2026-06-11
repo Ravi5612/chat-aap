@@ -9,7 +9,8 @@ type AboutPrivacy = 'everyone' | 'friends' | 'nobody';
 
 export default function AboutPrivacyScreen() {
     const router = useRouter();
-    const { profile, updateProfile } = useAuthStore();
+    const profile = useAuthStore(state => state.profile);
+    const updateProfile = useAuthStore(state => state.updateProfile);
     
     // Local state for instant UI updates
     const [privacy, setPrivacy] = useState<AboutPrivacy>(profile?.about_privacy || 'everyone');

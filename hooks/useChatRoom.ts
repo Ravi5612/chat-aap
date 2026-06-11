@@ -5,23 +5,21 @@ import { useChatMembership } from './chatRoom/useChatMembership';
 import { useChatRealtime } from './chatRoom/useChatRealtime';
 
 export const useChatRoom = (friendId: string, currentUserArg: any, isGroup: boolean = false) => {
-    const { user: currentUser } = useAuthStore();
-    const {
-        messages,
-        loading,
-        loadingMore,
-        hasMore,
-        isTyping,
-        flyingEmoji,
-        loadMessages,
-        loadMoreMessages,
-        sendMessage,
-        reactToMessage,
-        saveEdit,
-        deleteMessage,
-        forwardMessage,
-        setTypingStatus,
-    } = useChatStore();
+    const currentUser = useAuthStore(state => state.user);
+    const messages = useChatStore(state => state.messages);
+    const loading = useChatStore(state => state.loading);
+    const loadingMore = useChatStore(state => state.loadingMore);
+    const hasMore = useChatStore(state => state.hasMore);
+    const isTyping = useChatStore(state => state.isTyping);
+    const flyingEmoji = useChatStore(state => state.flyingEmoji);
+    const loadMessages = useChatStore(state => state.loadMessages);
+    const loadMoreMessages = useChatStore(state => state.loadMoreMessages);
+    const sendMessage = useChatStore(state => state.sendMessage);
+    const reactToMessage = useChatStore(state => state.reactToMessage);
+    const saveEdit = useChatStore(state => state.saveEdit);
+    const deleteMessage = useChatStore(state => state.deleteMessage);
+    const forwardMessage = useChatStore(state => state.forwardMessage);
+    const setTypingStatus = useChatStore(state => state.setTypingStatus);
 
     // 1. Membership Logic
     const isMember = useChatMembership(friendId, currentUser, isGroup);

@@ -62,7 +62,8 @@ const syncAllPendingDeliveredReceiptsGlobal = async (myUserId: string) => {
 export const BackgroundServices = () => {
     const session = useAuthStore(state => state.session);
     const combinedItems = useFriendsStore(state => state.combinedItems);
-    const { currentNotification, clearNotification } = useNotificationStore();
+    const currentNotification = useNotificationStore(state => state.currentNotification);
+    const clearNotification = useNotificationStore(state => state.clearNotification);
     const initializeDb = useDbStore(state => state.initialize);
 
     // Remove redundant initializeDb call here, it's already handled in _layout.tsx
@@ -114,7 +115,8 @@ export const BackgroundServices = () => {
         handleStartCall
     } = useCallManager(session?.user, memoizedFriends, true, profile);
     
-    const { isMinimized, setMinimized } = useCallStore();
+    const isMinimized = useCallStore(state => state.isMinimized);
+    const setMinimized = useCallStore(state => state.setMinimized);
 
     if (!session?.user) return null;
 

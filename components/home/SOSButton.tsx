@@ -8,7 +8,8 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-na
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 export default function SOSButton() {
-    const { user, profile } = useAuthStore();
+    const user = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
     const [modalVisible, setModalVisible] = useState(false);
     const [isSending, setIsSending] = useState(false);
     const [sharePhone, setSharePhone] = useState(true);

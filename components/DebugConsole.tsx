@@ -4,7 +4,10 @@ import { useDebugStore } from '@/store/useDebugStore';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function DebugConsole() {
-    const { logs, isVisible, toggleVisible, clearLogs } = useDebugStore();
+    const logs = useDebugStore(state => state.logs);
+    const isVisible = useDebugStore(state => state.isVisible);
+    const toggleVisible = useDebugStore(state => state.toggleVisible);
+    const clearLogs = useDebugStore(state => state.clearLogs);
     const scrollViewRef = useRef<ScrollView>(null);
 
     useEffect(() => {

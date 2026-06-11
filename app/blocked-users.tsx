@@ -11,8 +11,9 @@ import * as Haptics from 'expo-haptics';
 
 export default function BlockedUsersScreen() {
     const router = useRouter();
-    const { user: currentUser } = useAuthStore();
-    const { blockedUserIds, unblockUser } = useFriendsStore();
+    const currentUser = useAuthStore(state => state.user);
+    const blockedUserIds = useFriendsStore(state => state.blockedUserIds);
+    const unblockUser = useFriendsStore(state => state.unblockUser);
     const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 

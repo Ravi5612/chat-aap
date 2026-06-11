@@ -15,8 +15,9 @@ export default function NewGroupScreen() {
     const params = useLocalSearchParams();
     const initialMemberId = params.initialMemberId as string;
 
-    const { user: currentUser } = useAuthStore();
-    const { friends, loadFriends } = useFriendsStore();
+    const currentUser = useAuthStore(state => state.user);
+    const friends = useFriendsStore(state => state.friends);
+    const loadFriends = useFriendsStore(state => state.loadFriends);
 
     const [groupName, setGroupName] = useState('');
     const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set(initialMemberId ? [initialMemberId] : []));

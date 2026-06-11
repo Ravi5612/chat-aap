@@ -9,7 +9,8 @@ import { initializeX25519Keys } from '@/utils/chatCrypto';
 import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 
 export const useAuthInitialization = () => {
-    const { setSession, setInitializing } = useAuthStore();
+    const setSession = useAuthStore(state => state.setSession);
+    const setInitializing = useAuthStore(state => state.setInitializing);
     const [bootStatus, setBootStatus] = useState('Starting...');
     const [debugLogs, setDebugLogs] = useState<string[]>([]);
     

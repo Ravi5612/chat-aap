@@ -4,17 +4,15 @@ import { useFriendsStore } from '@/store/useFriendsStore';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export const useFriends = () => {
-    const { user: currentUser } = useAuthStore();
-    const {
-        friends,
-        groups,
-        combinedItems,
-        myStatuses,
-        statusInfo,
-        loading,
-        error,
-        loadFriends
-    } = useFriendsStore();
+    const currentUser = useAuthStore(state => state.user);
+    const friends = useFriendsStore(state => state.friends);
+    const groups = useFriendsStore(state => state.groups);
+    const combinedItems = useFriendsStore(state => state.combinedItems);
+    const myStatuses = useFriendsStore(state => state.myStatuses);
+    const statusInfo = useFriendsStore(state => state.statusInfo);
+    const loading = useFriendsStore(state => state.loading);
+    const error = useFriendsStore(state => state.error);
+    const loadFriends = useFriendsStore(state => state.loadFriends);
 
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 

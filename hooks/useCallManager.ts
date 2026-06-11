@@ -14,7 +14,10 @@ import { useCallNotifications } from './calls/useCallNotifications';
 import { useCallSignalingListener } from './calls/useCallSignalingListener';
 
 export const useCallManager = (currentUser: any, combinedItems: any[], isListener = true, profile: any = null) => {
-    const { callSession, setCallSession, setCallActive, setCallEnded } = useCallStore();
+    const callSession = useCallStore(state => state.callSession);
+    const setCallSession = useCallStore(state => state.setCallSession);
+    const setCallActive = useCallStore(state => state.setCallActive);
+    const setCallEnded = useCallStore(state => state.setCallEnded);
     
     const combinedItemsRef = useRef(combinedItems);
     useEffect(() => { combinedItemsRef.current = combinedItems; }, [combinedItems]);

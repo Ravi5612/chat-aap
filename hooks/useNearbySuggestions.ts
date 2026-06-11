@@ -19,9 +19,11 @@ const NEARBY_RADIUS_KM = 1.0;
 const REFRESH_INTERVAL_MS = 60000; // 1 minute smart poll
 
 export const useNearbySuggestions = () => {
-    const { user: currentUser, profile } = useAuthStore();
+    const currentUser = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
     const currentUserId = currentUser?.id || '';
-    const { currentLocation, startTracking } = useLocationStore();
+    const currentLocation = useLocationStore(state => state.currentLocation);
+    const startTracking = useLocationStore(state => state.startTracking);
     
     const [nearbyPeople, setNearbyPeople] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);

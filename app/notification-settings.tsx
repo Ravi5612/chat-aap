@@ -26,7 +26,10 @@ const CALL_TONES = [
 
 export default function NotificationSettingsScreen() {
     const router = useRouter();
-    const { user, profile, updateProfile, syncProfile } = useAuthStore();
+    const user = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
+    const updateProfile = useAuthStore(state => state.updateProfile);
+    const syncProfile = useAuthStore(state => state.syncProfile);
     
     const { playingId, playSound, stopSound } = useTonePlayer();
     const { saving, handleSave, pickAndUploadTone } = useToneUploader(user, updateProfile);

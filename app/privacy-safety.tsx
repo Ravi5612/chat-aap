@@ -14,8 +14,9 @@ import { PasswordVerificationModal } from '@/components/privacy/PasswordVerifica
 
 export default function PrivacySafetyScreen() {
     const router = useRouter();
-    const { profile, updateProfile } = useAuthStore();
-    const { blockedUserIds } = useFriendsStore();
+    const profile = useAuthStore(state => state.profile);
+    const updateProfile = useAuthStore(state => state.updateProfile);
+    const blockedUserIds = useFriendsStore(state => state.blockedUserIds);
 
     const {
         trackerEnabled, showPasswordModal, setShowPasswordModal,

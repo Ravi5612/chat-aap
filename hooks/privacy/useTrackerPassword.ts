@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export const useTrackerPassword = () => {
-    const { user } = useAuthStore();
+    const user = useAuthStore(state => state.user);
     const [trackerEnabled, setTrackerEnabled] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [passwordInput, setPasswordInput] = useState('');

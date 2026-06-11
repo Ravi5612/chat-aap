@@ -18,8 +18,9 @@ const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon
 };
 
 export const useEmergencySystem = () => {
-    const { user, profile } = useAuthStore();
-    const { setActiveEmergency } = useEmergencyStore();
+    const user = useAuthStore(state => state.user);
+    const profile = useAuthStore(state => state.profile);
+    const setActiveEmergency = useEmergencyStore(state => state.setActiveEmergency);
 
     useEffect(() => {
         // Only run listener if user is logged in and is a warrior

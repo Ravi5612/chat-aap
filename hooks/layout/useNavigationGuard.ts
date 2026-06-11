@@ -4,7 +4,10 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 export const useNavigationGuard = (segments: string[], isMounted: boolean, rootNavigationKey: string | undefined) => {
     const router = useRouter();
-    const { session, initializing, profile, isRegistering } = useAuthStore();
+    const session = useAuthStore(state => state.session);
+    const initializing = useAuthStore(state => state.initializing);
+    const profile = useAuthStore(state => state.profile);
+    const isRegistering = useAuthStore(state => state.isRegistering);
 
     useEffect(() => {
         if (initializing || !isMounted || !rootNavigationKey || isRegistering) return;
