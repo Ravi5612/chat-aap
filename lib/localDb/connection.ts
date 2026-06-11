@@ -171,12 +171,29 @@ export const initDatabase = async () => {
             );
         `);
 
-        // 15. Create Indexes for Messages Table
+        // 15. Create Advanced Indexes for Maximum Performance
         await db.execAsync(`
+            -- Basic Indexes
             CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages (sender_id);
             CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages (receiver_id);
             CREATE INDEX IF NOT EXISTS idx_messages_group ON messages (group_id);
             CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at DESC);
+            
+            -- Composite Indexes for Messages (Fast Chat Load)
+            CREATE INDEX IF NOT EXISTS idx_messages_chat_time ON messages (sender_id, receiver_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_messages_group_time ON messages (group_id, created_at DESC);
+            
+            -- Indexes for Conversations (Fast Home Screen)
+            CREATE INDEX IF NOT EXISTS idx_conv_last_message_at ON conversations (last_message_at DESC);
+            
+            -- Indexes for Statuses (Fast Status Page)
+            CREATE INDEX IF NOT EXISTS idx_statuses_user_expires ON statuses (user_id, expires_at);
+            
+            -- Indexes for Call Logs
+            CREATE INDEX IF NOT EXISTS idx_call_logs_time ON call_logs (created_at DESC);
+            
+            -- Indexes for Expenses
+            CREATE INDEX IF NOT EXISTS idx_expenses_friend ON expenses (friend_id);
         `);
 
 
