@@ -135,7 +135,7 @@ export default function ChatScreen() {
             style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}
             enabled={Platform.OS === 'ios'}
         >
-            {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high"  cachePolicy="memory-disk" />}
+            {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high"  cachePolicy="memory" />}
             {wallpaper && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.2)' }]} />}
             <StatusBar barStyle="dark-content" />
             <Stack.Screen options={{ headerShown: false }} />

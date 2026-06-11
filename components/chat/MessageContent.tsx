@@ -143,11 +143,10 @@ const MessageContent = memo(({
                     <View style={styles.mediaContainer}>
                         <Image 
                             source={{ uri: (localImageUrl || imageUrl)?.trim() || '' }} 
-                            placeholder={localImageUrl ? { uri: localImageUrl.trim() } : null}
                             style={styles.mediaImage} 
                             contentFit="cover" 
                             transition={300}
-                            cachePolicy="memory-disk"
+                            cachePolicy="memory"
                         />
                         {imageLoading && uploadProgress === undefined && (
                             <View style={styles.mediaLoadingOverlay}>
