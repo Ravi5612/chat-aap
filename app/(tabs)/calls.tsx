@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, FlatList, ActivityIndicator, RefreshControl, Alert, Text } from 'react-native';
+import { View, ActivityIndicator, RefreshControl, Alert, Text } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { supabase } from '@/lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -134,10 +135,10 @@ export default function CallsScreen() {
                         <ActivityIndicator size="large" color="#F68537" />
                     </View>
                 ) : (
-                    <FlatList
+                    <FlashList
                         data={logs}
                         keyExtractor={(item) => item.id}
-                        contentContainerStyle={{ flexGrow: 1 }}
+                        contentContainerStyle={{ paddingBottom: 100 }}
                         refreshControl={
                             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#F68537']} />
                         }
@@ -147,10 +148,7 @@ export default function CallsScreen() {
                         onEndReachedThreshold={0.5}
                         ListEmptyComponent={<CallListEmptyState />}
                         ListFooterComponent={renderFooter}
-                        initialNumToRender={15}
-                        maxToRenderPerBatch={10}
-                        windowSize={10}
-                        removeClippedSubviews={true}
+                        estimatedItemSize={70}
                         renderItem={renderItem}
                     />
                 )}
