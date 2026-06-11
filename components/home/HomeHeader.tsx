@@ -1,10 +1,10 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, Platform, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { PRIMARY_COLOR, SECONDARY_COLOR } from '@/constants/Colors';
 import { GlassHeader } from '@/components/ui/GlassHeader';
 import { useRouter } from 'expo-router';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface HomeHeaderProps {
     profile: any;
@@ -12,8 +12,6 @@ interface HomeHeaderProps {
     pendingReceivedCount: number;
     unreadNotificationsCount: number;
 }
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const HomeHeader = memo(function HomeHeader({
     profile,
@@ -27,7 +25,9 @@ const HomeHeader = memo(function HomeHeader({
 
     const IS_ANDROID = Platform.OS === 'android';
     const THEME_COLOR = '#F68537';
+    // On Android: icon/text color is white (light) or light-gray (dark). On iOS: orange theme.
     const PRIMARY_COLOR = IS_ANDROID ? (isDark ? '#E5E7EB' : 'white') : THEME_COLOR;
+    // Search button background color
     const SECONDARY_COLOR = IS_ANDROID ? THEME_COLOR : (isDark ? '#111827' : 'white');
 
     const handleProfile = React.useCallback(() => router.push('/(tabs)/profile' as any), [router]);
@@ -35,7 +35,7 @@ const HomeHeader = memo(function HomeHeader({
     const handleSentRequests = React.useCallback(() => router.push('/sent-requests' as any), [router]);
     const handleFriendRequests = React.useCallback(() => router.push('/friend-requests' as any), [router]);
     const handleNotifications = React.useCallback(() => router.push('/notifications' as any), [router]);
-    
+
     // Determine the avatar source
     let avatarSource;
     if (profile?.avatar_url) {
@@ -43,7 +43,6 @@ const HomeHeader = memo(function HomeHeader({
     } else if (profile?.gender === 'female') {
         avatarSource = require('@/assets/images/default-avatar-female.jpg');
     } else {
-        // Default to male/other icon if not female or not specified
         avatarSource = require('@/assets/images/default-avatar-male.jpg');
     }
 
@@ -53,11 +52,11 @@ const HomeHeader = memo(function HomeHeader({
                 <TouchableOpacity onPress={handleProfile}>
                     <Image
                         source={avatarSource}
-                        style={styles.avatar}
+                        style={[styles.avatar, { borderColor: PRIMARY_COLOR }]}
                         cachePolicy="memory-disk"
                     />
                 </TouchableOpacity>
-                <Text style={styles.usernameText}>
+                <Text style={[styles.usernameText, { color: PRIMARY_COLOR }]}>
                     {profile?.username || 'user'}
                 </Text>
             </View>
@@ -66,11 +65,11 @@ const HomeHeader = memo(function HomeHeader({
                 {/* Search Button */}
                 <TouchableOpacity
                     onPress={handleSearch}
-                    style={styles.searchBtn}
+                    style={[styles.searchBtn, { backgroundColor: 'transparent', borderColor: PRIMARY_COLOR, borderWidth: 1.5 }]}
                 >
-                    <Text style={styles.searchText}>SEARCH</Text>
-                    <View style={styles.searchIconWrap}>
-                        <Ionicons name="search" size={12} color={PRIMARY_COLOR} />
+                    <Text style={[styles.searchText, { color: PRIMARY_COLOR }]}>SEARCH</Text>
+                    <View style={[styles.searchIconWrap, { backgroundColor: PRIMARY_COLOR }]}>
+                        <Ionicons name="search" size={12} color={SECONDARY_COLOR} />
                     </View>
                 </TouchableOpacity>
 
@@ -78,7 +77,7 @@ const HomeHeader = memo(function HomeHeader({
                 <TouchableOpacity onPress={handleSentRequests} style={styles.iconBtn}>
                     <Ionicons name="paper-plane-outline" size={26} color={PRIMARY_COLOR} />
                     {pendingSentCount > 0 && (
-                        <View style={styles.badge}>
+                        <View style={[styles.badge, { borderColor: PRIMARY_COLOR }]}>
                             <Text style={styles.badgeText}>{pendingSentCount}</Text>
                         </View>
                     )}
@@ -88,7 +87,7 @@ const HomeHeader = memo(function HomeHeader({
                 <TouchableOpacity onPress={handleFriendRequests} style={styles.iconBtn}>
                     <Ionicons name="people-outline" size={26} color={PRIMARY_COLOR} />
                     {pendingReceivedCount > 0 && (
-                        <View style={styles.badge}>
+                        <View style={[styles.badge, { borderColor: PRIMARY_COLOR }]}>
                             <Text style={styles.badgeText}>{pendingReceivedCount}</Text>
                         </View>
                     )}
@@ -115,17 +114,16 @@ const styles = StyleSheet.create({
         height: 48,
         borderRadius: 24,
         borderWidth: 2,
-        borderColor: PRIMARY_COLOR
+        borderColor: 'white' // overridden inline
     },
     usernameText: {
-        color: PRIMARY_COLOR,
+        color: 'white', // overridden inline
         fontWeight: 'bold',
         fontSize: 18,
         textTransform: 'lowercase'
     },
     rightContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     searchBtn: {
-        backgroundColor: PRIMARY_COLOR,
         borderRadius: 9999,
         paddingLeft: 10,
         paddingRight: 4,
@@ -135,13 +133,11 @@ const styles = StyleSheet.create({
         gap: 4
     },
     searchText: {
-        color: SECONDARY_COLOR,
         fontWeight: '900',
         fontSize: 9,
         letterSpacing: -0.5
     },
     searchIconWrap: {
-        backgroundColor: SECONDARY_COLOR,
         padding: 4,
         borderRadius: 9999
     },
@@ -157,8 +153,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 4,
-        borderWidth: 1,
-        borderColor: PRIMARY_COLOR
+        borderWidth: 1
     },
     notifBadge: {
         backgroundColor: '#EF4444',
