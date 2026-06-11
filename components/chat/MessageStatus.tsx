@@ -1,25 +1,24 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Easing } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing as ReanimatedEasing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 const PendingStatus = () => {
-    const spinValue = useRef(new Animated.Value(0)).current;
+    const spinValue = useSharedValue(0);
 
     useEffect(() => {
-        Animated.loop(
-            Animated.timing(spinValue, {
-                toValue: 1,
+        spinValue.value = withRepeat(
+            withTiming(360, {
                 duration: 1000,
-                easing: Easing.linear,
-                useNativeDriver: true,
-            })
-        ).start();
-    }, [spinValue]);
+                easing: ReanimatedEasing.linear,
+            }),
+            -1
+        );
+    }, []);
 
-    const spin = spinValue.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '360deg'],
-    });
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ rotate: `${spinValue.value}deg` }]
+    }));
 
     return (
         <View style={styles.pendingContainer}>
@@ -27,7 +26,7 @@ const PendingStatus = () => {
             <Animated.View
                 style={[
                     styles.spinnerRing,
-                    { transform: [{ rotate: spin }] }
+                    animatedStyle
                 ]}
             />
         </View>

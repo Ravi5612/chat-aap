@@ -1,5 +1,5 @@
 import React, { useCallback, memo } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, TouchableWithoutFeedback, Animated } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface FriendContextMenuProps {

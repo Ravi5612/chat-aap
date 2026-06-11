@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,26 +25,15 @@ interface InAppNotificationProps {
 export default function InAppNotification({ notification, onClose }: InAppNotificationProps) {
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const translateY = useRef(new Animated.Value(-150)).current;
-    const opacity = useRef(new Animated.Value(0)).current;
+    const translateY = useSharedValue(-150);
+    const opacity = useSharedValue(0);
     const timeoutRef = useRef<any>(null);
 
     useEffect(() => {
         if (notification) {
             // Show animation
-            Animated.parallel([
-                Animated.spring(translateY, {
-                    toValue: insets.top + 10,
-                    useNativeDriver: true,
-                    tension: 50,
-                    friction: 8,
-                }),
-                Animated.timing(opacity, {
-                    toValue: 1,
-                    duration: 200,
-                    useNativeDriver: true,
-                }),
-            ]).start();
+            translateY.value = withSpring(insets.top + 10, { damping: 8, stiffness: 50 });
+            opacity.value = withTiming(1, { duration: 200 });
 
             // Auto hide after 4 seconds
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -58,19 +48,9 @@ export default function InAppNotification({ notification, onClose }: InAppNotifi
     }, [notification]);
 
     const hideNotification = () => {
-        Animated.parallel([
-            Animated.timing(translateY, {
-                toValue: -150,
-                duration: 300,
-                useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-                toValue: 0,
-                duration: 250,
-                useNativeDriver: true,
-            }),
-        ]).start(() => {
-            onClose();
+        translateY.value = withTiming(-150, { duration: 300 });
+        opacity.value = withTiming(0, { duration: 250 }, (finished) => {
+            if (finished) runOnJS(onClose)();
         });
     };
 
@@ -86,14 +66,16 @@ export default function InAppNotification({ notification, onClose }: InAppNotifi
 
     if (!notification) return null;
 
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: translateY.value }],
+        opacity: opacity.value,
+    }));
+
     return (
         <Animated.View 
             style={[
                 styles.container, 
-                { 
-                    transform: [{ translateY }],
-                    opacity 
-                }
+                animatedStyle
             ]}
         >
             <TouchableOpacity 

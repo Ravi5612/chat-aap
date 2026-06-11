@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Text, TouchableOpacity, View, Animated } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSequence, withDelay, interpolate, runOnJS } from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter as useExpoRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -30,7 +31,7 @@ export default function StatusViewer() {
     const [currentIndex, setCurrentIndex] = useState(parseInt(initialIndex as string || '0'));
     const [showViewers, setShowViewers] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
-    const toastAnim = useRef(new Animated.Value(0)).current;
+    const toastAnim = useSharedValue(0);
 
     // 1. Fetcher Hook
     const { statuses, setStatuses, loading, currentUser } = useStatusFetcher(userId as string, isArchive as string, date as string);
@@ -85,11 +86,12 @@ export default function StatusViewer() {
     // Toast
     const showToast = (message: string) => {
         setToastMessage(message);
-        Animated.sequence([
-            Animated.timing(toastAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-            Animated.delay(2000),
-            Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true })
-        ]).start(() => setToastMessage(''));
+        toastAnim.value = withSequence(
+            withTiming(1, { duration: 300 }),
+            withDelay(2000, withTiming(0, { duration: 300 }, (finished) => {
+                if (finished) runOnJS(setToastMessage)('');
+            }))
+        );
     };
 
     // Screenshot Prevention
@@ -173,6 +175,11 @@ export default function StatusViewer() {
         }
     };
 
+    const toastAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: toastAnim.value,
+        transform: [{ translateY: interpolate(toastAnim.value, [0, 1], [20, 0]) }]
+    }));
+
     return (
         <View style={{ flex: 1, backgroundColor: 'black' }}>
             <TouchableOpacity
@@ -214,7 +221,7 @@ export default function StatusViewer() {
             />
 
             {!!toastMessage && (
-                <Animated.View style={{ position: 'absolute', bottom: isOwner ? 60 : 120, left: 20, right: 20, alignItems: 'center', justifyContent: 'center', opacity: toastAnim, transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }], zIndex: 100 }}>
+                <Animated.View style={[{ position: 'absolute', bottom: isOwner ? 60 : 120, left: 20, right: 20, alignItems: 'center', justifyContent: 'center', zIndex: 100 }, toastAnimatedStyle]}>
                     <View style={{ backgroundColor: '#10B981', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 30, shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{toastMessage}</Text>
                     </View>
