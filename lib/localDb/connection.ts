@@ -85,7 +85,10 @@ export const initDatabase = async () => {
                 bio TEXT,
                 last_seen TEXT,
                 is_online INTEGER,
-                needs_sync INTEGER DEFAULT 0
+                needs_sync INTEGER DEFAULT 0,
+                email TEXT,
+                phone TEXT,
+                gender TEXT
             );
         `);
 
@@ -210,6 +213,20 @@ export const initDatabase = async () => {
         } catch (e) {
             // Column probably already exists, ignore
         }
+
+        // Migration: Ensure email, phone, gender exist in profiles
+        try {
+            await db.execAsync('ALTER TABLE profiles ADD COLUMN email TEXT;');
+            console.log('[DB] Migration: Added email to profiles');
+        } catch (e) { }
+        try {
+            await db.execAsync('ALTER TABLE profiles ADD COLUMN phone TEXT;');
+            console.log('[DB] Migration: Added phone to profiles');
+        } catch (e) { }
+        try {
+            await db.execAsync('ALTER TABLE profiles ADD COLUMN gender TEXT;');
+            console.log('[DB] Migration: Added gender to profiles');
+        } catch (e) { }
 
         // Migration: Ensure is_locked exists in conversations
         try {

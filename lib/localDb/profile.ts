@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 export const saveLocalProfile = async (db: SQLite.SQLiteDatabase, profile: any) => {
     try {
         await db.runAsync(
-            'INSERT OR REPLACE INTO profiles (id, username, full_name, avatar_url, bio, last_seen, is_online, needs_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT OR REPLACE INTO profiles (id, username, full_name, avatar_url, bio, last_seen, is_online, needs_sync, email, phone, gender) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 profile.id, 
                 profile.username || null, 
@@ -13,7 +13,10 @@ export const saveLocalProfile = async (db: SQLite.SQLiteDatabase, profile: any) 
                 profile.bio || null, 
                 profile.last_seen || null, 
                 profile.is_online ? 1 : 0,
-                profile.needs_sync ? 1 : 0
+                profile.needs_sync ? 1 : 0,
+                profile.email || null,
+                profile.phone || null,
+                profile.gender || null
             ]
         );
     } catch (error) {
@@ -42,6 +45,9 @@ export const updateLocalProfile = async (db: SQLite.SQLiteDatabase, profileData:
                 full_name = COALESCE(?, full_name), 
                 avatar_url = COALESCE(?, avatar_url), 
                 bio = COALESCE(?, bio),
+                email = COALESCE(?, email),
+                phone = COALESCE(?, phone),
+                gender = COALESCE(?, gender),
                 needs_sync = ?
              WHERE id = ?`,
             [
@@ -49,6 +55,9 @@ export const updateLocalProfile = async (db: SQLite.SQLiteDatabase, profileData:
                 profileData.full_name || null, 
                 profileData.avatar_url || null, 
                 profileData.bio || null,
+                profileData.email || null,
+                profileData.phone || null,
+                profileData.gender || null,
                 needsSync ? 1 : 0,
                 profileData.id
             ]
