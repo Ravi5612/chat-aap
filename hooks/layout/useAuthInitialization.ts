@@ -67,6 +67,10 @@ export const useAuthInitialization = () => {
                             }
                         }
 
+                        // 🔥 FAST BOOT: Hide Splash Screen immediately after local cache is loaded!
+                        setInitializing(false);
+                        useAuthStore.getState().setInitializing(false);
+
                         await useAuthStore.getState().syncProfile();
                         await useFriendsStore.getState().fetchBlockedUsers(cachedSession.user.id);
                         didFetchCache = true;
