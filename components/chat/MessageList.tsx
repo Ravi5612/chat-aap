@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
-import { FlatList, View, Platform, UIManager, ActivityIndicator } from 'react-native';
+import { View, Platform, UIManager, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import MessageItem from './MessageItem';
 import { useChatStore } from '@/store/useChatStore';
 import { SystemMessage, DateSeparator, ScrollToBottomButton } from './MessageListItems';
@@ -69,8 +70,8 @@ export default React.memo(function MessageList({
 
     return (
         <View style={{ flex: 1 }}>
-            <FlatList
-                ref={flatListRef}
+            <FlashList
+                ref={flatListRef as any}
                 inverted={true}
                 data={groupedMessages}
                 keyExtractor={keyExtractor}
@@ -83,16 +84,7 @@ export default React.memo(function MessageList({
                 keyboardShouldPersistTaps="handled"
                 onScroll={handleScroll}
                 scrollEventThrottle={100}
-                onScrollToIndexFailed={(info) => {
-                    flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
-                    setTimeout(() => {
-                        flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
-                    }, 100);
-                }}
-                initialNumToRender={15}
-                maxToRenderPerBatch={10}
-                windowSize={10}
-                removeClippedSubviews={Platform.OS === 'android'}
+                estimatedItemSize={70}
             />
 
             {showScrollBtn && (

@@ -1,4 +1,5 @@
-import { View, FlatList, RefreshControl, AppState, AppStateStatus } from 'react-native';
+import { View, RefreshControl, AppState, AppStateStatus } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import FriendListItem from '@/components/chat/FriendListItem';
@@ -144,8 +145,8 @@ function HomeScreen() {
                     />
                 </ComponentErrorBoundary>
 
-                <ComponentErrorBoundary fallbackName="FlatList">
-                    <FlatList
+                <ComponentErrorBoundary fallbackName="FlashList">
+                    <FlashList
                         style={{ flex: 1 }}
                         data={filteredItems}
                         keyExtractor={(item) => {
@@ -191,10 +192,7 @@ function HomeScreen() {
                             </ComponentErrorBoundary>
                         }
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />}
-                        initialNumToRender={15}
-                        maxToRenderPerBatch={10}
-                        windowSize={10}
-                        removeClippedSubviews={true}
+                        estimatedItemSize={76}
                     />
                 </ComponentErrorBoundary>
 
