@@ -1,4 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { Alert } from 'react-native';
+import * as Network from 'expo-network';
 import { useFriendsStore } from '@/store/useFriendsStore';
 import { useCallStore } from '@/store/useCallStore';
 import { cancelOutgoingCall } from '@/utils/notifeeCalling';
@@ -40,6 +42,13 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
     );
 
     const handleStartCall = async (friend: any, type: 'audio' | 'video' = 'video', isGroup: boolean = false) => {
+        const networkState = await Network.getNetworkStateAsync();
+        // isInternetReachable can be null on some devices, so we primarily check isConnected
+        if (!networkState.isConnected) {
+            Alert.alert('No Internet', 'Please check your internet connection and try calling again.');
+            return;
+        }
+
         if (__DEV__) console.log('[CALL_ACTION] Starting call to:', friend.name, 'Type:', type, 'IsGroup:', isGroup);
         
         setCallSession({
