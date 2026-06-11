@@ -7,30 +7,27 @@ export const useCallDragGesture = (toggleSwap: () => void) => {
     const translateY = useSharedValue(0);
     const offsetX = useSharedValue(0);
     const offsetY = useSharedValue(0);
-    // Track whether the finger moved significantly (drag vs tap)
-    const didDrag = useSharedValue(false);
 
     const panGesture = useMemo(() => Gesture.Pan()
-        .onStart(() => {
-            didDrag.value = false;
-        })
         .onUpdate((event) => {
-            // If moved more than 8px consider it a drag, not a tap
-            if (Math.abs(event.translationX) > 8 || Math.abs(event.translationY) > 8) {
-                didDrag.value = true;
-            }
             translateX.value = offsetX.value + event.translationX;
             translateY.value = offsetY.value + event.translationY;
         })
         .onEnd(() => {
             offsetX.value = translateX.value;
             offsetY.value = translateY.value;
-            // If barely moved → treat as tap → swap videos
-            if (!didDrag.value) {
-                runOnJS(toggleSwap)();
-            }
         }),
-    [translateX, translateY, offsetX, offsetY, didDrag, toggleSwap]);
+    [translateX, translateY, offsetX, offsetY]);
+
+    const tapGesture = useMemo(() => Gesture.Tap()
+        .onEnd(() => {
+            runOnJS(toggleSwap)();
+        }),
+    [toggleSwap]);
+
+    const composedGesture = useMemo(() => 
+        Gesture.Simultaneous(panGesture, tapGesture),
+    [panGesture, tapGesture]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
@@ -39,5 +36,5 @@ export const useCallDragGesture = (toggleSwap: () => void) => {
         ],
     }));
 
-    return { composedGesture: panGesture, animatedStyle };
+    return { composedGesture, animatedStyle };
 };

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, TouchableWithoutFeedback, Modal, StyleShe
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import Animated from 'react-native-reanimated';
-import { GestureDetector } from 'react-native-gesture-handler';
+import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import AgoraVideoView from './AgoraVideoView';
 import { useAgora } from '@/hooks/useAgora';
 import { useWindowDimensions } from 'react-native';
@@ -152,7 +152,7 @@ export default function CallScreen({
                 else onEndCall();
             }}
         >
-            <View style={styles.container}>
+            <GestureHandlerRootView style={styles.container}>
                 {/* Minimize Button */}
                 {!isInPipMode && callState !== 'ended' && onMinimize && showControls && (
                     <TouchableOpacity style={styles.minimizeButton} onPress={onMinimize}>
@@ -267,7 +267,7 @@ export default function CallScreen({
                         )}
                     </View>
                 )}
-            </View>
+            </GestureHandlerRootView>
         </Modal>
     );
 }
