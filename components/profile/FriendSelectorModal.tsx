@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFriends } from '@/hooks/useFriends';
@@ -102,7 +103,7 @@ export default function FriendSelectorModal({
                         <Text style={styles.emptyText}>You don't have any friends yet.</Text>
                     </View>
                 ) : (
-                    <FlatList
+                    <FlashList
                         data={filteredFriends}
                         keyExtractor={(item) => item.friendId}
                         contentContainerStyle={{ padding: 16 }}
@@ -135,6 +136,7 @@ export default function FriendSelectorModal({
                         ListEmptyComponent={
                             <Text style={styles.noResultsText}>No friends found matching "{searchQuery}"</Text>
                         }
+                        estimatedItemSize={75}
                     />
                 )}
             </View>
