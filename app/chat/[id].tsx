@@ -134,7 +134,7 @@ export default function ChatScreen() {
             keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             style={{ flex: 1, backgroundColor: wallpaper ? '#000' : '#EBD8B7' }}
         >
-            {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high" />}
+            {wallpaper && <Image source={{ uri: wallpaper }} style={StyleSheet.absoluteFillObject} contentFit="cover" priority="high"  cachePolicy="memory-disk" />}
             {wallpaper && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.2)' }]} />}
             <StatusBar barStyle="dark-content" />
             <Stack.Screen options={{ headerShown: false }} />

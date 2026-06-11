@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Modal, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, Modal, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -120,7 +121,7 @@ export default function MusicPicker({ visible, onClose, onSelectMusic }: MusicPi
         
         return (
             <View style={styles.songItem}>
-                <Image source={{ uri: item.artworkUrl100 }} style={styles.albumArt} />
+                <Image source={{ uri: item.artworkUrl100 }} style={styles.albumArt}  cachePolicy="memory-disk" />
                 <TouchableOpacity style={styles.songInfo} onPress={() => handleSelect(item)}>
                     <Text style={styles.songTitle} numberOfLines={1}>{item.trackName}</Text>
                     <Text style={styles.songArtist} numberOfLines={1}>{item.artistName}</Text>

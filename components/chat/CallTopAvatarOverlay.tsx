@@ -24,7 +24,7 @@ export const CallTopAvatarOverlay = ({ friend, callState }: Props) => {
     return (
         <View style={styles.topAvatarOverlay} pointerEvents="none">
             <View style={styles.smallAvatarContainer}>
-                <Image source={finalAvatarSource} style={styles.fullImage} contentFit="cover" />
+                <Image source={finalAvatarSource} style={styles.fullImage} contentFit="cover"  cachePolicy="memory-disk" />
             </View>
             <Text style={styles.topFriendName}>{friend?.name || friend?.username || 'Friend'}</Text>
             <Text style={styles.topCallStatus}>{callState === 'outgoing' ? 'Calling...' : 'Ringing...'}</Text>

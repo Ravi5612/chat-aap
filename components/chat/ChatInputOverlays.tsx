@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 interface EditingBannerProps {
@@ -40,7 +41,7 @@ export const SelectedImagePreview = memo(({ imageUri, onRemove, isVideo }: Selec
                     <Ionicons name="play-circle" size={32} color="white" />
                 </View>
             ) : (
-                <Image source={{ uri: imageUri }} style={styles.imageThumb} />
+                <Image source={{ uri: imageUri }} style={styles.imageThumb}  cachePolicy="memory-disk" />
             )}
             <TouchableOpacity onPress={onRemove} style={styles.removeBtn}>
                 <Ionicons name="close" size={16} color="white" />
@@ -69,8 +70,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16, paddingVertical: 8,
         backgroundColor: '#FFF7ED', borderBottomWidth: 1,
         borderBottomColor: 'rgba(246,133,55,0.3)',
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    },
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
     editingLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     editingBar: { width: 4, height: 40, backgroundColor: '#F68537', borderRadius: 9999, marginRight: 12 },
     flex1: { flex: 1 },

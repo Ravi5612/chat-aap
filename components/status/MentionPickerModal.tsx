@@ -58,7 +58,7 @@ export default function MentionPickerModal({
                                     onPress={() => handleToggle(friend)}
                                     style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}
                                 >
-                                    <Image source={friend.img || require('@/assets/images/default-avatar-male.jpg')} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                                    <Image source={friend.img || require('@/assets/images/default-avatar-male.jpg')} style={{ width: 44, height: 44, borderRadius: 22 }}  cachePolicy="memory-disk" />
                                     <Text style={{ flex: 1, marginLeft: 16, fontSize: 16, fontWeight: '600' }}>{friend.name}</Text>
                                     <Ionicons
                                         name={isSelected ? "checkbox" : "square-outline"}

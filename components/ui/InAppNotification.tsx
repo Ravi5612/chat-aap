@@ -106,7 +106,7 @@ export default function InAppNotification({ notification, onClose }: InAppNotifi
                         <Image 
                             source={{ uri: notification.image || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(notification.title)}&backgroundColor=F68537` }}
                             style={styles.avatar}
-                        />
+                         cachePolicy="memory-disk" />
                         <View style={styles.textContainer}>
                             <Text style={styles.title} numberOfLines={1}>{notification.title}</Text>
                             <Text style={styles.body} numberOfLines={2}>{notification.body}</Text>

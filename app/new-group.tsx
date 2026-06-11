@@ -1,4 +1,5 @@
-import { View, Text, TextInput, TouchableOpacity, FlatList, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
@@ -43,8 +44,7 @@ export default function NewGroupScreen() {
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 0.8,
-        });
+            quality: 0.8});
 
         if (!result.canceled) {
             setAvatarUri(result.assets[0].uri);
@@ -128,7 +128,7 @@ export default function NewGroupScreen() {
                 <Image
                     source={{ uri: item.img }}
                     style={{ width: 48, height: 48, borderRadius: 24, marginRight: 12 }}
-                />
+                 cachePolicy="memory-disk" />
                 <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.name}</Text>
                     <Text style={{ color: '#6B7280', fontSize: 12 }}>{item.email}</Text>
@@ -158,7 +158,7 @@ export default function NewGroupScreen() {
                 <TouchableOpacity onPress={handlePickImage} style={{ marginBottom: 16 }}>
                     <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                         {avatarUri ? (
-                            <Image source={{ uri: avatarUri }} style={{ width: 80, height: 80 }} />
+                            <Image source={{ uri: avatarUri }} style={{ width: 80, height: 80 }}  cachePolicy="memory-disk" />
                         ) : (
                             <Ionicons name="camera" size={32} color="#9CA3AF" />
                         )}

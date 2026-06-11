@@ -128,7 +128,7 @@ export default function AddStatus() {
                             />
                         ) : (
                             <View style={{ flex: 1 }}>
-                                <Image source={{ uri: selectedMedia.uri }} style={{ width: '100%', height: '100%', contentFit: 'contain' }} />
+                                <Image source={{ uri: selectedMedia.uri }} style={{ width: '100%', height: '100%', contentFit: 'contain' }}  cachePolicy="memory-disk" />
                                 
                                 <MusicPreviewSticker
                                     selectedMusic={selectedMusic}

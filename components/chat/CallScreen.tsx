@@ -101,7 +101,7 @@ export default function CallScreen({
             return (
                 <View style={styles.placeholderContainer}>
                     <View style={styles.avatarContainer}>
-                        <Image source={finalAvatarSource} style={styles.fullImage} contentFit="cover" />
+                        <Image source={finalAvatarSource} style={styles.fullImage} contentFit="cover"  cachePolicy="memory-disk" />
                     </View>
                     <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
                     <Text style={styles.callStatus}>{statusText}</Text>

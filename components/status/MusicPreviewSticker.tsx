@@ -34,7 +34,7 @@ export const MusicPreviewSticker: React.FC<Props> = ({
 
             {/* Music Sticker */}
             <View style={styles.musicSticker}>
-                <Image source={{ uri: selectedMusic.cover }} style={styles.musicStickerCover} />
+                <Image source={{ uri: selectedMusic.cover }} style={styles.musicStickerCover}  cachePolicy="memory-disk" />
                 <View style={{ marginLeft: 8, flex: 1 }}>
                     <Text style={styles.musicStickerTitle} numberOfLines={1}>{selectedMusic.title}</Text>
                     <Text style={styles.musicStickerArtist} numberOfLines={1}>{selectedMusic.artist}</Text>

@@ -119,7 +119,7 @@ const ChatHeader = memo(({
                     <Ionicons name="chevron-back" size={28} color="#F68537" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleProfilePress} style={styles.profileRow}>
-                    <Image source={avatarSource} style={styles.avatar} contentFit="cover" />
+                    <Image source={avatarSource} style={styles.avatar} contentFit="cover"  cachePolicy="memory-disk" />
                     <View>
                         <Text style={styles.friendName}>{friendName || 'User'}</Text>
                         <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>

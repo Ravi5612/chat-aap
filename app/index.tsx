@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/store/useAuthStore';
-import { View, Image } from 'react-native';
+import { View} from 'react-native';
+import { Image } from 'expo-image';
 import React from 'react';
 
 export default function Index() {
@@ -11,7 +12,7 @@ export default function Index() {
     if (initializing) {
         return (
             <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-                <Image source={require('../assets/images/logo.png')} style={{ width: 150, height: 150, resizeMode: 'contain' }} />
+                <Image source={require('../assets/images/logo.png')} style={{ width: 150, height: 150, resizeMode: 'contain' }}  cachePolicy="memory-disk" />
             </View>
         );
     }

@@ -36,7 +36,7 @@ const StatusThumbnail = React.memo(({
             <View style={[styles.fill, styles.centered, styles.videoBg]}>
                 {isValidUrl ? (
                     <>
-                        <Image source={mediaUrl} style={styles.absoluteFill} />
+                        <Image source={mediaUrl} style={styles.absoluteFill}  cachePolicy="memory-disk" />
                         <View style={styles.playIconWrapper}>
                             <Ionicons name="play" size={14} color="white" />
                         </View>
@@ -56,7 +56,7 @@ const StatusThumbnail = React.memo(({
     // Default: image
     return (
         <View style={[styles.fill, styles.relative]}>
-            <Image source={mediaUrl || ''} style={styles.fill} />
+            <Image source={mediaUrl || ''} style={styles.fill}  cachePolicy="memory-disk" />
             {isUploading && (
                 <View style={[styles.absoluteFill, styles.centered, styles.uploadingOverlayDark]}>
                     <ActivityIndicator size="small" color="white" />

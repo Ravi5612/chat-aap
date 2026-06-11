@@ -20,7 +20,7 @@ export const ContactRow = memo(({ user, sendRequest, cancelRequest }: { user: an
                 <Image 
                     source={user.avatar_url} 
                     style={styles.avatar}
-                />
+                 cachePolicy="memory-disk" />
             ) : (
                 <View style={styles.initialsAvatar}>
                     <Text style={styles.initialsText}>

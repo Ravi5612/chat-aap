@@ -33,7 +33,7 @@ const FriendItem = memo(({
             style={styles.friendItem}
         >
             <View style={styles.avatarContainer}>
-                <Image source={{ uri: item.img }} style={styles.avatar} />
+                <Image source={{ uri: item.img }} style={styles.avatar}  cachePolicy="memory-disk" />
                 {isSelected && (
                     <View style={styles.selectionOverlay}>
                         <Ionicons name="checkmark-circle" size={24} color="#F68537" />

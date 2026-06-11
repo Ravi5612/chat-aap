@@ -101,6 +101,7 @@ const FriendListItemInner = memo(function FriendListItemInner({ friend, onClick,
                     style={({ pressed }) => [styles.avatarPressable, { opacity: pressed ? 0.8 : 1 }]}
                 >
                     <Image
+                        cachePolicy="memory-disk"
                         source={
                             friend.img 
                                 ? (typeof friend.img === 'string' ? { uri: friend.img } : friend.img)

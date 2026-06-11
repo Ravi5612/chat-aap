@@ -97,7 +97,7 @@ export default function StatusOverlay({
                             <Image
                                 source={{ uri: currentStatusUI.profiles?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentStatusUI.profiles?.username || 'User')}&backgroundColor=F68537` }}
                                 style={{ width: 42, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: 'white' }}
-                            />
+                             cachePolicy="memory-disk" />
                             <View style={{ marginLeft: 12 }}>
                                 <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{currentStatusUI.profiles?.username || 'Unknown'}</Text>
                                 <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>
@@ -137,7 +137,7 @@ export default function StatusOverlay({
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
                         {currentStatusUI.mentionedProfiles.map((profile: any, i: number) => (
                             <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }}>
-                                <Image source={{ uri: profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.username || 'User')}` }} style={{ width: 24, height: 24, borderRadius: 12, marginRight: 8 }} />
+                                <Image source={{ uri: profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.username || 'User')}` }} style={{ width: 24, height: 24, borderRadius: 12, marginRight: 8 }}  cachePolicy="memory-disk" />
                                 <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>{profile.username}</Text>
                             </View>
                         ))}
@@ -203,7 +203,7 @@ export default function StatusOverlay({
                                         <Image
                                             source={{ uri: item.profiles?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.profiles?.username || 'User')}` }}
                                             style={{ width: 48, height: 48, borderRadius: 24 }}
-                                        />
+                                         cachePolicy="memory-disk" />
                                         <View style={{ marginLeft: 16 }}>
                                             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1E293B' }}>{item.profiles?.username || 'Unknown User'}</Text>
                                             <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>

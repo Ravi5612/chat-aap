@@ -120,7 +120,7 @@ export default function FriendSelectorModal({
                                     <Image 
                                         source={profile?.avatar_url ? { uri: profile.avatar_url } : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile?.username || 'User')}&backgroundColor=F68537`}
                                         style={styles.avatar}
-                                    />
+                                     cachePolicy="memory-disk" />
                                     <View style={styles.friendInfo}>
                                         <Text style={styles.friendName}>{profile?.username || 'User'}</Text>
                                         {profile?.phone && (

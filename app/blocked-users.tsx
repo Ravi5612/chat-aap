@@ -75,7 +75,7 @@ export default function BlockedUsersScreen() {
                                         <Image 
                                             source={{ uri: user.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username || 'User')}&backgroundColor=F68537` }} 
                                             style={styles.avatar}
-                                        />
+                                         cachePolicy="memory-disk" />
                                         <View style={styles.info}>
                                             <Text style={styles.name}>{user.username || 'Unknown'}</Text>
                                             <Text style={styles.email}>{user.email || 'Email hidden'}</Text>

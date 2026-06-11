@@ -24,7 +24,7 @@ export const CallPlaceholder = memo(({ friend, callState, remoteUids }: { friend
     return (
         <View style={styles.placeholderContainer}>
             <View style={styles.avatarContainer}>
-                <Image source={getAvatarUri(friend)} style={styles.fullImage} />
+                <Image source={getAvatarUri(friend)} style={styles.fullImage}  cachePolicy="memory-disk" />
             </View>
             <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
             <Text style={styles.callStatus}>{statusText}</Text>
@@ -39,7 +39,7 @@ export const CallEndedOverlay = memo(({ friend, endReason, onRetry, onGoToChat }
         <View style={[StyleSheet.absoluteFillObject, styles.endedOverlay]}>
             <View style={styles.placeholderContainer}>
                 <View style={styles.avatarContainerEnded}>
-                    <Image source={getAvatarUri(friend)} style={styles.fullImage} />
+                    <Image source={getAvatarUri(friend)} style={styles.fullImage}  cachePolicy="memory-disk" />
                 </View>
                 <Text style={styles.friendName}>{friend?.name || friend?.username || 'Friend'}</Text>
                 <Text style={styles.endedStatus}>

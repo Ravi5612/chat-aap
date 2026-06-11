@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import * as MediaLibrary from 'expo-media-library';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,7 +52,7 @@ export const MediaGalleryBottomSheet = ({
                     toggleSelection(item);
                 }}
             >
-                <Image source={{ uri: item.uri }} style={[styles.galleryItemImage, isSelected && { opacity: 0.6 }]} />
+                <Image source={{ uri: item.uri }} style={[styles.galleryItemImage, isSelected && { opacity: 0.6 }]}  cachePolicy="memory-disk" />
                 {isSelected && (
                     <View style={styles.selectedOverlay}>
                         <Ionicons name="checkmark-circle" size={24} color="#F68537" />
@@ -104,8 +105,7 @@ export const MediaGalleryBottomSheet = ({
 
 const styles = StyleSheet.create({
     bottomSheetBackground: {
-        backgroundColor: '#000000',
-    },
+        backgroundColor: '#000000'},
     bottomSheetHandle: {
         backgroundColor: '#ffffff',
         opacity: 0.5,

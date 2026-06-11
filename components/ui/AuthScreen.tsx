@@ -2,11 +2,9 @@ import React from 'react';
 import {
     View,
     Text,
-    Image,
     KeyboardAvoidingView,
     Platform,
-    ScrollView,
-} from 'react-native';
+    ScrollView} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChatLoader from '@/components/ui/ChatLoader';

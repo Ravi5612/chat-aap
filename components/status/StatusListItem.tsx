@@ -20,7 +20,7 @@ export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPres
         <View style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#1E293B', alignItems: 'center', justifyContent: 'center' }}>
             {item.thumbnail ? (
                 <>
-                    <Image source={{ uri: item.thumbnail }} style={{ width: '100%', height: '100%', position: 'absolute' }} />
+                    <Image source={{ uri: item.thumbnail }} style={{ width: '100%', height: '100%', position: 'absolute' }}  cachePolicy="memory-disk" />
                     <View style={{ position: 'absolute', backgroundColor: 'rgba(0,0,0,0.3)', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
                         <Ionicons name="play" size={14} color="white" />
                     </View>
@@ -56,7 +56,7 @@ export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPres
                         <Image
                             source={{ uri: item.thumbnail || item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
                             style={styles.avatar}
-                        />
+                         cachePolicy="memory-disk" />
                     )}
                 </View>
                 <View style={styles.statusCountBadge}>
@@ -88,7 +88,7 @@ export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPres
                     <Image
                         source={{ uri: item.thumbnail || item.img }}
                         style={{ width: '100%', height: '100%' }}
-                    />
+                     cachePolicy="memory-disk" />
                 )}
             </View>
         </TouchableOpacity>

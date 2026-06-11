@@ -1,4 +1,5 @@
-import { View, Text, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert, DeviceEventEmitter } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, Alert, DeviceEventEmitter } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
