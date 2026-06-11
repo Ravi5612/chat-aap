@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriends } from '@/hooks/useFriends';
@@ -104,7 +105,7 @@ export default function StatusScreen() {
     return (
         <View style={{ flex: 1 }} {...swipeHandlers} collapsable={false}>
             <View style={[styles.container, { paddingTop: insets.top }]}>
-                <FlatList
+                <FlashList
                     data={friendsWithStatus}
                     keyExtractor={(item) => item.id}
                     renderItem={renderItem}
@@ -114,10 +115,7 @@ export default function StatusScreen() {
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F68537" />
                     }
                     contentContainerStyle={{ paddingBottom: 40 }}
-                    initialNumToRender={10}
-                    maxToRenderPerBatch={10}
-                    windowSize={5}
-                    removeClippedSubviews={true}
+                    estimatedItemSize={80}
                 />
             </View>
         </View>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Modal, TextInput, TouchableOpacity, FlatList, Image, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, Modal, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
@@ -173,7 +174,7 @@ export default function MusicPicker({ visible, onClose, onSelectMusic }: MusicPi
                         <ActivityIndicator size="large" color="#F68537" />
                     </View>
                 ) : (
-                    <FlatList
+                    <FlashList
                         data={results}
                         keyExtractor={(item, index) => item.trackId ? item.trackId.toString() : index.toString()}
                         renderItem={renderItem}
@@ -188,6 +189,7 @@ export default function MusicPicker({ visible, onClose, onSelectMusic }: MusicPi
                                 )}
                             </View>
                         )}
+                        estimatedItemSize={70}
                     />
                 )}
             </View>
