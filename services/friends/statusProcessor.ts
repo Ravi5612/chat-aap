@@ -99,6 +99,7 @@ export async function processMyStatuses(
     const decryptedMyStatuses = await Promise.all((myAllStatuses || []).map(async (s: any) => {
         let decryptedContent = s.content;
         let decryptedMediaUrl = s.media_url;
+        let decryptedAudioUrl = s.audio_url;
 
         let statusKey = null;
         if (s.encrypted_keys && s.encrypted_keys[userId] && myProfile?.public_key) {
@@ -119,9 +120,14 @@ export async function processMyStatuses(
                     decryptedMediaUrl = await decryptText(s.media_url, statusKey);
                 } catch (e) { console.error('My status media decryption error:', e); }
             }
+            if (s.audio_url && s.audio_url.trim().startsWith('{')) {
+                try {
+                    decryptedAudioUrl = await decryptText(s.audio_url, statusKey);
+                } catch (e) { console.error('My status audio decryption error:', e); }
+            }
         }
 
-        return { ...s, content: decryptedContent, media_url: decryptedMediaUrl, statusKey };
+        return { ...s, content: decryptedContent, media_url: decryptedMediaUrl, audio_url: decryptedAudioUrl, statusKey };
     }));
 
     const groupedMyStatus: any = { active: [] };

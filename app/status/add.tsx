@@ -138,6 +138,7 @@ export default function AddStatus() {
                                     musicDuration={musicDuration}
                                     toggleMusic={toggleMusic}
                                     onClearMusic={() => setSelectedMusic(null)}
+                                    onPositionChange={(x, y) => setSelectedMusic((prev: any) => ({ ...prev, x, y }))}
                                 />
 
                                 {/* Music Picker Button at Top Right */}

@@ -21,6 +21,9 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     vaultPasscode: null,
     loading: false,
     error: null,
+    debugLogs: '',
+
+    addDebugLog: (msg: string) => set((state) => ({ debugLogs: state.debugLogs + '\n' + msg })),
 
     // Extracted Actions (Slices)
     ...createFriendsLoadActions(set, get),

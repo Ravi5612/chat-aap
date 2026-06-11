@@ -58,6 +58,8 @@ export const useDbStore = create<DbState>((set, get) => ({
                 set({ db: db as SQLite.SQLiteDatabase, isInitialized: true, error: null });
             } catch (error: any) {
                 console.error('DbStore: Initialization failed or timed out', error);
+                const { useFriendsStore } = require('@/store/useFriendsStore');
+                useFriendsStore.getState().addDebugLog(`[DbStore] Init Error: ${error.message}`);
                 
                 // Attempt to delete the corrupted database file so it recovers next time
                 try {

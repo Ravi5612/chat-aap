@@ -39,7 +39,12 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
             const isLocalImage = parsedImageUrl?.startsWith('file://') || parsedImageUrl?.startsWith('content://') || parsedImageUrl?.startsWith('file:/') || parsedImageUrl?.startsWith('data:image/');
             if (parsedImageUrl && !isLocalImage) {
                 const cached = await getMediaCache(db, parsedImageUrl);
+                let cacheExists = false;
                 if (cached) {
+                    const info = await FileSystem.getInfoAsync(cached);
+                    cacheExists = info.exists;
+                }
+                if (cacheExists) {
                     if (isMounted) {
                         setLocalImageUrl(cached);
                         setImageLoading(false);
@@ -47,8 +52,9 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                 } else {
                     try {
                         const filename = (typeof parsedImageUrl === 'string' ? parsedImageUrl.split('/').pop() : null) || 'media.jpg';
-                        const isE2EE = !!imageMediaKey || parsedImageUrl.endsWith('.txt');
-                        const localFileName = isE2EE ? filename.replace('.txt', '.jpg').replace('.bin', '.jpg') : filename;
+                        const isE2EE = !!imageMediaKey || parsedImageUrl.includes('.txt');
+                        let ext = message?.media_type === 'video' ? '.mp4' : '.jpg';
+                        const localFileName = isE2EE ? filename.replace('.e2ee.txt', ext).replace('.txt', ext).replace('.bin', ext) : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
                         
                         if (isE2EE) {
@@ -80,13 +86,18 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
 
             if (parsedVoiceUrl && !parsedVoiceUrl.startsWith('file://')) {
                 const cached = await getMediaCache(db, parsedVoiceUrl);
+                let cacheExists = false;
                 if (cached) {
+                    const info = await FileSystem.getInfoAsync(cached);
+                    cacheExists = info.exists;
+                }
+                if (cacheExists) {
                     if (isMounted) setLocalVoiceUrl(cached);
                 } else {
                     try {
                         const filename = (typeof parsedVoiceUrl === 'string' ? parsedVoiceUrl.split('/').pop() : null) || 'voice.m4a';
-                        const isE2EE = !!voiceMediaKey || parsedVoiceUrl.endsWith('.txt');
-                        const localFileName = isE2EE ? filename.replace('.txt', '.m4a').replace('.bin', '.m4a') : filename;
+                        const isE2EE = !!voiceMediaKey || parsedVoiceUrl.includes('.txt');
+                        const localFileName = isE2EE ? filename.replace('.e2ee.txt', '.m4a').replace('.txt', '.m4a').replace('.bin', '.m4a') : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
 
                         if (isE2EE) {
@@ -114,18 +125,23 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
 
             if (parsedDocumentUrl && !parsedDocumentUrl.startsWith('file://')) {
                 const cached = await getMediaCache(db, parsedDocumentUrl);
+                let cacheExists = false;
                 if (cached) {
+                    const info = await FileSystem.getInfoAsync(cached);
+                    cacheExists = info.exists;
+                }
+                if (cacheExists) {
                     if (isMounted) setLocalDocumentUrl(cached);
                 } else {
                     try {
                         const filename = (typeof parsedDocumentUrl === 'string' ? parsedDocumentUrl.split('/').pop() : null) || 'doc.bin';
-                        const isE2EE = !!documentMediaKey || parsedDocumentUrl.endsWith('.txt');
+                        const isE2EE = !!documentMediaKey || parsedDocumentUrl.includes('.txt');
                         let ext = 'bin';
                         if (message?.file_name) {
                             const parts = message.file_name.split('.');
                             if (parts.length > 1) ext = parts[parts.length - 1];
                         }
-                        const localFileName = isE2EE ? filename.replace('.txt', `.${ext}`).replace('.bin', `.${ext}`) : filename;
+                        const localFileName = isE2EE ? filename.replace('.e2ee.txt', `.${ext}`).replace('.txt', `.${ext}`).replace('.bin', `.${ext}`) : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
 
                         if (isE2EE) {

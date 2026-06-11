@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
 
 interface Props {
     selectedMusic: any;
@@ -11,11 +13,35 @@ interface Props {
     musicDuration: number;
     toggleMusic: () => void;
     onClearMusic: () => void;
+    onPositionChange?: (x: number, y: number) => void;
 }
 
 export const MusicPreviewSticker: React.FC<Props> = ({
-    selectedMusic, isMusicPlaying, musicProgress, musicPosition, musicDuration, toggleMusic, onClearMusic
+    selectedMusic, isMusicPlaying, musicProgress, musicPosition, musicDuration, toggleMusic, onClearMusic, onPositionChange
 }) => {
+    const translateX = useSharedValue(selectedMusic?.x || 0);
+    const translateY = useSharedValue(selectedMusic?.y || 0);
+
+    const panGesture = Gesture.Pan()
+        .onChange((event) => {
+            translateX.value += event.changeX;
+            translateY.value += event.changeY;
+        })
+        .onEnd(() => {
+            if (onPositionChange) {
+                runOnJS(onPositionChange)(translateX.value, translateY.value);
+            }
+        });
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [
+                { translateX: translateX.value },
+                { translateY: translateY.value }
+            ],
+        };
+    });
+
     if (!selectedMusic) return null;
 
     return (
@@ -33,27 +59,29 @@ export const MusicPreviewSticker: React.FC<Props> = ({
             </View>
 
             {/* Music Sticker */}
-            <View style={styles.musicSticker}>
-                <Image source={{ uri: selectedMusic.cover }} style={styles.musicStickerCover}  cachePolicy="memory-disk" />
-                <View style={{ marginLeft: 8, flex: 1 }}>
-                    <Text style={styles.musicStickerTitle} numberOfLines={1}>{selectedMusic.title}</Text>
-                    <Text style={styles.musicStickerArtist} numberOfLines={1}>{selectedMusic.artist}</Text>
-                </View>
-                
-                <TouchableOpacity onPress={toggleMusic} style={{ padding: 6 }}>
-                    <Ionicons name={isMusicPlaying ? "pause-circle" : "play-circle"} size={26} color="white" />
-                </TouchableOpacity>
+            <GestureDetector gesture={panGesture}>
+                <Animated.View style={[styles.musicSticker, animatedStyle]}>
+                    <Image source={{ uri: selectedMusic.cover }} style={styles.musicStickerCover}  cachePolicy="memory-disk" />
+                    <View style={{ marginLeft: 8, flex: 1 }}>
+                        <Text style={styles.musicStickerTitle} numberOfLines={1}>{selectedMusic.title}</Text>
+                        <Text style={styles.musicStickerArtist} numberOfLines={1}>{selectedMusic.artist}</Text>
+                    </View>
+                    
+                    <TouchableOpacity onPress={toggleMusic} style={{ padding: 6 }}>
+                        <Ionicons name={isMusicPlaying ? "pause-circle" : "play-circle"} size={26} color="white" />
+                    </TouchableOpacity>
 
-                <TouchableOpacity onPress={onClearMusic} style={{ padding: 4 }}>
-                    <Ionicons name="close-circle" size={20} color="white" />
-                </TouchableOpacity>
-            </View>
+                    <TouchableOpacity onPress={onClearMusic} style={{ padding: 4 }}>
+                        <Ionicons name="close-circle" size={20} color="white" />
+                    </TouchableOpacity>
+                </Animated.View>
+            </GestureDetector>
         </>
     );
 };
 
 const styles = StyleSheet.create({
-    musicSticker: { position: 'absolute', top: 50, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, padding: 6, flexDirection: 'row', alignItems: 'center', width: 200 },
+    musicSticker: { position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, padding: 6, flexDirection: 'row', alignItems: 'center', width: 200, zIndex: 10 },
     musicStickerCover: { width: 40, height: 40, borderRadius: 20 },
     musicStickerTitle: { color: 'white', fontSize: 14, fontWeight: 'bold' },
     musicStickerArtist: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },

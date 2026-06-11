@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useMessageSync } from './realtime/useMessageSync';
 import { usePresenceSync } from './realtime/usePresenceSync';
+import { useStatusSync } from './realtime/useStatusSync';
 
 export const useGlobalRealtime = (userId: string | null) => {
     const profile = useAuthStore(state => state.profile);
@@ -15,4 +16,5 @@ export const useGlobalRealtime = (userId: string | null) => {
 
     useMessageSync(userId, profileRef);
     usePresenceSync(userId);
+    useStatusSync(userId);
 };

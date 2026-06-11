@@ -44,38 +44,75 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
 
         // SILENT LOCAL LOAD FIRST
         if (db && existingItems.length === 0) {
+            get().addDebugLog('[LoadFriends] Starting local DB fetch');
             const { getLocalStatuses } = require('@/lib/localDb');
-            const [localConv, localBlocked, localStatuses] = await Promise.all([
-                getLocalConversations(db),
-                getLocalBlocks(db, userId),
-                getLocalStatuses(db)
-            ]);
+            try {
+                const [localConv, localBlocked, localStatuses] = await Promise.all([
+                    getLocalConversations(db),
+                    getLocalBlocks(db, userId),
+                    getLocalStatuses(db)
+                ]);
 
-            let localStatusInfo: Record<string, any> = {};
-            if (localStatuses && localStatuses.length > 0) {
-                localStatuses.forEach((s: any) => {
-                    if (s.is_deleted === 1 || s.is_deleted === true || s.is_deleted === '1') return;
-                    if (!localStatusInfo[s.user_id]) {
-                        localStatusInfo[s.user_id] = { count: 0, viewedCount: 0 };
+                get().addDebugLog(`[LoadFriends] Local fetch done: ${localConv.length} convs, ${localStatuses.length} statuses`);
+
+                if (localStatuses && localStatuses.length > 0) {
+                    // SQLite stores JSON fields as strings, need to parse them before processing
+                    const parsedStatuses = localStatuses.map((s: any) => {
+                        try {
+                            if (typeof s.encrypted_keys === 'string') s.encrypted_keys = JSON.parse(s.encrypted_keys);
+                            if (typeof s.mentioned_user_ids === 'string') s.mentioned_user_ids = JSON.parse(s.mentioned_user_ids);
+                        } catch (e) {}
+                        return s;
+                    }).filter((s: any) => s.is_deleted !== 1 && s.is_deleted !== true && s.is_deleted !== '1');
+
+                    const myLocalStatuses = parsedStatuses.filter((s: any) => s.user_id === userId);
+                    const friendLocalStatuses = parsedStatuses.filter((s: any) => s.user_id !== userId);
+
+                    const { processMyStatuses, processStatuses } = require('@/services/friends/statusProcessor');
+                    let myProfile = useAuthStore.getState().profile;
+                    
+                    if (!myProfile) {
+                        const { getLocalProfile } = require('@/lib/localDb');
+                        myProfile = await getLocalProfile(db, userId);
+                        if (myProfile) {
+                            useAuthStore.setState({ profile: myProfile });
+                        }
                     }
-                    localStatusInfo[s.user_id].count++;
-                });
-                set({ statusInfo: localStatusInfo });
-            }
+                    
+                    // Format friendships array locally to match what processStatuses expects
+                    const mockFriendships = localConv.map((c: any) => ({ friend: c }));
 
-            if (localConv && localConv.length > 0) {
-                const filteredLocalConv = localConv.filter((c: any) => c.id !== userId);
-                set({ 
-                    combinedItems: filteredLocalConv,
-                    friends: filteredLocalConv.filter((c: any) => !c.isGroup),
-                    groups: filteredLocalConv.filter((c: any) => c.isGroup),
-                    lockedChatIds: filteredLocalConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
-                    loading: false 
-                });
+                    try {
+                        // Process both concurrently for performance
+                        const [groupedMyStatus, localStatusInfoMap] = await Promise.all([
+                            processMyStatuses(myLocalStatuses, myProfile, userId),
+                            processStatuses(friendLocalStatuses, [], mockFriendships, myProfile, userId, null)
+                        ]);
+
+                        set({ statusInfo: localStatusInfoMap, myStatuses: groupedMyStatus });
+                    } catch (cryptoErr: any) {
+                        get().addDebugLog(`[LoadFriends] Crypto error during status decryption: ${cryptoErr.message}`);
+                    }
+                }
+
+                if (localConv && localConv.length > 0) {
+                    const filteredLocalConv = localConv.filter((c: any) => c.id !== userId);
+                    set({ 
+                        combinedItems: filteredLocalConv,
+                        friends: filteredLocalConv.filter((c: any) => !c.isGroup),
+                        groups: filteredLocalConv.filter((c: any) => c.isGroup),
+                        lockedChatIds: filteredLocalConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
+                        loading: false 
+                    });
+                }
+                if (localBlocked && localBlocked.length > 0) {
+                    set({ blockedUserIds: localBlocked });
+                }
+            } catch (err: any) {
+                get().addDebugLog(`[LoadFriends] Error fetching local DB: ${err.message}`);
             }
-            if (localBlocked && localBlocked.length > 0) {
-                set({ blockedUserIds: localBlocked });
-            }
+        } else if (!db) {
+            get().addDebugLog('[LoadFriends] ERROR: db is NULL. Skipping local load.');
         }
 
         const currentItems = get().combinedItems;
@@ -90,7 +127,14 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
 
         try {
             const currentUserId = useAuthStore.getState().user?.id;
-            const data = await fetchAndFormatFriendsData(userId, existingItems, db, onlineUsers, currentUserId);
+            
+            // 10-second timeout to prevent indefinite hanging when offline
+            const timeoutPromise = new Promise<any>((_, reject) => {
+                setTimeout(() => reject(new Error('Network request timed out')), 10000);
+            });
+            const fetchPromise = fetchAndFormatFriendsData(userId, existingItems, db, onlineUsers, currentUserId);
+            
+            const data = await Promise.race([fetchPromise, timeoutPromise]);
             
             loadedForUserId = userId; // Mark as loaded for this user
 

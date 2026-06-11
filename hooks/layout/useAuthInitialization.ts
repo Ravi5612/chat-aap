@@ -36,21 +36,43 @@ export const useAuthInitialization = () => {
 
                         const { db } = useDbStore.getState();
                         if (db) {
-                            const { getLocalConversations, getLocalStatuses } = require('@/lib/localDb');
-                            const [localConv, localStatuses] = await Promise.all([
+                            const { getLocalConversations, getLocalStatuses, getLocalProfile } = require('@/lib/localDb');
+                            const [localConv, localStatuses, localProfile] = await Promise.all([
                                 getLocalConversations(db),
-                                getLocalStatuses(db)
+                                getLocalStatuses(db),
+                                getLocalProfile(db, cachedSession.user.id)
                             ]);
                             
-                            let localStatusInfo: Record<string, any> = {};
+                            if (localProfile) {
+                                useAuthStore.setState({ profile: localProfile });
+                            }
+                            
+                            let localStatusInfoMap: Record<string, any> = {};
+                            let groupedMyStatus: any = { active: [] };
+
                             if (localStatuses && localStatuses.length > 0) {
-                                localStatuses.forEach((s: any) => {
-                                    if (s.is_deleted === 1 || s.is_deleted === true || s.is_deleted === '1') return;
-                                    if (!localStatusInfo[s.user_id]) {
-                                        localStatusInfo[s.user_id] = { count: 0, viewedCount: 0 };
-                                    }
-                                    localStatusInfo[s.user_id].count++;
-                                });
+                                const parsedStatuses = localStatuses.map((s: any) => {
+                                    try {
+                                        if (typeof s.encrypted_keys === 'string') s.encrypted_keys = JSON.parse(s.encrypted_keys);
+                                        if (typeof s.mentioned_user_ids === 'string') s.mentioned_user_ids = JSON.parse(s.mentioned_user_ids);
+                                    } catch (e) {}
+                                    return s;
+                                }).filter((s: any) => s.is_deleted !== 1 && s.is_deleted !== true && s.is_deleted !== '1');
+
+                                const userId = cachedSession.user.id;
+                                const myLocalStatuses = parsedStatuses.filter((s: any) => s.user_id === userId);
+                                const friendLocalStatuses = parsedStatuses.filter((s: any) => s.user_id !== userId);
+
+                                const { processMyStatuses, processStatuses } = require('@/services/friends/statusProcessor');
+                                const myProfile = useAuthStore.getState().profile;
+                                const mockFriendships = (localConv || []).map((c: any) => ({ friend: c }));
+
+                                const [myStat, friendStat] = await Promise.all([
+                                    processMyStatuses(myLocalStatuses, myProfile, userId),
+                                    processStatuses(friendLocalStatuses, [], mockFriendships, myProfile, userId, null)
+                                ]);
+                                groupedMyStatus = myStat;
+                                localStatusInfoMap = friendStat;
                             }
 
                             if (localConv && localConv.length > 0) {
@@ -60,11 +82,12 @@ export const useAuthInitialization = () => {
                                     friends: filteredLocalConv.filter((c: any) => c.isFriend),
                                     groups: filteredLocalConv.filter((c: any) => c.isGroup),
                                     lockedChatIds: filteredLocalConv.filter((c: any) => c.isLocked).map((c: any) => c.id),
-                                    statusInfo: localStatusInfo,
+                                    statusInfo: localStatusInfoMap,
+                                    myStatuses: groupedMyStatus,
                                     loading: false
                                 });
-                            } else if (Object.keys(localStatusInfo).length > 0) {
-                                useFriendsStore.setState({ statusInfo: localStatusInfo });
+                            } else if (Object.keys(localStatusInfoMap).length > 0 || groupedMyStatus.active?.length > 0) {
+                                useFriendsStore.setState({ statusInfo: localStatusInfoMap, myStatuses: groupedMyStatus });
                             }
                         }
 

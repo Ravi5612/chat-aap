@@ -12,6 +12,8 @@ export interface FriendsState {
     vaultPasscode: string | null;
     loading: boolean;
     error: string | null;
+    debugLogs: string;
+    addDebugLog: (msg: string) => void;
 
     setOnlineUsers: (users: Record<string, any>) => void;
     loadFriends: (userId: string, force?: boolean) => Promise<void>;

@@ -38,6 +38,8 @@ export default function StatusOverlay({
     const router = useRouter();
     const [downloading, setDownloading] = useState(false);
 
+    if (!currentStatusUI) return null;
+
     const handleDownloadStatus = async () => {
         if (!currentStatusUI?.media_url) return;
         try {

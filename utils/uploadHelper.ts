@@ -114,6 +114,7 @@ export const uploadWithProgressToCloudinary = (
 
             const xhr = new XMLHttpRequest();
             xhr.open('POST', uploadUrl);
+            xhr.timeout = 60000; // 60 seconds timeout
 
             let lastProgressTime = 0;
             xhr.upload.onprogress = (event) => {
@@ -138,6 +139,7 @@ export const uploadWithProgressToCloudinary = (
             };
 
             xhr.onerror = () => reject(new Error('XHR upload network error'));
+            xhr.ontimeout = () => reject(new Error('XHR upload timed out after 60 seconds'));
             xhr.send(formData);
         } catch (e) {
             reject(e);

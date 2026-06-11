@@ -3,12 +3,16 @@ import { View, Text, TouchableOpacity, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import HomeSkeleton from '@/components/home/HomeSkeleton';
 
+import { useFriendsStore } from '@/store/useFriendsStore';
+
 interface Props {
     loading: boolean;
     searchQuery: string;
 }
 
 const EmptyChatState: React.FC<Props> = ({ loading, searchQuery }) => {
+    const debugLogs = useFriendsStore(state => state.debugLogs);
+    const errorMsg = useFriendsStore(state => state.error);
     const handleShareApp = useCallback(async () => {
         try {
             await Share.share({
@@ -22,6 +26,13 @@ const EmptyChatState: React.FC<Props> = ({ loading, searchQuery }) => {
     if (loading) {
         return (
             <View style={{ marginTop: 20 }}>
+                {(errorMsg || debugLogs) ? (
+                    <View style={{ marginBottom: 20, padding: 16, backgroundColor: '#FEF2F2', borderRadius: 12, borderWidth: 1, borderColor: '#FCA5A5', marginHorizontal: 20 }}>
+                        <Text style={{ color: '#DC2626', fontWeight: 'bold', marginBottom: 8 }}>Debug Information:</Text>
+                        {errorMsg && <Text style={{ color: '#991B1B', fontSize: 12, marginBottom: 4 }}>Error: {errorMsg}</Text>}
+                        {debugLogs ? <Text style={{ color: '#991B1B', fontSize: 10, fontFamily: 'monospace' }}>{debugLogs}</Text> : null}
+                    </View>
+                ) : null}
                 <HomeSkeleton />
             </View>
         );
@@ -61,6 +72,14 @@ const EmptyChatState: React.FC<Props> = ({ loading, searchQuery }) => {
                     </TouchableOpacity>
                 </View>
             )}
+
+            {(errorMsg || debugLogs) ? (
+                <View style={{ marginTop: 20, padding: 16, backgroundColor: '#FEF2F2', borderRadius: 12, width: '100%', borderWidth: 1, borderColor: '#FCA5A5' }}>
+                    <Text style={{ color: '#DC2626', fontWeight: 'bold', marginBottom: 8 }}>Debug Information:</Text>
+                    {errorMsg && <Text style={{ color: '#991B1B', fontSize: 12, marginBottom: 4 }}>Error: {errorMsg}</Text>}
+                    {debugLogs ? <Text style={{ color: '#991B1B', fontSize: 10, fontFamily: 'monospace' }}>{debugLogs}</Text> : null}
+                </View>
+            ) : null}
         </View>
     );
 };

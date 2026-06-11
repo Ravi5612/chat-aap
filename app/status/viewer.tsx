@@ -128,28 +128,6 @@ export default function StatusViewer() {
         ]);
     };
 
-    if (loading) {
-        return (
-            <View style={{ flex: 1, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center' }}>
-                <ActivityIndicator size="large" color="#F68537" />
-                <Text style={{ color: 'white', marginTop: 16 }}>Loading Story...</Text>
-            </View>
-        );
-    }
-
-    if (statuses.length === 0) {
-        return (
-            <View style={{ flex: 1, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-                <Text style={{ color: 'white', marginBottom: 20, fontSize: 16, textAlign: 'center' }}>
-                    {isArchive === 'true' ? `No status updates found for ${date || 'this period'}.` : 'No active statuses found.'}
-                </Text>
-                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: '#F68537', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}>
-                    <Text style={{ color: 'white', fontWeight: 'bold' }}>Back</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
     let trimStart = 0;
     let trimEnd = 999999;
     if (renderedStatusUI?.media_url) {
@@ -179,6 +157,28 @@ export default function StatusViewer() {
         opacity: toastAnim.value,
         transform: [{ translateY: interpolate(toastAnim.value, [0, 1], [20, 0]) }]
     }));
+
+    if (loading) {
+        return (
+            <View style={{ flex: 1, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator size="large" color="#F68537" />
+                <Text style={{ color: 'white', marginTop: 16 }}>Loading Story...</Text>
+            </View>
+        );
+    }
+
+    if (statuses.length === 0) {
+        return (
+            <View style={{ flex: 1, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                <Text style={{ color: 'white', marginBottom: 20, fontSize: 16, textAlign: 'center' }}>
+                    {isArchive === 'true' ? `No status updates found for ${date || 'this period'}.` : 'No active statuses found.'}
+                </Text>
+                <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: '#F68537', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}>
+                    <Text style={{ color: 'white', fontWeight: 'bold' }}>Back</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <View style={{ flex: 1, backgroundColor: 'black' }}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text} from 'react-native';
+import { View, Text } from 'react-native';
 import { Image } from 'expo-image';
 import { ResizeMode, Video } from 'expo-av';
 
@@ -36,7 +36,8 @@ export default function StatusRenderer({
                     <Image
                         source={{ uri: currentStatusUI.media_url }}
                         style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-                     cachePolicy="memory-disk" />
+                        cachePolicy="memory-disk"
+                    />
                 )}
                 {currentStatusUI.content && (
                     <View style={{ position: 'absolute', bottom: 120, left: 0, right: 0, padding: 20, backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -52,7 +53,7 @@ export default function StatusRenderer({
                         const music = JSON.parse(currentStatusUI.audio_url);
                         if (!music.title) return null;
                         return (
-                            <View style={{ position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, padding: 6, flexDirection: 'row', alignItems: 'center', width: 200, zIndex: 10 }}>
+                            <View style={{ position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24, padding: 6, flexDirection: 'row', alignItems: 'center', width: 200, zIndex: 10, transform: [{ translateX: music.x || 0 }, { translateY: music.y || 0 }] }}>
                                 <Image source={{ uri: music.cover }} style={{ width: 40, height: 40, borderRadius: 20 }}  cachePolicy="memory-disk" />
                                 <View style={{ marginLeft: 8, flex: 1 }}>
                                     <Text style={{ color: 'white', fontSize: 14, fontWeight: 'bold' }} numberOfLines={1}>{music.title}</Text>

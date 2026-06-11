@@ -170,6 +170,20 @@ export async function getChatKey(userId: string, friendId: string, isGroup: bool
         }
     }
 
+    // ✅ OFFLINE FIX: If requesting our own key, we don't need network
+    if (userId === friendId) {
+        const pk = await getLocalPrivateKey(userId);
+        if (pk) {
+            const publicKey = x25519.getPublicKey(pk);
+            const publicKeyBase64 = Buffer.from(publicKey).toString('base64');
+            const key = await getX25519SharedSecret(publicKeyBase64, userId);
+            if (key) {
+                keyCache.set(baseKeyCacheStr, key);
+                return key;
+            }
+        }
+    }
+
     try {
         const { data } = await supabase.from('profiles').select('public_key').eq('id', friendId).single();
         if (data?.public_key) {

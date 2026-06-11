@@ -146,7 +146,6 @@ const MessageContent = memo(({
                             style={styles.mediaImage} 
                             contentFit="cover" 
                             transition={300}
-                            cachePolicy="memory"
                         />
                         {imageLoading && uploadProgress === undefined && (
                             <View style={styles.mediaLoadingOverlay}>

@@ -167,6 +167,16 @@ export const processStatusUpload = async (params: StatusUploadParams) => {
             }
         }
 
+        // ✅ Remove the temporary uploading status from local state before fetching fresh data
+        const refreshedStore = useFriendsStore.getState();
+        const currentActive = refreshedStore.myStatuses?.active || [];
+        useFriendsStore.setState({
+            myStatuses: {
+                ...refreshedStore.myStatuses,
+                active: currentActive.filter((s: any) => s.id !== tempId)
+            }
+        });
+
         await friendsStore.loadFriends(user.id, true);
 
     } catch (error: any) {

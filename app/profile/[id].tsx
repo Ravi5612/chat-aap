@@ -97,8 +97,9 @@ export default function UserProfileScreen() {
                 <View style={{ alignItems: 'center', paddingVertical: 40 }}>
                     <View style={{ position: 'relative' }}>
                         <Image
-                            source={{ uri: profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.username || 'User')}&backgroundColor=F68537` }}
+                            source={profile.avatar_url}
                             style={{ width: 140, height: 140, borderRadius: 70, borderWidth: 4, borderColor: 'white' }}
+                            contentFit="cover"
                         />
                         <View style={{
                             position: 'absolute',

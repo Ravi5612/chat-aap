@@ -192,8 +192,6 @@ export const initDatabase = async () => {
             -- Indexes for Call Logs
             CREATE INDEX IF NOT EXISTS idx_call_logs_time ON call_logs (created_at DESC);
             
-            -- Indexes for Expenses
-            CREATE INDEX IF NOT EXISTS idx_expenses_friend ON expenses (friend_id);
         `);
 
 
@@ -297,6 +295,9 @@ export const initDatabase = async () => {
                     created_at TEXT NOT NULL,
                     sync_id TEXT UNIQUE
                 );
+                
+                -- Indexes for Expenses
+                CREATE INDEX IF NOT EXISTS idx_expenses_friend ON expenses (friend_id);
             `);
             console.log('[DB] Expenses table initialized');
         } catch (e) {
