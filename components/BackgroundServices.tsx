@@ -131,6 +131,7 @@ export const BackgroundServices = () => {
                 onEndCall={endCall}
                 onAcceptCall={setCallActive}
                 onMinimize={() => setMinimized(true)}
+                onMaximize={() => setMinimized(false)}
                 onRetry={() => {
                     if (callSession?.friend && callSession?.type) {
                         // Restart the call using previous call's info
@@ -143,7 +144,7 @@ export const BackgroundServices = () => {
                 offer={callSession?.offer}
                 isGroup={callSession?.isGroup}
             />
-            {isMinimized && callSession && callSession.status !== 'ended' && (
+            {isMinimized && callSession && callSession.status !== 'ended' && callSession.type === 'audio' && (
                 <>
                     <TouchableOpacity 
                         onPress={() => setMinimized(false)}

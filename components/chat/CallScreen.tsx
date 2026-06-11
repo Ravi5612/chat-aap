@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated from 'react-native-reanimated';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import AgoraVideoView from './AgoraVideoView';
+import FloatingCallWidget from './FloatingCallWidget';
 import { useAgora } from '@/hooks/useAgora';
 import { useWindowDimensions } from 'react-native';
 import { useCallActions } from '@/hooks/useCallActions';
@@ -26,6 +27,7 @@ interface CallScreenProps {
     onAcceptCall: () => void;
     onRetry?: () => void;
     onMinimize?: () => void;
+    onMaximize?: () => void;
     currentUser: any;
     callType: 'audio' | 'video';
     friend: any;
@@ -35,7 +37,7 @@ interface CallScreenProps {
 }
 
 export default function CallScreen({
-    visible, callState, onEndCall, onAcceptCall, onRetry, onMinimize,
+    visible, callState, onEndCall, onAcceptCall, onRetry, onMinimize, onMaximize,
     currentUser, callType, friend, offer: incomingOffer, isGroup = false, endReason
 }: CallScreenProps) {
     const { width, height } = useWindowDimensions();
@@ -139,7 +141,19 @@ export default function CallScreen({
         return () => sub.remove();
     }, [callState, callType]);
 
-    if (!visible) return null;
+    if (!visible) {
+        if (callType === 'video' && callState === 'active' && isEngineReady) {
+            return (
+                <FloatingCallWidget 
+                    uid={remoteUids[0] || 0}
+                    channelId={channelId}
+                    onMaximize={() => { if (onMaximize) onMaximize(); }}
+                    onEndCall={onEndCall}
+                />
+            );
+        }
+        return null;
+    }
 
     return (
         <Modal
