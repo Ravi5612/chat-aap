@@ -1,13 +1,16 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Animated } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Animated, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 
 interface WatchPartyState {
     videoId: string;
     hostId: string;
     status: 'playing' | 'paused';
     currentTime: number;
+    invite_status?: 'pending' | 'active' | 'declined' | 'expired';
+    createdAt?: string;
 }
 
 interface WatchPartyBubbleProps {
@@ -20,6 +23,8 @@ interface WatchPartyBubbleProps {
 export default function WatchPartyBubble({ message, currentUserId, friendName, roomId }: WatchPartyBubbleProps) {
     const router = useRouter();
     const pulseAnim = useRef(new Animated.Value(1)).current;
+    const [timeLeft, setTimeLeft] = useState(120);
+    const [updating, setUpdating] = useState(false);
 
     useEffect(() => {
         Animated.loop(
@@ -37,9 +42,33 @@ export default function WatchPartyBubble({ message, currentUserId, friendName, r
         return <Text style={{ color: 'red' }}>Corrupted Party Data</Text>;
     }
 
-    const { videoId, hostId } = partyState;
+    const { videoId, hostId, invite_status = 'active', createdAt } = partyState;
     const isHost = hostId === currentUserId;
     const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+
+    useEffect(() => {
+        if (invite_status !== 'pending' || !createdAt) return;
+
+        const interval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
+            const remaining = Math.max(120 - elapsed, 0);
+            setTimeLeft(remaining);
+
+            if (remaining === 0 && invite_status === 'pending') {
+                if (isHost) handleUpdateStatus('expired');
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [createdAt, invite_status, isHost]);
+
+    const handleUpdateStatus = async (newStatus: string) => {
+        if (updating) return;
+        setUpdating(true);
+        const newState = { ...partyState, invite_status: newStatus };
+        await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', message.id);
+        setUpdating(false);
+    };
 
     const handleJoin = () => {
         // Navigate to the split-screen Watch Party theater
@@ -63,10 +92,56 @@ export default function WatchPartyBubble({ message, currentUserId, friendName, r
                 {isHost ? "You started a Watch Party!" : `${friendName || 'Friend'} invited you to watch a movie!`}
             </Text>
 
-            <TouchableOpacity style={styles.joinBtn} onPress={handleJoin} activeOpacity={0.8}>
-                <Ionicons name={isHost ? "play" : "enter"} size={18} color="white" />
-                <Text style={styles.joinText}>{isHost ? "Enter Theater" : "Join Party"}</Text>
-            </TouchableOpacity>
+            {invite_status === 'pending' && (
+                <View style={styles.pendingArea}>
+                    <Text style={styles.timerText}>
+                        {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
+                    </Text>
+                    {isHost ? (
+                        <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={() => handleUpdateStatus('expired')} disabled={updating}>
+                            <Text style={styles.btnText}>Cancel Invite</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.actionRow}>
+                            <TouchableOpacity style={[styles.btn, styles.declineBtn]} onPress={() => handleUpdateStatus('declined')} disabled={updating}>
+                                <Ionicons name="close" size={20} color="white" />
+                                <Text style={styles.btnText}>Decline</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.btn, styles.acceptBtn]} onPress={() => handleUpdateStatus('active')} disabled={updating}>
+                                <Ionicons name="checkmark" size={20} color="white" />
+                                <Text style={styles.btnText}>Accept</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+            )}
+
+            {invite_status === 'active' && (
+                <TouchableOpacity style={styles.joinBtn} onPress={handleJoin} activeOpacity={0.8}>
+                    <Ionicons name={isHost ? "play" : "enter"} size={18} color="white" />
+                    <Text style={styles.joinText}>{isHost ? "Enter Theater" : "Join Party"}</Text>
+                </TouchableOpacity>
+            )}
+
+            {invite_status === 'declined' && (
+                <View style={styles.resultArea}>
+                    <Ionicons name="close-circle" size={40} color="#EF4444" />
+                    <Text style={styles.resultText}>Invite Declined</Text>
+                </View>
+            )}
+
+            {invite_status === 'expired' && (
+                <View style={styles.resultArea}>
+                    <Ionicons name="time" size={40} color="#94A3B8" />
+                    <Text style={styles.resultText}>Invite Expired</Text>
+                </View>
+            )}
+
+            {updating && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#EAB308" />
+                </View>
+            )}
         </Animated.View>
     );
 }
@@ -131,5 +206,51 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         fontSize: 15,
         letterSpacing: 0.5,
+    },
+    pendingArea: {
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    timerText: {
+        color: '#EAB308',
+        fontSize: 28,
+        fontWeight: 'bold',
+        marginBottom: 16,
+        fontVariant: ['tabular-nums'],
+    },
+    actionRow: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+    },
+    btn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 12,
+        gap: 4,
+    },
+    cancelBtn: { backgroundColor: '#334155', width: '100%' },
+    declineBtn: { backgroundColor: '#EF4444' },
+    acceptBtn: { backgroundColor: '#10B981' },
+    btnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+    resultArea: {
+        alignItems: 'center',
+        paddingVertical: 12,
+    },
+    resultText: {
+        color: '#94A3B8',
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginTop: 8,
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(15, 23, 42, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 20,
     }
 });

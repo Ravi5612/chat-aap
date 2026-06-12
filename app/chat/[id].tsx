@@ -195,7 +195,9 @@ export default function ChatScreen() {
         const initialState = {
             videoId,
             hostId: currentUser.id,
-            status: 'playing',
+            invite_status: 'pending', // 'pending' | 'active' | 'declined' | 'expired'
+            createdAt: new Date().toISOString(),
+            status: 'playing', // playback status
             currentTime: 0
         };
 
