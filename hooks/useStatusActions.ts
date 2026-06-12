@@ -99,11 +99,11 @@ export const useStatusActions = (currentUser: any, loadFriends?: () => void) => 
         }
     }, [viewingStatus, statusIndex]);
 
-    const handleViewMyStatus = useCallback(() => {
+    const handleViewMyStatus = useCallback((index = 0) => {
         if (!currentUser) return;
         router.push({
             pathname: '/status/viewer' as any,
-            params: { userId: currentUser.id, initialIndex: 0, isArchive: 'false' }
+            params: { userId: currentUser.id, initialIndex: index, isArchive: 'false' }
         });
     }, [currentUser, router]);
 

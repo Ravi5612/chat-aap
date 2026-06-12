@@ -57,12 +57,7 @@ const StatusBar = memo(function StatusBar({
                         onViewStatus={onViewStatus}
                     />
 
-                    {/* 4. Friends Statuses Section */}
-                    <FriendsStatusSection
-                        friendsWithStatus={friendsWithStatus}
-                        statusInfo={statusInfo}
-                        onViewStatus={onViewStatus}
-                    />
+                    {/* 4. Friends Statuses Section (REMOVED as requested) */}
                 </ScrollView>
             </View>
         </View>

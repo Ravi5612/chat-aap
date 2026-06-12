@@ -139,9 +139,12 @@ export async function processMyStatuses(
         } else {
             const sDate = new Date(status.created_at);
             const diffDays = Math.floor((now.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
-            let dateKey = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : sDate.toLocaleDateString('en-US', { weekday: 'long' });
-            if (!groupedMyStatus[dateKey]) groupedMyStatus[dateKey] = [];
-            groupedMyStatus[dateKey].push(status);
+            // Only keep history for the last 7 days
+            if (diffDays <= 7) {
+                let dateKey = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : sDate.toLocaleDateString('en-US', { weekday: 'long' });
+                if (!groupedMyStatus[dateKey]) groupedMyStatus[dateKey] = [];
+                groupedMyStatus[dateKey].push(status);
+            }
         }
     });
 

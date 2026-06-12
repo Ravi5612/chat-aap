@@ -8,68 +8,50 @@ interface MyStatusSectionProps {
     myStatuses: any;
     statusInfo: any;
     onAddClick: () => void;
-    onViewMyStatus: () => void;
+    onViewMyStatus: (index?: number) => void;
 }
 
 interface ActiveStatusBubbleProps {
-    myStatuses: any;
-    statusInfo: any;
-    currentUser: any;
+    status: any;
+    index: number;
     currentProfile: any;
-    onViewMyStatus: () => void;
+    onViewMyStatus: (index: number) => void;
 }
 
 const ActiveStatusBubble = React.memo(({
-    myStatuses, statusInfo, currentUser, currentProfile, onViewMyStatus
+    status, index, currentProfile, onViewMyStatus
 }: ActiveStatusBubbleProps) => {
-    const allViewed = useMemo(() => myStatuses.active.every((s: any) => s.isViewed), [myStatuses.active]);
-    const hasUploading = useMemo(() => myStatuses.active.some((s: any) => s.isUploading), [myStatuses.active]);
-    const activeFirst = myStatuses.active[0];
-    const userId = currentUser?.id || '';
+    const isViewed = status.isViewed;
+    const isUploading = status.isUploading;
     const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentProfile?.username || 'User')}&backgroundColor=F68537`;
 
-    const borderColor = hasUploading ? '#F68537' : (allViewed ? '#D1D5DB' : '#10B981');
-    const badgeBg = allViewed ? '#94A3B8' : '#10B981';
-    const labelColor = hasUploading ? '#F68537' : (allViewed ? '#94A3B8' : '#10B981');
+    const borderColor = isUploading ? '#F68537' : (isViewed ? '#D1D5DB' : '#10B981');
+    const labelColor = isUploading ? '#F68537' : (isViewed ? '#94A3B8' : '#10B981');
 
     return (
         <View style={styles.itemContainer}>
             <View style={styles.relative}>
                 <TouchableOpacity
-                    onPress={hasUploading
+                    onPress={isUploading
                         ? () => Alert.alert("Uploading Status", "Please wait, your status is being posted in the background...")
-                        : onViewMyStatus
+                        : () => onViewMyStatus(index)
                     }
                     style={[styles.activeThumbnailWrapper, { borderColor }]}
                 >
                     <View style={styles.thumbnailInner}>
-                        {hasUploading ? (
-                            <StatusThumbnail
-                                mediaType={activeFirst.media_type}
-                                mediaUrl={activeFirst.media_url}
-                                text={activeFirst.content}
-                                bgColor={activeFirst.background_color}
-                                isUploading={true}
-                            />
-                        ) : (
-                            <StatusThumbnail
-                                mediaType={statusInfo?.[userId]?.mediaType || 'image'}
-                                mediaUrl={statusInfo?.[userId]?.thumbnail || currentProfile?.avatar_url || defaultAvatar}
-                                text={statusInfo?.[userId]?.text}
-                                bgColor={statusInfo?.[userId]?.bgColor}
-                                showPlayIcon={statusInfo?.[userId]?.mediaType === 'video'}
-                            />
-                        )}
+                        <StatusThumbnail
+                            mediaType={status.media_type || 'image'}
+                            mediaUrl={status.media_url || currentProfile?.avatar_url || defaultAvatar}
+                            text={status.content}
+                            bgColor={status.background_color}
+                            isUploading={isUploading}
+                            showPlayIcon={status.media_type === 'video'}
+                        />
                     </View>
                 </TouchableOpacity>
-                {!hasUploading && (
-                    <View style={[styles.countBadge, { backgroundColor: badgeBg }]}>
-                        <Text style={styles.countText}>{myStatuses.active.length}</Text>
-                    </View>
-                )}
             </View>
             <Text style={[styles.statusLabel, { color: labelColor }]}>
-                {hasUploading ? 'SENDING...' : 'VIEWING...'}
+                {isUploading ? 'SENDING...' : 'VIEWING...'}
             </Text>
         </View>
     );
@@ -97,16 +79,16 @@ const MyStatusSection = React.memo(({
                     <Text style={styles.addLabel}>ADD NEW</Text>
                 </View>
 
-                {/* Show Active Bundle if any */}
-                {hasActive && (
+                {/* Show individual active statuses */}
+                {hasActive && myStatuses.active.map((status: any, index: number) => (
                     <ActiveStatusBubble
-                        myStatuses={myStatuses}
-                        statusInfo={statusInfo}
-                        currentUser={currentUser}
+                        key={status.id || index}
+                        status={status}
+                        index={index}
                         currentProfile={currentProfile}
                         onViewMyStatus={onViewMyStatus}
                     />
-                )}
+                ))}
             </View>
         </View>
     );
