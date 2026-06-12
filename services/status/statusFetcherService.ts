@@ -82,11 +82,30 @@ export const processRawStatuses = async (params: ProcessStatusParams) => {
         if (encKeys && currentUser?.id) {
             const encryptedMasterKey = encKeys[currentUser.id];
             if (encryptedMasterKey && profile?.public_key) {
-                statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key, currentUser.id);
+                try {
+                    statusKey = await decryptKeyWithSharedSecret(encryptedMasterKey, profile.public_key, currentUser.id);
+                } catch (e) {
+                    console.warn('[STATUS] decryptKeyWithSharedSecret failed:', e);
+                }
             }
         }
-        if (!statusKey) {
-            statusKey = await getChatKey(userId, userId);
+
+        // Fallback 1: Try shared chat key between viewer and status owner
+        if (!statusKey && currentUser?.id && userId !== currentUser.id) {
+            try {
+                statusKey = await getChatKey(currentUser.id, userId);
+            } catch (e) {
+                console.warn('[STATUS] Fallback shared key failed:', e);
+            }
+        }
+
+        // Fallback 2: If own status, use self-key
+        if (!statusKey && userId === currentUser?.id) {
+            try {
+                statusKey = await getChatKey(userId, userId);
+            } catch (e) {
+                console.warn('[STATUS] Self key fallback failed:', e);
+            }
         }
 
         let decryptedContent = s.content;
