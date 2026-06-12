@@ -98,6 +98,58 @@ export default function WatchPartyScreen() {
                     setTimeout(() => { isSyncingRef.current = false; }, 1000); // Release lock after sync
                 });
             })
+            .on('broadcast', { event: 'access_request' }, (payload) => {
+                if (currentUser.id === hostId) {
+                    const { requesterId, requesterName, targetFriendId, targetFriendName } = payload.payload;
+                    Alert.alert(
+                        "Guest Invite Request",
+                        `${requesterName} wants to invite ${targetFriendName} to the theater. Allow?`,
+                        [
+                            { text: "Deny", style: "cancel" },
+                            { text: "Allow", onPress: () => {
+                                channel.send({
+                                    type: 'broadcast',
+                                    event: 'access_granted',
+                                    payload: { requesterId, targetFriendId }
+                                });
+                            }}
+                        ]
+                    );
+                }
+            })
+            .on('broadcast', { event: 'access_granted' }, async (payload) => {
+                if (currentUser.id === payload.payload.requesterId) {
+                    const { targetFriendId } = payload.payload;
+                    
+                    const ids = [currentUser.id, targetFriendId].sort();
+                    const friendChatId = `${ids[0]}_${ids[1]}`;
+                    
+                    const time = await playerRef.current?.getCurrentTime() || 0;
+
+                    const initialState = {
+                        partyId: roomId,
+                        videoId,
+                        hostId: hostId,
+                        invite_status: 'pending',
+                        createdAt: new Date().toISOString(),
+                        status: 'playing', // Always send as playing to be safe, sync handles the rest
+                        currentTime: time
+                    };
+
+                    const { error } = await supabase.from('messages').insert({
+                        chat_id: friendChatId,
+                        sender_id: currentUser.id,
+                        message: JSON.stringify(initialState),
+                        message_type: 'watch_party'
+                    });
+
+                    if (!error) {
+                        Alert.alert("Invite Approved! 🍿", "Your ticket was sent successfully.");
+                    } else {
+                        Alert.alert("Error", "Could not send invite.");
+                    }
+                }
+            })
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
                     await channel.track({ name: currentUser.name, avatar: currentUser.image });
@@ -195,20 +247,40 @@ export default function WatchPartyScreen() {
         setInviteModalVisible(true);
     };
 
-    const sendInvite = async (friendId: string) => {
+    const sendInvite = async (friendId: string, friendName: string) => {
         if (!currentUser || inviting) return;
         setInviting(true);
+
+        if (!isHost) {
+            // Ask for permission
+            channelRef.current?.send({
+                type: 'broadcast',
+                event: 'access_request',
+                payload: {
+                    requesterId: currentUser.id,
+                    requesterName: currentUser.name,
+                    targetFriendId: friendId,
+                    targetFriendName: friendName
+                }
+            });
+            setInviting(false);
+            setInviteModalVisible(false);
+            Alert.alert("Request Sent", "Waiting for the Host to approve your invite...");
+            return;
+        }
+
         const ids = [currentUser.id, friendId].sort();
         const friendChatId = `${ids[0]}_${ids[1]}`;
+        const time = await playerRef.current?.getCurrentTime() || 0;
 
         const initialState = {
             partyId: roomId,
             videoId,
-            hostId: currentUser.id,
+            hostId: hostId,
             invite_status: 'pending',
             createdAt: new Date().toISOString(),
             status: playing ? 'playing' : 'paused',
-            currentTime: currentTime
+            currentTime: time
         };
 
         const { error } = await supabase.from('messages').insert({
@@ -311,12 +383,10 @@ export default function WatchPartyScreen() {
                     />
                 </View>
 
-                {isHost && (
-                    <TouchableOpacity style={styles.inviteBtn} onPress={openInviteModal} activeOpacity={0.8}>
-                        <Ionicons name="person-add" size={22} color="white" />
-                        <Text style={styles.callBtnText}>Invite Friend</Text>
-                    </TouchableOpacity>
-                )}
+                <TouchableOpacity style={styles.inviteBtn} onPress={openInviteModal} activeOpacity={0.8}>
+                    <Ionicons name="person-add" size={22} color="white" />
+                    <Text style={styles.callBtnText}>Invite Friend</Text>
+                </TouchableOpacity>
             </View>
             )}
 
@@ -341,7 +411,7 @@ export default function WatchPartyScreen() {
                                         <View style={styles.friendImgFallback}><Text style={{ color: 'white' }}>{item.name?.charAt(0)}</Text></View>
                                     )}
                                     <Text style={styles.friendName}>{item.name}</Text>
-                                    <TouchableOpacity style={styles.sendInviteBtn} onPress={() => sendInvite(item.id)}>
+                                    <TouchableOpacity style={styles.sendInviteBtn} onPress={() => sendInvite(item.id, item.name)}>
                                         <Text style={styles.sendInviteText}>Send Ticket</Text>
                                     </TouchableOpacity>
                                 </View>
