@@ -84,24 +84,36 @@ export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPres
                 </View>
             </View>
 
-            <View style={[
-                styles.thumbnail,
-                { backgroundColor: item.mediaType === 'text' ? (item.bgColor || '#F68537') : '#FDBA74' }
-            ]}>
-                {item.mediaType === 'text' ? (
-                    <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
-                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 8, textAlign: 'center' }} numberOfLines={3}>
-                            {item.text || 'TEXT'}
-                        </Text>
-                    </View>
-                ) : item.mediaType === 'video' ? (
-                    videoThumbnail
-                ) : (
-                    <Image
-                        source={{ uri: thumbnailToRender }}
-                        style={{ width: '100%', height: '100%' }}
-                     cachePolicy="memory-disk" />
-                )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[
+                    styles.thumbnail,
+                    { backgroundColor: item.mediaType === 'text' ? (item.bgColor || '#F68537') : '#FDBA74' }
+                ]}>
+                    {item.mediaType === 'text' ? (
+                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
+                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 8, textAlign: 'center' }} numberOfLines={3}>
+                                {item.text || 'TEXT'}
+                            </Text>
+                        </View>
+                    ) : item.mediaType === 'video' ? (
+                        videoThumbnail
+                    ) : (
+                        <Image
+                            source={{ uri: thumbnailToRender }}
+                            style={{ width: '100%', height: '100%' }}
+                         cachePolicy="memory-disk" />
+                    )}
+                </View>
+                
+                <TouchableOpacity 
+                    style={{ padding: 4 }} 
+                    onPress={(e) => {
+                        e.stopPropagation();
+                        // TODO: Handle 3-dots press (e.g. mute status)
+                    }}
+                >
+                    <Ionicons name="ellipsis-vertical" size={20} color="#94A3B8" />
+                </TouchableOpacity>
             </View>
         </TouchableOpacity>
     );
