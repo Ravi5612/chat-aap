@@ -251,10 +251,10 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                                 }
 
                                 return (
-                                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); Haptics.selectionAsync(); onReplyClick?.(reply); }} activeOpacity={0.7} style={{ margin: 6, padding: 8, borderRadius: 8, borderLeftWidth: 4, backgroundColor: 'rgba(0, 0, 0, 0.05)', borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537', flexDirection: 'row', alignItems: 'center' }}>
+                                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); Haptics.selectionAsync(); onReplyClick?.(reply); }} activeOpacity={0.7} style={{ margin: 6, padding: 8, borderRadius: 8, borderLeftWidth: 4, backgroundColor: 'rgba(0, 0, 0, 0.05)', borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537', flexDirection: 'row', alignItems: 'center', minWidth: 140 }}>
                                         <View style={{ flex: 1 }}>
                                             <Text style={{ fontWeight: 'bold', fontSize: 11, color: isCurrentUser ? 'white' : '#F68537' }}>{reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}</Text>
-                                            <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={4}>{previewText}</Text>
+                                            <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={3}>{previewText}</Text>
                                         </View>
                                         {/* Thumbnail for image replies */}
                                         {isImg && replyImgUrl ? (
