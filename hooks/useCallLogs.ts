@@ -117,6 +117,14 @@ export const useCallLogs = () => {
         }
     }, [loadingMore, hasMore, loadLogs]);
 
+    const removeLogsLocally = useCallback((idsToRemove: string[]) => {
+        setLogs(prev => {
+            const updated = prev.filter(log => !idsToRemove.includes(log.id));
+            saveCallLogsToCache(updated);
+            return updated;
+        });
+    }, []);
+
     return {
         logs,
         loading,
@@ -124,6 +132,7 @@ export const useCallLogs = () => {
         hasMore,
         refreshLogs,
         loadMoreLogs,
+        removeLogsLocally,
         currentUser
     };
 };

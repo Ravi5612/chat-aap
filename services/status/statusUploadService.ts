@@ -167,17 +167,18 @@ export const processStatusUpload = async (params: StatusUploadParams) => {
             }
         }
 
-        // ✅ Remove the temporary uploading status from local state before fetching fresh data
+        // ✅ Update local state directly instead of re-fetching everything from server
         const refreshedStore = useFriendsStore.getState();
         const currentActive = refreshedStore.myStatuses?.active || [];
         useFriendsStore.setState({
             myStatuses: {
                 ...refreshedStore.myStatuses,
-                active: currentActive.filter((s: any) => s.id !== tempId)
+                active: currentActive.map((s: any) => s.id === tempId ? { ...insertedStatus, isUploading: false } : s)
             }
         });
 
-        await friendsStore.loadFriends(user.id, true);
+        // ❌ REMOVED: await friendsStore.loadFriends(user.id, true);
+        // We no longer trigger a full reload of the app when a status is posted!
 
     } catch (error: any) {
         console.error('Background status upload failed:', error);

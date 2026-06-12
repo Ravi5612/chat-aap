@@ -18,7 +18,7 @@ import DeleteCallLogsModal from '@/components/calls/DeleteCallLogsModal';
 export default function CallsScreen() {
     const swipeHandlers = useSwipeNavigation();
     const router = useRouter();
-    const { logs, loading, loadingMore, hasMore, refreshLogs, loadMoreLogs, currentUser } = useCallLogs();
+    const { logs, loading, loadingMore, hasMore, refreshLogs, loadMoreLogs, removeLogsLocally, currentUser } = useCallLogs();
     const [refreshing, setRefreshing] = useState(false);
 
     // Multi-selection state
@@ -73,7 +73,7 @@ export default function CallsScreen() {
             .or(`caller_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`);
             
         if (!error) {
-            refreshLogs();
+            removeLogsLocally(idsToDelete); // ✅ Optimistic UI: Remove locally instead of fetching from server!
             setSelectedIds(new Set());
             setIsSelectionMode(false);
             setIsDeleteModalVisible(false);
@@ -82,7 +82,7 @@ export default function CallsScreen() {
             setIsDeleteModalVisible(false);
         }
         setIsDeleting(false);
-    }, [selectedIds, isDeleting, currentUser?.id, refreshLogs]);
+    }, [selectedIds, isDeleting, currentUser?.id, removeLogsLocally]);
 
     const cancelSelection = () => {
         setIsSelectionMode(false);
