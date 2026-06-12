@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, ActivityIndicator, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import { Ionicons } from '@expo/vector-icons';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useCallStore } from '@/store/useCallStore';
 
-const { width } = Dimensions.get('window');
-
 export default function WatchPartyScreen() {
+    const { width, height } = useWindowDimensions();
     const { id: roomId, videoId, messageId } = useLocalSearchParams();
     const router = useRouter();
     const currentUser = useAuthStore(state => state.user);
@@ -20,6 +20,7 @@ export default function WatchPartyScreen() {
     const [currentTime, setCurrentTime] = useState(0);
     const [loading, setLoading] = useState(true);
     const [partyStatus, setPartyStatus] = useState('Joining Cinema...');
+    const [isFullScreen, setIsFullScreen] = useState(false);
     
     const playerRef = useRef<any>(null);
     const channelRef = useRef<any>(null);
@@ -41,6 +42,11 @@ export default function WatchPartyScreen() {
         if (callSession && !useCallStore.getState().isMinimized) {
             useCallStore.getState().setMinimized(true);
         }
+
+        // Cleanup orientation on unmount
+        return () => {
+            ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        };
     }, []);
 
     // Setup Supabase Realtime Channel for Sync
@@ -119,30 +125,42 @@ export default function WatchPartyScreen() {
         }
     }, [broadcastState]);
 
+    const onFullScreenChange = useCallback((isFull: boolean) => {
+        setIsFullScreen(isFull);
+        if (isFull) {
+            ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        } else {
+            ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        }
+    }, []);
+
     const handleBack = () => {
         router.back();
     };
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
-                    <Ionicons name="chevron-down" size={28} color="white" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Cinema Mode</Text>
-                <View style={{ width: 28 }} />
-            </View>
+            {!isFullScreen && (
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
+                        <Ionicons name="chevron-down" size={28} color="white" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Cinema Mode</Text>
+                    <View style={{ width: 28 }} />
+                </View>
+            )}
 
-            <View style={styles.playerWrapper}>
+            <View style={[styles.playerWrapper, { width, height: isFullScreen ? height : width * (9 / 16) }]}>
                 <YoutubeIframe
                     ref={playerRef}
-                    height={width * (9 / 16)} // 16:9 aspect ratio
+                    height={isFullScreen ? height : width * (9 / 16)} // 16:9 aspect ratio or fullscreen
                     width={width}
                     play={playing}
                     videoId={videoId as string}
                     onChangeState={onStateChange}
                     onReady={() => setLoading(false)}
                     onError={(e) => setPartyStatus('Error loading video!')}
+                    onFullScreenChange={onFullScreenChange}
                     initialPlayerParams={{
                         controls: true,
                         modestbranding: true,
@@ -156,10 +174,11 @@ export default function WatchPartyScreen() {
                 )}
             </View>
 
-            <View style={styles.controlsArea}>
-                {partyStatus ? (
-                    <Animated.Text style={[styles.statusText, { opacity: pulseAnim }]}>{partyStatus}</Animated.Text>
-                ) : (
+            {!isFullScreen && (
+                <View style={styles.controlsArea}>
+                    {partyStatus ? (
+                        <Animated.Text style={[styles.statusText, { opacity: pulseAnim }]}>{partyStatus}</Animated.Text>
+                    ) : (
                     <Animated.Text style={[styles.syncText, { opacity: pulseAnim }]}>
                         <Ionicons name="sync" size={14} color="#10B981" /> Live Sync Active
                     </Animated.Text>
@@ -186,6 +205,7 @@ export default function WatchPartyScreen() {
                     </TouchableOpacity>
                 )}
             </View>
+            )}
         </View>
     );
 }
@@ -214,8 +234,6 @@ const styles = StyleSheet.create({
         letterSpacing: 1,
     },
     playerWrapper: {
-        width: width,
-        height: width * (9 / 16),
         backgroundColor: 'black',
         justifyContent: 'center',
         alignItems: 'center',
