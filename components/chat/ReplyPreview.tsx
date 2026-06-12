@@ -49,7 +49,7 @@ export default React.memo(function ReplyPreview({ replyingTo, onCancel }: ReplyP
                 <View style={styles.indicatorBar} />
                 <View style={styles.textContainer}>
                     <Text style={styles.titleText}>Replying to...</Text>
-                    <Text style={styles.messageText} numberOfLines={1}>
+                    <Text style={styles.messageText} numberOfLines={4}>
                         {getPreviewText()}
                     </Text>
                 </View>
