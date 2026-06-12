@@ -57,6 +57,17 @@ export default function ProfileSettings() {
                 <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
             </TouchableOpacity>
 
+            <TouchableOpacity onPress={() => router.push('/storage-data' as any)} style={styles.settingsItem}>
+                <View style={[styles.settingsIconBg, { backgroundColor: '#FFF7ED' }]}>
+                    <Ionicons name="cloud-download-outline" size={20} color="#F68537" />
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.settingsTitle}>Storage and Data</Text>
+                    <Text style={styles.settingsSubtitle}>Network usage, auto-download</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.settingsItem}>
                 <View style={[styles.settingsIconBg, { backgroundColor: '#FFF7ED' }]}>
                     <Ionicons name="help-circle-outline" size={20} color="#F68537" />
