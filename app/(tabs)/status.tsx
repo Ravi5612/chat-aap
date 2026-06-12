@@ -40,6 +40,7 @@ export default function StatusScreen() {
                 text: statusInfo[item.id]?.text,
                 bgColor: statusInfo[item.id]?.bgColor,
                 latestTimestamp: statusInfo[item.id]?.latestTimestamp,
+                statusKey: statusInfo[item.id]?.statusKey,
             }))
             .sort((a, b) => {
                 const timeA = a.latestTimestamp ? new Date(a.latestTimestamp).getTime() : 0;

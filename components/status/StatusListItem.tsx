@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
 
 const formatRelativeTime = (isoString?: string) => {
     if (!isoString) return 'Recently updated';
@@ -15,12 +16,23 @@ const formatRelativeTime = (isoString?: string) => {
 };
 
 export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPress: (item: any) => void }) => {
+    // Decrypt thumbnail using the cache hook
+    const { localImageUrl } = useMessageMediaCache(
+        { sender_id: item.id }, // mock message object just for fallback if needed
+        item.mediaType !== 'text' ? item.thumbnail : null,
+        null,
+        null,
+        item.statusKey
+    );
+
+    const thumbnailToRender = localImageUrl || item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}`;
+
     // Single Video thumbnail rendered once for both avatar and thumbnail areas
     const videoThumbnail = item.mediaType === 'video' ? (
         <View style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#1E293B', alignItems: 'center', justifyContent: 'center' }}>
-            {item.thumbnail ? (
+            {localImageUrl ? (
                 <>
-                    <Image source={{ uri: item.thumbnail }} style={{ width: '100%', height: '100%', position: 'absolute' }}  cachePolicy="memory-disk" />
+                    <Image source={{ uri: localImageUrl }} style={{ width: '100%', height: '100%', position: 'absolute' }}  cachePolicy="memory-disk" />
                     <View style={{ position: 'absolute', backgroundColor: 'rgba(0,0,0,0.3)', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
                         <Ionicons name="play" size={14} color="white" />
                     </View>
@@ -54,7 +66,7 @@ export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPres
                         </View>
                     ) : (
                         <Image
-                            source={{ uri: item.thumbnail || item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
+                            source={{ uri: thumbnailToRender }}
                             style={styles.avatar}
                          cachePolicy="memory-disk" />
                     )}
@@ -86,7 +98,7 @@ export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPres
                     videoThumbnail
                 ) : (
                     <Image
-                        source={{ uri: item.thumbnail || item.img }}
+                        source={{ uri: thumbnailToRender }}
                         style={{ width: '100%', height: '100%' }}
                      cachePolicy="memory-disk" />
                 )}

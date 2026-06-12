@@ -55,13 +55,15 @@ export async function processStatuses(
                     try {
                         const statusKey = keyCache[s.user_id];
                         if (statusKey) {
-                            statusInfoMap[s.user_id].thumbnail = await decryptText(targetUrl, statusKey);
+                            statusInfoMap[s.user_id].thumbnail = targetUrl; // KEEP IT ENCRYPTED
                             statusInfoMap[s.user_id].mediaType = s.media_type;
+                            statusInfoMap[s.user_id].statusKey = statusKey;
                         }
                     } catch (e) { console.error('Thumbnail decryption error:', e); }
                 } else {
                     statusInfoMap[s.user_id].thumbnail = targetUrl;
                     statusInfoMap[s.user_id].mediaType = s.media_type;
+                    statusInfoMap[s.user_id].statusKey = keyCache[s.user_id];
                 }
             } else if (s.media_type === 'text') {
                 statusInfoMap[s.user_id].mediaType = 'text';

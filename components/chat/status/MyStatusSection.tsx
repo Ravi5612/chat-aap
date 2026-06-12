@@ -18,12 +18,23 @@ interface ActiveStatusBubbleProps {
     onViewMyStatus: (index: number) => void;
 }
 
+import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
+
 const ActiveStatusBubble = React.memo(({
     status, index, currentProfile, onViewMyStatus
 }: ActiveStatusBubbleProps) => {
     const isViewed = status.isViewed;
     const isUploading = status.isUploading;
     const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentProfile?.username || 'User')}&backgroundColor=F68537`;
+
+    // Decrypt the thumbnail/media for preview
+    const { localImageUrl } = useMessageMediaCache(
+        status,
+        status.media_type !== 'text' ? (status.thumbnail_url || status.media_url) : null,
+        null,
+        null,
+        status.statusKey
+    );
 
     const borderColor = isUploading ? '#F68537' : (isViewed ? '#D1D5DB' : '#10B981');
     const labelColor = isUploading ? '#F68537' : (isViewed ? '#94A3B8' : '#10B981');
@@ -41,7 +52,7 @@ const ActiveStatusBubble = React.memo(({
                     <View style={styles.thumbnailInner}>
                         <StatusThumbnail
                             mediaType={status.media_type || 'image'}
-                            mediaUrl={status.media_url || currentProfile?.avatar_url || defaultAvatar}
+                            mediaUrl={localImageUrl || currentProfile?.avatar_url || defaultAvatar}
                             text={status.content}
                             bgColor={status.background_color}
                             isUploading={isUploading}
