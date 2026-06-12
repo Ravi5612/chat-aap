@@ -15,7 +15,7 @@ const formatRelativeTime = (isoString?: string) => {
     return `${Math.floor(hours / 24)}d ago`;
 };
 
-export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPress: (item: any) => void }) => {
+export const StatusListItem = React.memo(({ item, onPress, onOptionsPress }: { item: any, onPress: (item: any) => void, onOptionsPress?: (item: any) => void }) => {
     // Decrypt thumbnail using the cache hook
     const { localImageUrl } = useMessageMediaCache(
         { sender_id: item.id }, // mock message object just for fallback if needed
@@ -109,7 +109,7 @@ export const StatusListItem = React.memo(({ item, onPress }: { item: any, onPres
                     style={{ padding: 4 }} 
                     onPress={(e) => {
                         e.stopPropagation();
-                        // TODO: Handle 3-dots press (e.g. mute status)
+                        if (onOptionsPress) onOptionsPress(item);
                     }}
                 >
                     <Ionicons name="ellipsis-vertical" size={20} color="#94A3B8" />

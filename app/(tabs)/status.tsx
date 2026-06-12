@@ -89,11 +89,35 @@ export default function StatusScreen() {
         </View>
     );
 
+    const handleStatusOptions = useCallback((item: any) => {
+        import('react-native').then(({ Alert }) => {
+            Alert.alert(
+                `${item.name}`,
+                'What would you like to do?',
+                [
+                    { 
+                        text: 'Message', 
+                        onPress: () => router.push({ pathname: `/chat/${item.id}`, params: { name: item.name, image: item.img } }) 
+                    },
+                    { 
+                        text: 'View Profile', 
+                        onPress: () => router.push({ pathname: `/profile/${item.id}`, params: { name: item.name, image: item.img } }) 
+                    },
+                    { 
+                        text: 'Mute Status', 
+                        onPress: () => Alert.alert('Mute', 'This friend\'s status updates will be muted. (Coming soon)', [{ text: 'OK' }]) 
+                    },
+                    { text: 'Cancel', style: 'cancel' }
+                ]
+            );
+        });
+    }, [router]);
+
     const renderItem = useCallback(({ item }: { item: any }) => (
         <View style={{ paddingHorizontal: 20 }}>
-            <StatusListItem item={item} onPress={handleViewUserStatus} />
+            <StatusListItem item={item} onPress={handleViewUserStatus} onOptionsPress={handleStatusOptions} />
         </View>
-    ), [handleViewUserStatus]);
+    ), [handleViewUserStatus, handleStatusOptions]);
 
     const [refreshing, setRefreshing] = useState(false);
 
