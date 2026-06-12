@@ -66,7 +66,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
         if (!chatKey) return; // truly no key available even after retry
 
 
-        const PAGE_SIZE = 20;
+        const PAGE_SIZE = 100;
         let hasLocalMessages = false;
 
         try {
@@ -216,7 +216,7 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
         const { chatKey, messages, hasMore, loadingMore } = get();
         if (!friendId || !currentUser || !chatKey || !hasMore || loadingMore) return;
 
-        const PAGE_SIZE = 20;
+        const PAGE_SIZE = 100;
         set({ loadingMore: true });
 
         try {
