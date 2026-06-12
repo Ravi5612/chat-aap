@@ -11,6 +11,9 @@ interface ChessState {
     playerWhite: string;
     playerBlack: string;
     winner: 'w' | 'b' | 'draw' | null;
+    status?: string;
+    lastMoveAt?: number;
+    timeoutWinner?: 'w' | 'b';
 }
 
 interface ChessWidgetProps {
@@ -22,6 +25,7 @@ export default function ChessWidget({ message, currentUserId }: ChessWidgetProps
     const [updating, setUpdating] = useState(false);
     const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
     const [validMoves, setValidMoves] = useState<Move[]>([]);
+    const [timeLeft, setTimeLeft] = useState(120);
 
     let gameState: ChessState;
     try {
@@ -40,6 +44,32 @@ export default function ChessWidget({ message, currentUserId }: ChessWidgetProps
     const isBlack = playerBlack === currentUserId;
     const isMyTurn = (chess.turn() === 'w' && isWhite) || (chess.turn() === 'b' && isBlack);
     const myColor = isWhite ? 'w' : 'b';
+
+    useEffect(() => {
+        if (winner || gameState.status !== 'active' || !gameState.lastMoveAt) return;
+
+        const interval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - gameState.lastMoveAt!) / 1000);
+            const remaining = Math.max(120 - elapsed, 0);
+            setTimeLeft(remaining);
+
+            if (remaining === 0 && !isMyTurn && !winner && !updating) {
+                claimTimeoutWin();
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [gameState.lastMoveAt, winner, isMyTurn, gameState.status]);
+
+    const claimTimeoutWin = async () => {
+        setUpdating(true);
+        const newState: ChessState = {
+            ...gameState,
+            winner: myColor,
+            timeoutWinner: myColor
+        };
+        await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', message.id);
+        setUpdating(false);
+    };
 
     const handleSquarePress = async (rowIndex: number, colIndex: number) => {
         if (updating || winner || !isMyTurn) return;
@@ -82,7 +112,8 @@ export default function ChessWidget({ message, currentUserId }: ChessWidgetProps
                     const newState: ChessState = {
                         ...gameState,
                         fen: chess.fen(),
-                        winner: newWinner
+                        winner: newWinner,
+                        lastMoveAt: Date.now()
                     };
 
                     const { error } = await supabase
@@ -130,13 +161,20 @@ export default function ChessWidget({ message, currentUserId }: ChessWidgetProps
                     {winner ? (
                         <Text style={styles.winnerText}>
                             {winner === 'draw' ? 'Game Draw!' : 
-                             (winner === myColor ? '🎉 You Won!' : '😔 You Lost!')}
+                             (gameState.timeoutWinner ? (winner === myColor ? '🎉 You Won (Timeout)!' : '⏳ You Lost (Timeout)') :
+                             (winner === myColor ? '🎉 You Won!' : '😔 You Lost!'))}
                         </Text>
                     ) : (
-                        <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#6B7280' }]}>
-                            {chess.inCheck() ? '⚠️ CHECK! ' : ''}
-                            {isMyTurn ? "Your Turn" : "Opponent's Turn"}
-                        </Text>
+                        <View style={{ alignItems: 'center' }}>
+                            <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
+                                {isMyTurn ? "Your Turn" : "Opponent's Turn"}
+                            </Text>
+                            {gameState.status === 'active' && gameState.lastMoveAt && (
+                                <Text style={styles.timerText}>
+                                    {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
+                                </Text>
+                            )}
+                        </View>
                     )}
                 </View>
 
@@ -224,8 +262,15 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     turnText: {
-        fontSize: 13,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    timerText: {
+        fontSize: 14,
+        color: '#94A3B8',
+        fontWeight: 'bold',
+        fontVariant: ['tabular-nums'],
     },
     winnerText: {
         fontSize: 16,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -22,6 +22,9 @@ interface LudoState {
     };
     winner: string | null;
     message?: string; // e.g. "Red killed Yellow!"
+    status?: string;
+    lastMoveAt?: number;
+    timeoutWinner?: string;
 }
 
 const BOARD_SIZE = 270;
@@ -29,6 +32,7 @@ const CELL_SIZE = BOARD_SIZE / 15;
 
 export default function LudoWidget({ message, currentUserId }: { message: any, currentUserId: string }) {
     const [updating, setUpdating] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(120);
 
     let state: LudoState;
     try {
@@ -46,6 +50,33 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
     const isMyTurn = myColor === state.turn && !state.winner;
     const canRoll = isMyTurn && state.diceValue === null;
     const mustMove = isMyTurn && state.diceValue !== null;
+
+    useEffect(() => {
+        if (state.winner || state.status !== 'active' || !state.lastMoveAt) return;
+
+        const interval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - state.lastMoveAt!) / 1000);
+            const remaining = Math.max(120 - elapsed, 0);
+            setTimeLeft(remaining);
+
+            if (remaining === 0 && !isMyTurn && !state.winner && !updating) {
+                claimTimeoutWin();
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [state.lastMoveAt, state.winner, isMyTurn, state.status]);
+
+    const claimTimeoutWin = async () => {
+        setUpdating(true);
+        const newState: LudoState = {
+            ...state,
+            winner: myColor,
+            timeoutWinner: myColor,
+            message: "Opponent timed out!"
+        };
+        await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', message.id);
+        setUpdating(false);
+    };
 
     // ----- LOGIC: Calculate Paths & Validity -----
     const getStepsTaken = (color: string, pos: number) => {
@@ -104,7 +135,8 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
 
     const saveState = async (newState: LudoState) => {
         setUpdating(true);
-        await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', message.id);
+        const stateToSave = { ...newState, lastMoveAt: Date.now() };
+        await supabase.from('messages').update({ message: JSON.stringify(stateToSave) }).eq('id', message.id);
         setUpdating(false);
     };
 
@@ -184,7 +216,8 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
             turn: nextTurn,
             diceValue: null,
             winner,
-            message: killMessage || state.message
+            message: killMessage || state.message,
+            lastMoveAt: Date.now()
         };
 
         await saveState(newState);
@@ -281,26 +314,36 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
                 )}
             </View>
 
-            {state.winner ? (
-                <Text style={styles.winnerText}>🏆 {state.winner} Won!</Text>
-            ) : (
-                <View style={styles.controls}>
-                    <Text style={[styles.turnText, { color: LUDO_COLORS[state.turn] }]}>
-                        {isMyTurn ? "Your Turn!" : `${state.turn}'s Turn`}
+            <View style={styles.statusRow}>
+                {state.winner ? (
+                    <Text style={styles.winnerText}>
+                        {state.winner === myColor ? (state.timeoutWinner ? '🎉 You Won (Timeout)!' : '🎉 You Won!') : (state.timeoutWinner ? '⏳ You Lost (Timeout)' : '😔 You Lost!')}
                     </Text>
-                    <TouchableOpacity 
-                        style={[styles.dice, { opacity: canRoll ? 1 : 0.5 }]} 
-                        onPress={rollDice}
-                        disabled={!canRoll || updating}
-                    >
-                        <FontAwesome5 
-                            name={`dice-${['one','two','three','four','five','six'][(state.diceValue || 1) - 1]}`} 
-                            size={32} 
-                            color={LUDO_COLORS[state.turn]} 
-                        />
-                    </TouchableOpacity>
-                </View>
-            )}
+                ) : (
+                    <View style={{ alignItems: 'center' }}>
+                        <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : LUDO_COLORS[state.turn as keyof typeof LUDO_COLORS] }]}>
+                            {isMyTurn ? "Your Turn" : `${state.turn} Player's Turn`}
+                        </Text>
+                        {state.status === 'active' && state.lastMoveAt && (
+                            <Text style={styles.timerText}>
+                                {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
+                            </Text>
+                        )}
+                    </View>
+                )}
+            </View>
+
+            <TouchableOpacity 
+                style={[styles.dice, { opacity: canRoll ? 1 : 0.5 }]} 
+                onPress={rollDice}
+                disabled={!canRoll || updating}
+            >
+                <FontAwesome5 
+                    name={`dice-${['one','two','three','four','five','six'][(state.diceValue || 1) - 1]}`} 
+                    size={32} 
+                    color={LUDO_COLORS[state.turn as keyof typeof LUDO_COLORS]} 
+                />
+            </TouchableOpacity>
         </View>
         </GameInviteOverlay>
     );
@@ -381,23 +424,33 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    controls: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+    statusRow: {
         marginTop: 12,
-        paddingHorizontal: 8,
+        alignItems: 'center',
     },
-    turnText: { fontWeight: 'bold', fontSize: 15 },
+    turnText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    timerText: {
+        fontSize: 14,
+        color: '#94A3B8',
+        fontWeight: 'bold',
+        fontVariant: ['tabular-nums'],
+    },
+    winnerText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#10B981',
+    },
     dice: {
         width: 48, height: 48,
         justifyContent: 'center', alignItems: 'center',
         backgroundColor: '#F1F5F9',
         borderRadius: 12,
         borderWidth: 1, borderColor: '#E2E8F0',
+        alignSelf: 'center',
+        marginTop: 12,
     },
-    winnerText: {
-        marginTop: 12, textAlign: 'center',
-        fontSize: 18, fontWeight: 'bold', color: '#10B981'
-    }
 });

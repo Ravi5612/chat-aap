@@ -37,8 +37,13 @@ export default function GameInviteOverlay({ gameName, gameState, currentUserId, 
 
     const handleUpdateStatus = async (newStatus: string) => {
         if (updating) return;
-        setUpdating(true);
         const newState = { ...gameState, status: newStatus };
+        
+        // Start the turn timer when game is accepted
+        if (newStatus === 'active') {
+            newState.lastMoveAt = Date.now();
+        }
+
         await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', messageId);
         setUpdating(false);
     };

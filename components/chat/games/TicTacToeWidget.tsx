@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +11,9 @@ interface TicTacToeState {
     playerX: string;
     playerO: string;
     winner: string | null | 'Draw';
+    status?: string;
+    lastMoveAt?: number;
+    timeoutWinner?: string;
 }
 
 interface TicTacToeWidgetProps {
@@ -20,6 +23,7 @@ interface TicTacToeWidgetProps {
 
 export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWidgetProps) {
     const [updating, setUpdating] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(120);
 
     let gameState: TicTacToeState;
     try {
@@ -32,6 +36,33 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
     const isMyTurn = (turn === 'X' && playerX === currentUserId) || (turn === 'O' && playerO === currentUserId);
     const iAmPlayerX = playerX === currentUserId;
     const mySymbol = iAmPlayerX ? 'X' : 'O';
+
+    useEffect(() => {
+        if (winner || gameState.status !== 'active' || !gameState.lastMoveAt) return;
+
+        const interval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - gameState.lastMoveAt!) / 1000);
+            const remaining = Math.max(120 - elapsed, 0);
+            setTimeLeft(remaining);
+
+            if (remaining === 0 && !isMyTurn && !winner && !updating) {
+                // Opponent ran out of time, I win!
+                claimTimeoutWin();
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [gameState.lastMoveAt, winner, isMyTurn, gameState.status]);
+
+    const claimTimeoutWin = async () => {
+        setUpdating(true);
+        const newState: TicTacToeState = {
+            ...gameState,
+            winner: mySymbol,
+            timeoutWinner: mySymbol
+        };
+        await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', message.id);
+        setUpdating(false);
+    };
 
     const checkWinner = (newBoard: (string | null)[]) => {
         const lines = [
@@ -65,7 +96,8 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
             ...gameState,
             board: newBoard,
             turn: newTurn,
-            winner: newWinner
+            winner: newWinner,
+            lastMoveAt: Date.now()
         };
 
         const { error } = await supabase
@@ -91,12 +123,20 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
                     {winner ? (
                         <Text style={styles.winnerText}>
                             {winner === 'Draw' ? 'Game Draw!' : 
-                             (winner === mySymbol ? '🎉 You Won!' : '😔 You Lost!')}
+                             (gameState.timeoutWinner ? (winner === mySymbol ? '🎉 You Won (Timeout)!' : '⏳ You Lost (Timeout)') :
+                             (winner === mySymbol ? '🎉 You Won!' : '😔 You Lost!'))}
                         </Text>
                     ) : (
-                        <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
-                            {isMyTurn ? "Your Turn" : "Opponent's Turn"}
-                        </Text>
+                        <View style={{ alignItems: 'center' }}>
+                            <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
+                                {isMyTurn ? "Your Turn" : "Opponent's Turn"}
+                            </Text>
+                            {gameState.status === 'active' && gameState.lastMoveAt && (
+                                <Text style={styles.timerText}>
+                                    {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
+                                </Text>
+                            )}
+                        </View>
                     )}
                 </View>
 
@@ -161,8 +201,15 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     turnText: {
-        fontSize: 13,
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    timerText: {
+        fontSize: 14,
+        color: '#94A3B8',
+        fontWeight: 'bold',
+        fontVariant: ['tabular-nums'],
     },
     winnerText: {
         fontSize: 15,
