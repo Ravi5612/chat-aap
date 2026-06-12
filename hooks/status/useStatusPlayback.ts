@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
 
 export const useStatusPlayback = (
@@ -8,7 +8,8 @@ export const useStatusPlayback = (
     viewerVideoRef: React.MutableRefObject<any>,
     paused: boolean
 ) => {
-    const [bgMusic, setBgMusic] = useState<Audio.Sound | null>(null);
+    // Use a ref so cleanup always has access to the latest sound instance
+    const bgMusicRef = useRef<Audio.Sound | null>(null);
 
     // Video Play/Pause effect
     useEffect(() => {
@@ -18,15 +19,22 @@ export const useStatusPlayback = (
         }
     }, [paused, currentIndex, statuses]);
 
-    // Handle Music playback
+    // Handle Music playback - runs when status changes
     useEffect(() => {
-        let sound: Audio.Sound | null = null;
-        
+        let isMounted = true;
+
         const playMusic = async () => {
-            if (bgMusic) {
-                await bgMusic.unloadAsync();
-                setBgMusic(null);
+            // Always stop & unload previous music first
+            if (bgMusicRef.current) {
+                try {
+                    await bgMusicRef.current.stopAsync();
+                    await bgMusicRef.current.unloadAsync();
+                } catch (e) {}
+                bgMusicRef.current = null;
             }
+
+            if (!isMounted) return;
+
             if (currentStatusUI?.audio_url) {
                 try {
                     const musicData = JSON.parse(currentStatusUI.audio_url);
@@ -35,30 +43,38 @@ export const useStatusPlayback = (
                             { uri: musicData.url },
                             { shouldPlay: !paused, isLooping: true }
                         );
-                        sound = newSound;
-                        setBgMusic(newSound);
+                        if (isMounted) {
+                            bgMusicRef.current = newSound;
+                        } else {
+                            // Component unmounted before sound loaded, clean it up
+                            await newSound.unloadAsync();
+                        }
                     }
-                } catch(e) {}
+                } catch (e) {}
             }
         };
-        
-        if (currentStatusUI) {
-            playMusic();
-        }
 
+        playMusic();
+
+        // Cleanup: runs when status changes OR component unmounts
         return () => {
-            if (sound) {
-                sound.unloadAsync().catch(() => {});
+            isMounted = false;
+            if (bgMusicRef.current) {
+                bgMusicRef.current.stopAsync()
+                    .then(() => bgMusicRef.current?.unloadAsync())
+                    .catch(() => {})
+                    .finally(() => { bgMusicRef.current = null; });
             }
         };
-    }, [currentIndex, statuses, currentStatusUI?.id]);
+    }, [currentIndex, currentStatusUI?.id]);
 
+    // Pause/Resume music when user holds screen
     useEffect(() => {
-        if (bgMusic) {
-            if (paused) bgMusic.pauseAsync();
-            else bgMusic.playAsync();
+        if (bgMusicRef.current) {
+            if (paused) bgMusicRef.current.pauseAsync().catch(() => {});
+            else bgMusicRef.current.playAsync().catch(() => {});
         }
-    }, [paused, bgMusic]);
+    }, [paused]);
 
-    return { bgMusic };
+    return {};
 };
