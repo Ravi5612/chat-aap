@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, RefreshControl, StyleSheet, Modal, TouchableWithoutFeedback, Alert } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -89,29 +89,13 @@ export default function StatusScreen() {
         </View>
     );
 
+    const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+    const [selectedOptionsItem, setSelectedOptionsItem] = useState<any>(null);
+
     const handleStatusOptions = useCallback((item: any) => {
-        import('react-native').then(({ Alert }) => {
-            Alert.alert(
-                `${item.name}`,
-                'What would you like to do?',
-                [
-                    { 
-                        text: 'Message', 
-                        onPress: () => router.push({ pathname: `/chat/${item.id}`, params: { name: item.name, image: item.img } }) 
-                    },
-                    { 
-                        text: 'View Profile', 
-                        onPress: () => router.push({ pathname: `/profile/${item.id}`, params: { name: item.name, image: item.img } }) 
-                    },
-                    { 
-                        text: 'Mute Status', 
-                        onPress: () => Alert.alert('Mute', 'This friend\'s status updates will be muted. (Coming soon)', [{ text: 'OK' }]) 
-                    },
-                    { text: 'Cancel', style: 'cancel' }
-                ]
-            );
-        });
-    }, [router]);
+        setSelectedOptionsItem(item);
+        setOptionsModalVisible(true);
+    }, []);
 
     const renderItem = useCallback(({ item }: { item: any }) => (
         <View style={{ paddingHorizontal: 20 }}>
@@ -148,6 +132,53 @@ export default function StatusScreen() {
                     estimatedItemSize={80}
                 />
             </View>
+
+            <Modal visible={optionsModalVisible} transparent animationType="slide">
+                <TouchableWithoutFeedback onPress={() => setOptionsModalVisible(false)}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.modalContent}>
+                                <View style={styles.modalHeader}>
+                                    <Text style={styles.modalTitle}>{selectedOptionsItem?.name}</Text>
+                                    <TouchableOpacity onPress={() => setOptionsModalVisible(false)} style={styles.modalCloseBtn}>
+                                        <Ionicons name="close" size={24} color="#64748B" />
+                                    </TouchableOpacity>
+                                </View>
+                                <TouchableOpacity 
+                                    style={styles.modalOption}
+                                    onPress={() => {
+                                        setOptionsModalVisible(false);
+                                        if (selectedOptionsItem) router.push({ pathname: `/chat/${selectedOptionsItem.id}`, params: { name: selectedOptionsItem.name, image: selectedOptionsItem.img } });
+                                    }}
+                                >
+                                    <Ionicons name="chatbubble-outline" size={24} color="#1E293B" />
+                                    <Text style={styles.modalOptionText}>Message</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={styles.modalOption}
+                                    onPress={() => {
+                                        setOptionsModalVisible(false);
+                                        if (selectedOptionsItem) router.push({ pathname: `/profile/${selectedOptionsItem.id}`, params: { name: selectedOptionsItem.name, image: selectedOptionsItem.img } });
+                                    }}
+                                >
+                                    <Ionicons name="person-outline" size={24} color="#1E293B" />
+                                    <Text style={styles.modalOptionText}>View Profile</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.modalOption, { borderBottomWidth: 0 }]}
+                                    onPress={() => {
+                                        setOptionsModalVisible(false);
+                                        Alert.alert('Mute', "This friend's status updates will be muted. (Coming soon)", [{ text: 'OK' }]);
+                                    }}
+                                >
+                                    <Ionicons name="volume-mute-outline" size={24} color="#EF4444" />
+                                    <Text style={[styles.modalOptionText, { color: '#EF4444' }]}>Mute Status</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </View>
     );
 }
@@ -162,6 +193,13 @@ const styles = StyleSheet.create({
     emptyContainer: { alignItems: 'center', justifyContent: 'center', padding: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 32, marginTop: 10, marginHorizontal: 20 },
     emptyIconCircle: { marginBottom: 16 },
     emptyText: { color: '#64748B', fontWeight: '900', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E293B' },
+    modalCloseBtn: { padding: 4, backgroundColor: '#F1F5F9', borderRadius: 20 },
+    modalOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+    modalOptionText: { fontSize: 16, fontWeight: '600', color: '#1E293B', marginLeft: 16 },
 });
 
 export { ScreenErrorBoundary as ErrorBoundary } from '@/components/ui/ScreenErrorBoundary';
