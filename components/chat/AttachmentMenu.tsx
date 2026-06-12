@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Modal, TouchableWithoutFeedback, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, TouchableWithoutFeedback, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface AttachmentMenuProps {
@@ -9,7 +9,7 @@ interface AttachmentMenuProps {
     onCamera: () => void;
     onDocument: () => void;
     onSchedule?: () => void;
-    onGame?: () => void;
+    onGame?: (gameType: 'tictactoe' | 'chess') => void;
 }
 
 // Static config outside component — never recreated
@@ -29,6 +29,20 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
     const open  = useCallback(() => setVisible(true),  []);
     const close = useCallback(() => setVisible(false), []);
 
+    const handleGameClick = useCallback(() => {
+        close();
+        if (!onGame) return;
+        Alert.alert(
+            "Select a Game",
+            "Which game do you want to play?",
+            [
+                { text: "Tic-Tac-Toe", onPress: () => onGame('tictactoe') },
+                { text: "Chess", onPress: () => onGame('chess') },
+                { text: "Cancel", style: "cancel" }
+            ]
+        );
+    }, [onGame, close]);
+
     // Map handlers once — only re-created if a handler prop changes
     const items = useMemo(() => [
         { ...MENU_ITEM_CONFIG[0], onPress: onDocument },
@@ -37,8 +51,8 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
         { ...MENU_ITEM_CONFIG[3], onPress: onSchedule ?? close },
         { ...MENU_ITEM_CONFIG[4], onPress: onLocation },
         { ...MENU_ITEM_CONFIG[5], onPress: onContact },
-        { ...MENU_ITEM_CONFIG[6], onPress: onGame ?? close },
-    ], [onDocument, onCamera, onImage, onSchedule, onLocation, onContact, onGame, close]);
+        { ...MENU_ITEM_CONFIG[6], onPress: handleGameClick },
+    ], [onDocument, onCamera, onImage, onSchedule, onLocation, onContact, handleGameClick, close]);
 
     return (
         <View>

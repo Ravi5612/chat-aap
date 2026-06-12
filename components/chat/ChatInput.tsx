@@ -37,7 +37,7 @@ interface ChatInputProps {
     isKeyboardOpen?: boolean;
     initialMessage?: string;
     onDraftChange?: (text: string) => void;
-    onPlayGame?: () => void;
+    onPlayGame?: (gameType: 'tictactoe' | 'chess') => void;
 }
 
 const ChatInput = memo(({

@@ -107,17 +107,33 @@ export default function ChatScreen() {
         }
     };
 
-    const handlePlayGame = async () => {
+    const handlePlayGame = async (gameType: 'tictactoe' | 'chess') => {
         if (!currentUser) return;
-        const initialState = {
-            board: [null, null, null, null, null, null, null, null, null],
-            turn: 'X',
-            playerX: currentUser.id,
-            playerO: isGroup === 'true' ? null : safeFriendId, // Simple logic for 1v1
-            winner: null
-        };
+        
+        let initialState: any = {};
+        let msgType = '';
+
+        if (gameType === 'tictactoe') {
+            initialState = {
+                board: [null, null, null, null, null, null, null, null, null],
+                turn: 'X',
+                playerX: currentUser.id,
+                playerO: isGroup === 'true' ? null : safeFriendId,
+                winner: null
+            };
+            msgType = 'game_tictactoe';
+        } else if (gameType === 'chess') {
+            initialState = {
+                fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", // Standard starting FEN
+                playerWhite: currentUser.id,
+                playerBlack: isGroup === 'true' ? null : safeFriendId,
+                winner: null
+            };
+            msgType = 'game_chess';
+        }
+
         try {
-            await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, 'game_tictactoe');
+            await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, msgType);
         } catch (e) {
             console.error('Failed to start game', e);
         }

@@ -10,6 +10,7 @@ import FlyingReaction from './FlyingReaction';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 import { Buffer } from 'buffer';
 import TicTacToeWidget from './games/TicTacToeWidget';
+import ChessWidget from './games/ChessWidget';
 
 import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
 import { useMessageGestures } from '@/hooks/useMessageGestures';
@@ -150,6 +151,14 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         return (
             <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
                 <TicTacToeWidget message={message} currentUserId={currentUserId} />
+            </View>
+        );
+    }
+
+    if (message.message_type === 'game_chess' && currentUserId) {
+        return (
+            <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
+                <ChessWidget message={message} currentUserId={currentUserId} />
             </View>
         );
     }
