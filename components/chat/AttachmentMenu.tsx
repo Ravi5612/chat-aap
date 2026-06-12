@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Modal, TouchableWithoutFeedback, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, TouchableWithoutFeedback, StyleSheet, Alert, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface AttachmentMenuProps {
@@ -85,29 +85,31 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
                             <View style={styles.gameMenuCard}>
                                 <Text style={styles.gameMenuTitle}>Choose a Game 🎮</Text>
                                 
-                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('tictactoe'); }}>
-                                    <View style={[styles.gameIcon, { backgroundColor: '#3B82F6' }]}><Ionicons name="grid" size={24} color="white" /></View>
-                                    <Text style={styles.gameText}>Tic-Tac-Toe</Text>
-                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-                                </TouchableOpacity>
+                                <ScrollView style={{ maxHeight: 350 }} showsVerticalScrollIndicator={false}>
+                                    <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('tictactoe'); }}>
+                                        <View style={[styles.gameIcon, { backgroundColor: '#3B82F6' }]}><Ionicons name="grid" size={24} color="white" /></View>
+                                        <Text style={styles.gameText}>Tic-Tac-Toe</Text>
+                                        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                    </TouchableOpacity>
 
-                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('chess'); }}>
-                                    <View style={[styles.gameIcon, { backgroundColor: '#1E293B' }]}><Ionicons name="apps" size={24} color="white" /></View>
-                                    <Text style={styles.gameText}>Chess (Shatranj)</Text>
-                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-                                </TouchableOpacity>
+                                    <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('chess'); }}>
+                                        <View style={[styles.gameIcon, { backgroundColor: '#1E293B' }]}><Ionicons name="apps" size={24} color="white" /></View>
+                                        <Text style={styles.gameText}>Chess (Shatranj)</Text>
+                                        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                    </TouchableOpacity>
 
-                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('ludo'); }}>
-                                    <View style={[styles.gameIcon, { backgroundColor: '#EF4444' }]}><Ionicons name="cube" size={24} color="white" /></View>
-                                    <Text style={styles.gameText}>Ludo Multiplayer</Text>
-                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-                                </TouchableOpacity>
+                                    <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('ludo'); }}>
+                                        <View style={[styles.gameIcon, { backgroundColor: '#EF4444' }]}><Ionicons name="cube" size={24} color="white" /></View>
+                                        <Text style={styles.gameText}>Ludo Multiplayer</Text>
+                                        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                    </TouchableOpacity>
 
-                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('racing'); }}>
-                                    <View style={[styles.gameIcon, { backgroundColor: '#F59E0B' }]}><Ionicons name="car" size={24} color="white" /></View>
-                                    <Text style={styles.gameText}>Car Racing 🏎️</Text>
-                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-                                </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.gameBtn, { borderBottomWidth: 0 }]} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('racing'); }}>
+                                        <View style={[styles.gameIcon, { backgroundColor: '#F59E0B' }]}><Ionicons name="car" size={24} color="white" /></View>
+                                        <Text style={styles.gameText}>Car Racing 🏎️</Text>
+                                        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                    </TouchableOpacity>
+                                </ScrollView>
                             </View>
                         </TouchableWithoutFeedback>
                     </View>
