@@ -33,6 +33,7 @@ const CELL_SIZE = BOARD_SIZE / 15;
 export default function LudoWidget({ message, currentUserId }: { message: any, currentUserId: string }) {
     const [updating, setUpdating] = useState(false);
     const [timeLeft, setTimeLeft] = useState(120);
+    const [isRolling, setIsRolling] = useState(false);
 
     let state: LudoState;
     try {
@@ -108,9 +109,14 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
     const validMoves = getValidMoves();
 
     // Auto-skip if no valid moves
-    if (mustMove && validMoves.length === 0 && !updating) {
-        setTimeout(() => handleNextTurn(state), 1000);
-    }
+    useEffect(() => {
+        if (mustMove && validMoves.length === 0 && !updating && !state.winner) {
+            const timer = setTimeout(() => {
+                handleNextTurn(state);
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [mustMove, validMoves.length, updating, state.winner, state.turn]);
 
     const handleNextTurn = async (currentState: LudoState, extraTurn = false) => {
         const order = ['R', 'G', 'Y', 'B'];
@@ -141,10 +147,35 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
     };
 
     const rollDice = async () => {
-        if (!canRoll || updating) return;
+        if (!canRoll || updating || isRolling || !myColor) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        const roll = Math.floor(Math.random() * 6) + 1;
-        await saveState({ ...state, diceValue: roll, message: undefined });
+        setIsRolling(true);
+        
+        setTimeout(async () => {
+            const roll = Math.floor(Math.random() * 6) + 1;
+            
+            const validIndices: number[] = [];
+            state.tokens[myColor as keyof typeof state.tokens].forEach((pos, i) => {
+                if (pos === 57) return;
+                if (pos === -1) {
+                    if (roll === 6) validIndices.push(i);
+                } else {
+                    const stepsTaken = getStepsTaken(myColor!, pos);
+                    if (stepsTaken + roll <= 56) validIndices.push(i);
+                }
+            });
+
+            const colorNames: any = { R: 'Red', G: 'Green', Y: 'Yellow', B: 'Blue' };
+            const playerName = colorNames[myColor];
+            
+            let newMsg = `${playerName} rolled a ${roll}! 🎲`;
+            if (validIndices.length === 0) {
+                newMsg = `${playerName} rolled a ${roll}. No valid moves! 🚫`;
+            }
+
+            await saveState({ ...state, diceValue: roll, message: newMsg });
+            setIsRolling(false);
+        }, 500);
     };
 
     const moveToken = async (tokenIndex: number) => {
@@ -322,7 +353,7 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
                 ) : (
                     <View style={{ alignItems: 'center' }}>
                         <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : LUDO_COLORS[state.turn as keyof typeof LUDO_COLORS] }]}>
-                            {isMyTurn ? "Your Turn" : `${state.turn} Player's Turn`}
+                            {isMyTurn ? "Your Turn" : `${{R:'Red', G:'Green', Y:'Yellow', B:'Blue'}[state.turn]} Player's Turn`}
                         </Text>
                         {state.status === 'active' && state.lastMoveAt && (
                             <Text style={styles.timerText}>
@@ -336,13 +367,17 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
             <TouchableOpacity 
                 style={[styles.dice, { opacity: canRoll ? 1 : 0.5 }]} 
                 onPress={rollDice}
-                disabled={!canRoll || updating}
+                disabled={!canRoll || updating || isRolling}
             >
-                <FontAwesome5 
-                    name={`dice-${['one','two','three','four','five','six'][(state.diceValue || 1) - 1]}`} 
-                    size={32} 
-                    color={LUDO_COLORS[state.turn as keyof typeof LUDO_COLORS]} 
-                />
+                {isRolling ? (
+                    <ActivityIndicator color={LUDO_COLORS[state.turn as keyof typeof LUDO_COLORS]} size="large" />
+                ) : (
+                    <FontAwesome5 
+                        name={`dice-${['one','two','three','four','five','six'][(state.diceValue || 1) - 1]}`} 
+                        size={40} 
+                        color={LUDO_COLORS[state.turn as keyof typeof LUDO_COLORS]} 
+                    />
+                )}
             </TouchableOpacity>
         </View>
         </GameInviteOverlay>
@@ -445,11 +480,11 @@ const styles = StyleSheet.create({
         color: '#10B981',
     },
     dice: {
-        width: 48, height: 48,
+        width: 64, height: 64,
         justifyContent: 'center', alignItems: 'center',
         backgroundColor: '#F1F5F9',
-        borderRadius: 12,
-        borderWidth: 1, borderColor: '#E2E8F0',
+        borderRadius: 16,
+        borderWidth: 2, borderColor: '#E2E8F0',
         alignSelf: 'center',
         marginTop: 12,
     },
