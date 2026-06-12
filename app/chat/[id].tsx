@@ -115,6 +115,9 @@ export default function ChatScreen() {
 
         if (gameType === 'tictactoe') {
             initialState = {
+                status: 'pending', // 'pending' | 'active' | 'declined' | 'expired'
+                hostId: currentUser.id,
+                createdAt: new Date().toISOString(),
                 board: [null, null, null, null, null, null, null, null, null],
                 turn: 'X',
                 playerX: currentUser.id,
@@ -124,6 +127,9 @@ export default function ChatScreen() {
             msgType = 'game_tictactoe';
         } else if (gameType === 'chess') {
             initialState = {
+                status: 'pending',
+                hostId: currentUser.id,
+                createdAt: new Date().toISOString(),
                 fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", // Standard starting FEN
                 playerWhite: currentUser.id,
                 playerBlack: isGroup === 'true' ? null : safeFriendId,
@@ -132,6 +138,9 @@ export default function ChatScreen() {
             msgType = 'game_chess';
         } else if (gameType === 'ludo') {
             initialState = {
+                status: 'pending',
+                hostId: currentUser.id,
+                createdAt: new Date().toISOString(),
                 players: {
                     R: currentUser.id,
                     Y: isGroup === 'true' ? null : safeFriendId // Default 2nd player to Yellow for opposite corners

@@ -8,6 +8,7 @@ import {
     LUDO_BASE_POSITIONS, LUDO_FINISH_POS, LUDO_START_INDEX, 
     LUDO_COLORS
 } from '@/utils/ludoConstants';
+import GameInviteOverlay from './GameInviteOverlay';
 
 interface LudoState {
     players: Record<string, string>; // { R: 'user_1', Y: 'user_2' }
@@ -238,18 +239,19 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Ludo 🎲</Text>
-                {state.message && <Text style={styles.alertText}>{state.message}</Text>}
-            </View>
-
-            <View style={styles.board}>
-                <View style={styles.gridContainer}>
-                    {renderBoardGrid()}
+        <GameInviteOverlay gameName="Ludo 🎲" gameState={state} currentUserId={currentUserId} messageId={message.id}>
+            <View style={styles.container}>
+                <View style={styles.header}>
+                    <Text style={styles.title}>Ludo 🎲</Text>
+                    {state.message && <Text style={styles.alertText}>{state.message}</Text>}
                 </View>
 
-                {/* Tokens overlay */}
+                <View style={styles.board}>
+                    <View style={styles.gridContainer}>
+                        {renderBoardGrid()}
+                    </View>
+
+                    {/* Tokens overlay */}
                 {['R', 'G', 'Y', 'B'].map((color) => 
                     state.tokens[color as keyof typeof state.tokens]?.map((pos, i) => {
                         const [col, row] = getPosCoords(color, pos, i);
@@ -300,6 +302,7 @@ export default function LudoWidget({ message, currentUserId }: { message: any, c
                 </View>
             )}
         </View>
+        </GameInviteOverlay>
     );
 }
 

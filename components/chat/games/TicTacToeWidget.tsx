@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
+import GameInviteOverlay from './GameInviteOverlay';
 
 interface TicTacToeState {
     board: (string | null)[];
@@ -79,54 +80,56 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Ionicons name="game-controller" size={16} color="#F68537" />
-                <Text style={styles.title}>Tic-Tac-Toe</Text>
-            </View>
+        <GameInviteOverlay gameName="Tic-Tac-Toe" gameState={gameState} currentUserId={currentUserId} messageId={message.id}>
+            <View style={styles.container}>
+                <View style={styles.header}>
+                    <Ionicons name="game-controller" size={16} color="#F68537" />
+                    <Text style={styles.title}>Tic-Tac-Toe</Text>
+                </View>
 
-            <View style={styles.statusRow}>
-                {winner ? (
-                    <Text style={styles.winnerText}>
-                        {winner === 'Draw' ? 'Game Draw!' : 
-                         (winner === mySymbol ? '🎉 You Won!' : '😔 You Lost!')}
-                    </Text>
-                ) : (
-                    <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
-                        {isMyTurn ? "Your Turn" : "Opponent's Turn"}
-                    </Text>
-                )}
-            </View>
-
-            <View style={styles.board}>
-                {board.map((cell, index) => (
-                    <TouchableOpacity
-                        key={index}
-                        style={[
-                            styles.cell,
-                            index % 3 !== 2 && styles.borderRight,
-                            index < 6 && styles.borderBottom
-                        ]}
-                        onPress={() => handleCellPress(index)}
-                        disabled={!!cell || !!winner || !isMyTurn || updating}
-                        activeOpacity={0.6}
-                    >
-                        <Text style={[
-                            styles.cellText,
-                            { color: cell === 'X' ? '#F68537' : '#3B82F6' }
-                        ]}>
-                            {cell}
+                <View style={styles.statusRow}>
+                    {winner ? (
+                        <Text style={styles.winnerText}>
+                            {winner === 'Draw' ? 'Game Draw!' : 
+                             (winner === mySymbol ? '🎉 You Won!' : '😔 You Lost!')}
                         </Text>
-                    </TouchableOpacity>
-                ))}
-                
-                {updating && (
-                    <View style={styles.loadingOverlay}>
-                        <ActivityIndicator color="#F68537" />
-                    </View>
-                )}
+                    ) : (
+                        <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
+                            {isMyTurn ? "Your Turn" : "Opponent's Turn"}
+                        </Text>
+                    )}
+                </View>
+
+                <View style={styles.board}>
+                    {board.map((cell, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            style={[
+                                styles.cell,
+                                index % 3 !== 2 && styles.borderRight,
+                                index < 6 && styles.borderBottom
+                            ]}
+                            onPress={() => handleCellPress(index)}
+                            disabled={!!cell || !!winner || !isMyTurn || updating}
+                            activeOpacity={0.6}
+                        >
+                            <Text style={[
+                                styles.cellText,
+                                { color: cell === 'X' ? '#F68537' : '#3B82F6' }
+                            ]}>
+                                {cell}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                    
+                    {updating && (
+                        <View style={styles.loadingOverlay}>
+                            <ActivityIndicator color="#F68537" />
+                        </View>
+                    )}
+                </View>
             </View>
-        </View>
+        </GameInviteOverlay>
     );
 }
 

@@ -151,7 +151,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
     if (message.message_type === 'game_tictactoe' && currentUserId) {
         return (
-            <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
+            <View style={{ width: '100%', alignItems: 'center', marginVertical: 12 }}>
                 <TicTacToeWidget message={message} currentUserId={currentUserId} />
             </View>
         );
@@ -159,7 +159,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
     if (message.message_type === 'game_chess' && currentUserId) {
         return (
-            <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
+            <View style={{ width: '100%', alignItems: 'center', marginVertical: 12 }}>
                 <ChessWidget message={message} currentUserId={currentUserId} />
             </View>
         );
@@ -167,7 +167,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
     if (message.message_type === 'game_ludo' && currentUserId) {
         return (
-            <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
+            <View style={{ width: '100%', alignItems: 'center', marginVertical: 12 }}>
                 <LudoWidget message={message} currentUserId={currentUserId} />
             </View>
         );

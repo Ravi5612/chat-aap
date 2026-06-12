@@ -4,6 +4,7 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 import { Chess, Square, Move } from 'chess.js';
+import GameInviteOverlay from './GameInviteOverlay';
 
 interface ChessState {
     fen: string;
@@ -118,25 +119,26 @@ export default function ChessWidget({ message, currentUserId }: ChessWidgetProps
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <FontAwesome5 name="chess" size={16} color="#1F2937" />
-                <Text style={styles.title}>Chess</Text>
-            </View>
+        <GameInviteOverlay gameName="Chess ♟️" gameState={gameState} currentUserId={currentUserId} messageId={message.id}>
+            <View style={styles.container}>
+                <View style={styles.header}>
+                    <FontAwesome5 name="chess" size={16} color="#1F2937" />
+                    <Text style={styles.title}>Chess</Text>
+                </View>
 
-            <View style={styles.statusRow}>
-                {winner ? (
-                    <Text style={styles.winnerText}>
-                        {winner === 'draw' ? 'Game Draw!' : 
-                         (winner === myColor ? '🎉 You Won!' : '😔 You Lost!')}
-                    </Text>
-                ) : (
-                    <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#6B7280' }]}>
-                        {chess.inCheck() ? '⚠️ CHECK! ' : ''}
-                        {isMyTurn ? "Your Turn" : "Opponent's Turn"}
-                    </Text>
-                )}
-            </View>
+                <View style={styles.statusRow}>
+                    {winner ? (
+                        <Text style={styles.winnerText}>
+                            {winner === 'draw' ? 'Game Draw!' : 
+                             (winner === myColor ? '🎉 You Won!' : '😔 You Lost!')}
+                        </Text>
+                    ) : (
+                        <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#6B7280' }]}>
+                            {chess.inCheck() ? '⚠️ CHECK! ' : ''}
+                            {isMyTurn ? "Your Turn" : "Opponent's Turn"}
+                        </Text>
+                    )}
+                </View>
 
             <View style={styles.boardContainer}>
                 {board.map((row, rowIndex) => (
@@ -185,6 +187,7 @@ export default function ChessWidget({ message, currentUserId }: ChessWidgetProps
                 )}
             </View>
         </View>
+        </GameInviteOverlay>
     );
 }
 
