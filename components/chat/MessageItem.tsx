@@ -12,6 +12,7 @@ import { Buffer } from 'buffer';
 import TicTacToeWidget from './games/TicTacToeWidget';
 import ChessWidget from './games/ChessWidget';
 import LudoWidget from './games/LudoWidget';
+import RacingWidget from './games/RacingWidget';
 import WatchPartyBubble from './WatchPartyBubble';
 
 import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
@@ -169,6 +170,14 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         return (
             <View style={{ width: '100%', alignItems: 'center', marginVertical: 12 }}>
                 <LudoWidget message={message} currentUserId={currentUserId} />
+            </View>
+        );
+    }
+
+    if (message.message_type === 'game_racing' && currentUserId) {
+        return (
+            <View style={{ width: '100%', alignItems: 'center', marginVertical: 12 }}>
+                <RacingWidget message={message} currentUserId={currentUserId} />
             </View>
         );
     }

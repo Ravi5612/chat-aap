@@ -156,6 +156,17 @@ export default function ChatScreen() {
                 winner: null
             };
             msgType = 'game_ludo';
+        } else if (gameType === 'racing') {
+            initialState = {
+                status: 'pending',
+                hostId: currentUser.id,
+                createdAt: new Date().toISOString(),
+                playerHost: currentUser.id,
+                playerGuest: isGroup === 'true' ? null : safeFriendId,
+                seed: Math.floor(Math.random() * 1000000), // Seed for matching obstacles
+                winner: null
+            };
+            msgType = 'game_racing';
         }
 
         try {

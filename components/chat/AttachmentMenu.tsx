@@ -9,7 +9,7 @@ interface AttachmentMenuProps {
     onCamera: () => void;
     onDocument: () => void;
     onSchedule?: () => void;
-    onGame?: (gameType: 'tictactoe' | 'chess' | 'ludo') => void;
+    onGame?: (gameType: 'tictactoe' | 'chess' | 'ludo' | 'racing') => void;
     onCinema?: () => void;
 }
 
@@ -100,6 +100,12 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
                                 <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('ludo'); }}>
                                     <View style={[styles.gameIcon, { backgroundColor: '#EF4444' }]}><Ionicons name="cube" size={24} color="white" /></View>
                                     <Text style={styles.gameText}>Ludo Multiplayer</Text>
+                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('racing'); }}>
+                                    <View style={[styles.gameIcon, { backgroundColor: '#F59E0B' }]}><Ionicons name="car" size={24} color="white" /></View>
+                                    <Text style={styles.gameText}>Car Racing 🏎️</Text>
                                     <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
                                 </TouchableOpacity>
                             </View>
