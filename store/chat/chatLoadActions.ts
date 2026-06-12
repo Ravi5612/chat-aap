@@ -88,11 +88,13 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
                 if (localMsgs && localMsgs.length > 0) {
                     hasLocalMessages = true;
                     console.log(`ChatStore: Loaded ${localMsgs.length} messages from Local DB`);
+                    // ✅ Decrypt local messages before showing them
+                    const decryptedLocalMsgs = await decryptMessageBatch(localMsgs, chatKey, currentUser.id);
                     set({
-                        messages: localMsgs,
+                        messages: decryptedLocalMsgs,
                         loading: false,
                         hasMore: localMsgs.length >= PAGE_SIZE,
-                        cache: { ...get().cache, [friendId]: { messages: localMsgs, key: chatKey } }
+                        cache: { ...get().cache, [friendId]: { messages: decryptedLocalMsgs, key: chatKey } }
                     });
                 }
             }
@@ -229,7 +231,9 @@ export const createChatLoadActions = (set: StoreSet, get: StoreGet) => ({
 
             if (olderLocalMsgs.length > 0) {
                 console.log(`ChatStore: Loaded ${olderLocalMsgs.length} older messages from Local DB`);
-                const combined = [...olderLocalMsgs, ...messages];
+                // ✅ Decrypt local messages before showing them
+                const decryptedOlderLocal = await decryptMessageBatch(olderLocalMsgs, chatKey, currentUser.id);
+                const combined = [...decryptedOlderLocal, ...messages];
                 const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
 
                 set({ messages: unique, loadingMore: false, hasMore: true });
