@@ -40,7 +40,12 @@ export default function StatusScreen() {
                 text: statusInfo[item.id]?.text,
                 bgColor: statusInfo[item.id]?.bgColor,
                 latestTimestamp: statusInfo[item.id]?.latestTimestamp,
-            }));
+            }))
+            .sort((a, b) => {
+                const timeA = a.latestTimestamp ? new Date(a.latestTimestamp).getTime() : 0;
+                const timeB = b.latestTimestamp ? new Date(b.latestTimestamp).getTime() : 0;
+                return timeB - timeA;
+            });
     }, [combinedItems, statusInfo, currentUser]);
 
     const renderHeader = useCallback(() => {

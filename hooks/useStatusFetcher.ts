@@ -32,7 +32,7 @@ export function useStatusFetcher(userId: string | undefined, isArchive: string |
 
             try {
                 // Own Active Statuses (Memory Cache)
-                if (currentUser && userId === currentUser.id) {
+                if (currentUser && userId === currentUser.id && isArchive !== 'true') {
                     const localActive = useFriendsStore.getState().myStatuses?.active || [];
                     if (localActive.length > 0) {
                         const enriched = localActive.map((s: any) => ({

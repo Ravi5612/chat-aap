@@ -48,7 +48,7 @@ export async function processStatuses(
 
     for (const s of sortedStatuses) {
         if (!statusInfoMap[s.user_id]) {
-            statusInfoMap[s.user_id] = { count: 0, viewedCount: 0 };
+            statusInfoMap[s.user_id] = { count: 0, viewedCount: 0, latestTimestamp: s.created_at };
             if (s.thumbnail_url || s.media_url) {
                 const targetUrl = s.thumbnail_url || s.media_url;
                 if (targetUrl.trim().startsWith('{')) {
@@ -78,6 +78,7 @@ export async function processStatuses(
                 }
             }
         }
+
         statusInfoMap[s.user_id].count++;
         if (viewedStatusIds.has(s.id)) statusInfoMap[s.user_id].viewedCount++;
     }
