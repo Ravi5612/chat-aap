@@ -78,8 +78,10 @@ export default function StatusViewer() {
     // 2. Viewers Hook
     const { statusViewers } = useStatusViewers(renderedStatusUI, currentUser, isOwner);
 
+    const touchStartCoordsRef = useRef({ x: 0, y: 0 });
+
     // 3. Controls Hook
-    const { paused, setPaused, progress, setProgress, isReplying, setIsReplying, touchStartRef, handleNext, handlePrev } = useStatusControls(
+    const { paused, setPaused, progress, setProgress, isReplying, setIsReplying, touchStartRef, handleNext, handlePrev, handleSkipToNextUser, handleSkipToPrevUser } = useStatusControls(
         statuses, currentIndex, setCurrentIndex, loading, userId as string, router, currentUser
     );
 
@@ -182,13 +184,30 @@ export default function StatusViewer() {
 
     return (
         <View style={{ flex: 1, backgroundColor: 'black' }}>
-            <TouchableOpacity
-                activeOpacity={1}
-                onPressIn={() => { touchStartRef.current = Date.now(); setPaused(true); }}
-                onPressOut={() => setPaused(false)}
-                onPress={(e) => {
+            <View
+                onTouchStart={(e) => {
+                    touchStartRef.current = Date.now();
+                    touchStartCoordsRef.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+                    setPaused(true);
+                }}
+                onTouchEnd={(e) => {
+                    setPaused(false);
                     const touchDuration = Date.now() - touchStartRef.current;
-                    if (touchDuration < 250) {
+                    const endX = e.nativeEvent.pageX;
+                    const startX = touchStartCoordsRef.current.x;
+                    const diffX = endX - startX;
+
+                    if (Math.abs(diffX) > 50) {
+                        // Swipe detected
+                        if (diffX > 0) {
+                            // Swiped Right (Finger moved left -> right) => Previous Friend
+                            handleSkipToPrevUser();
+                        } else {
+                            // Swiped Left (Finger moved right -> left) => Next Friend
+                            handleSkipToNextUser();
+                        }
+                    } else if (touchDuration < 250) {
+                        // Tap detected
                         const x = e.nativeEvent.locationX;
                         if (x < width / 3) handlePrev();
                         else if (x > (2 * width) / 3) handleNext();
@@ -208,7 +227,7 @@ export default function StatusViewer() {
                         onViewerPlaybackStatusUpdate={onViewerPlaybackStatusUpdate}
                     />
                 )}
-            </TouchableOpacity>
+            </View>
 
             <StatusOverlay
                 statuses={statuses}

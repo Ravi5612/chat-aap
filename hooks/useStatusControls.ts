@@ -108,11 +108,30 @@ export function useStatusControls(
         return () => clearInterval(interval);
     }, [currentIndex, statuses, loading, paused, isReplying, handleNext]);
 
+    const handleSkipToNextUser = useCallback(() => {
+        const nextUserId = getNextFriendWithStatus();
+        if (nextUserId) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.setParams({ userId: nextUserId, initialIndex: '0' });
+        } else {
+            router.back();
+        }
+    }, [getNextFriendWithStatus, router]);
+
+    const handleSkipToPrevUser = useCallback(() => {
+        const prevUserId = getPrevFriendWithStatus();
+        if (prevUserId) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.setParams({ userId: prevUserId, initialIndex: '0' });
+        }
+    }, [getPrevFriendWithStatus, router]);
+
     return {
         paused, setPaused,
         progress, setProgress,
         isReplying, setIsReplying,
         touchStartRef,
-        handleNext, handlePrev
+        handleNext, handlePrev,
+        handleSkipToNextUser, handleSkipToPrevUser
     };
 }
