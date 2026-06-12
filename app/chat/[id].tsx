@@ -139,6 +139,37 @@ export default function ChatScreen() {
         }
     };
 
+    const handleCinemaClick = async () => {
+        if (!currentUser) return;
+        
+        const extractVideoId = (url: string) => {
+            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        };
+
+        const videoId = extractVideoId(draft);
+
+        if (!videoId) {
+            Alert.alert("No Video Link Found", "Please paste a YouTube video link in the message box below, then click the Cinema Mode button again.");
+            return;
+        }
+
+        const initialState = {
+            videoId,
+            hostId: currentUser.id,
+            status: 'playing',
+            currentTime: 0
+        };
+
+        try {
+            await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, 'watch_party');
+            handleDraftChange('');
+        } catch (e) {
+            console.error('Failed to start watch party', e);
+        }
+    };
+
     const onSaveEdit = (text: string) => {
         if (editingMessage) {
             handleSaveEdit(editingMessage.id, text);
@@ -234,6 +265,7 @@ export default function ChatScreen() {
                         initialMessage={draft}
                         onDraftChange={handleDraftChange}
                         onPlayGame={handlePlayGame}
+                        onCinema={handleCinemaClick}
                     />
                 )}
 
