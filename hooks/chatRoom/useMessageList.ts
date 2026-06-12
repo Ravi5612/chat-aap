@@ -8,6 +8,7 @@ export const useMessageList = (messages: any[], currentUser: any) => {
     // Scroll-to-bottom button state
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [scrollPercentage, setScrollPercentage] = useState(0);
     const isAtBottomRef = useRef(true);
     const prevMsgCountRef = useRef(messages.length);
 
@@ -25,10 +26,20 @@ export const useMessageList = (messages: any[], currentUser: any) => {
     const hideBtn = useCallback(() => setShowScrollBtn(false), []);
 
     const handleScroll = useCallback((event: any) => {
-        const atBottom = event.nativeEvent.contentOffset.y < 60;
+        const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+        const atBottom = contentOffset.y < 60;
         isAtBottomRef.current = atBottom;
         if (atBottom) { setUnreadCount(0); hideBtn(); }
         else { showBtn(); }
+
+        const maxScroll = Math.max(0, contentSize.height - layoutMeasurement.height);
+        if (maxScroll > 0) {
+            let percentage = contentOffset.y / maxScroll;
+            percentage = Math.max(0, Math.min(1, percentage));
+            setScrollPercentage(percentage);
+        } else {
+            setScrollPercentage(0);
+        }
     }, [showBtn, hideBtn]);
 
     const scrollToBottom = useCallback(() => {
@@ -124,6 +135,7 @@ export const useMessageList = (messages: any[], currentUser: any) => {
         flatListRef,
         showScrollBtn,
         unreadCount,
+        scrollPercentage,
         groupedMessages,
         handleScroll,
         scrollToBottom,

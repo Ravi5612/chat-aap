@@ -30,7 +30,7 @@ export default React.memo(function MessageList({
 }: MessageListProps) {
 
     const {
-        flatListRef, showScrollBtn, unreadCount,
+        flatListRef, showScrollBtn, unreadCount, scrollPercentage,
         groupedMessages, handleScroll, scrollToBottom, handleScrollToMessage,
     } = useMessageList(messages, currentUser);
 
@@ -83,12 +83,12 @@ export default React.memo(function MessageList({
                 onEndReachedThreshold={0.2}
                 keyboardShouldPersistTaps="handled"
                 onScroll={handleScroll}
-                scrollEventThrottle={100}
+                scrollEventThrottle={16}
                 estimatedItemSize={70}
             />
 
             {showScrollBtn && (
-                <ScrollToBottomButton onPress={scrollToBottom} unreadCount={unreadCount} />
+                <ScrollToBottomButton onPress={scrollToBottom} unreadCount={unreadCount} scrollPercentage={scrollPercentage} />
             )}
         </View>
     );
