@@ -60,15 +60,15 @@ export const ScrollToBottomButton = React.memo(function ScrollToBottomButton({
                         cx={center}
                         cy={center}
                         r={radius}
-                        stroke="rgba(15, 23, 42, 0.4)" // Dark translucent background ring
+                        stroke="#E5E7EB" // Light gray track
                         strokeWidth={strokeWidth}
-                        fill="rgba(15, 23, 42, 0.8)" // Inner dark background like image
+                        fill="white" // White inner background
                     />
                     <Circle
                         cx={center}
                         cy={center}
                         r={radius}
-                        stroke="#0EA5E9" // Bright blue progress ring like image
+                        stroke="#F68537" // App theme orange progress
                         strokeWidth={strokeWidth}
                         fill="none"
                         strokeDasharray={circumference}
@@ -78,7 +78,7 @@ export const ScrollToBottomButton = React.memo(function ScrollToBottomButton({
                     />
                 </Svg>
                 <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.scrollBtnInner}>
-                    <Ionicons name="chevron-down" size={28} color="#0EA5E9" />
+                    <Ionicons name="chevron-down" size={28} color="#F68537" />
                 </TouchableOpacity>
             </View>
             {unreadCount > 0 && (
