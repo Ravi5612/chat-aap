@@ -570,8 +570,7 @@ const styles = StyleSheet.create({
         color: '#0F172A',
         fontWeight: 'bold',
         fontSize: 12,
-    }
-});
+    },
     statusText: {
         color: '#EAB308',
         fontSize: 16,
