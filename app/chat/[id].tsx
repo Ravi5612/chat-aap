@@ -192,7 +192,10 @@ export default function ChatScreen() {
             return;
         }
 
+        const partyId = `party_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
         const initialState = {
+            partyId,
             videoId,
             hostId: currentUser.id,
             invite_status: 'pending', // 'pending' | 'active' | 'declined' | 'expired'

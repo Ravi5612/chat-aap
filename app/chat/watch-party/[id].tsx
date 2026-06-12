@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, ActivityIndicator, Animated, FlatList, Image, Modal, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import { useCallStore } from '@/store/useCallStore';
 
 export default function WatchPartyScreen() {
     const { width, height } = useWindowDimensions();
-    const { id: roomId, videoId, messageId } = useLocalSearchParams();
+    const { id: roomId, videoId, messageId, hostId } = useLocalSearchParams();
     const router = useRouter();
     const currentUser = useAuthStore(state => state.user);
     const { handleStartCall } = useCallManager(currentUser, [], false); // Just for starting call if needed
@@ -21,6 +21,12 @@ export default function WatchPartyScreen() {
     const [loading, setLoading] = useState(true);
     const [partyStatus, setPartyStatus] = useState('Joining Cinema...');
     const [isFullScreen, setIsFullScreen] = useState(false);
+    const [participants, setParticipants] = useState<any[]>([]);
+    const [inviteModalVisible, setInviteModalVisible] = useState(false);
+    const [friends, setFriends] = useState<any[]>([]);
+    const [inviting, setInviting] = useState(false);
+    
+    const isHost = currentUser?.id === hostId;
     
     const playerRef = useRef<any>(null);
     const channelRef = useRef<any>(null);
@@ -53,9 +59,25 @@ export default function WatchPartyScreen() {
     useEffect(() => {
         if (!roomId || !currentUser) return;
 
-        const channel = supabase.channel(`watch_party_${roomId}`);
+        const channel = supabase.channel(`watch_party_${roomId}`, {
+            config: { presence: { key: currentUser.id } }
+        });
 
         channel
+            .on('presence', { event: 'sync' }, () => {
+                const state = channel.presenceState();
+                const active = Object.keys(state).map(key => ({
+                    id: key,
+                    ...(state[key][0] as any)
+                }));
+                setParticipants(active);
+            })
+            .on('broadcast', { event: 'kick' }, (payload) => {
+                if (payload.payload.targetUserId === currentUser.id) {
+                    Alert.alert("Removed", "The host has removed you from the theater.");
+                    router.back();
+                }
+            })
             .on('broadcast', { event: 'player_state' }, (payload) => {
                 // Ignore our own events
                 if (payload.payload.userId === currentUser.id) return;
@@ -76,8 +98,9 @@ export default function WatchPartyScreen() {
                     setTimeout(() => { isSyncingRef.current = false; }, 1000); // Release lock after sync
                 });
             })
-            .subscribe((status) => {
+            .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
+                    await channel.track({ name: currentUser.name, avatar: currentUser.image });
                     setPartyStatus('Connected to Cinema 🍿');
                     setTimeout(() => setPartyStatus(''), 3000);
                 }
@@ -138,6 +161,72 @@ export default function WatchPartyScreen() {
         router.back();
     };
 
+    const handleKick = (userId: string) => {
+        if (!isHost) return;
+        channelRef.current?.send({
+            type: 'broadcast',
+            event: 'kick',
+            payload: { targetUserId: userId }
+        });
+    };
+
+    const fetchFriends = async () => {
+        if (!currentUser) return;
+        const { data, error } = await supabase
+            .from('friendships')
+            .select(`
+                id,
+                user_id1:users!friendships_user_id1_fkey(id, name, image, phone),
+                user_id2:users!friendships_user_id2_fkey(id, name, image, phone)
+            `)
+            .eq('status', 'accepted')
+            .or(`user_id1.eq.${currentUser.id},user_id2.eq.${currentUser.id}`);
+            
+        if (data && !error) {
+            const friendList = data.map((f: any) => 
+                f.user_id1.id === currentUser.id ? f.user_id2 : f.user_id1
+            ).filter(f => f && !participants.find(p => p.id === f.id));
+            setFriends(friendList);
+        }
+    };
+
+    const openInviteModal = () => {
+        fetchFriends();
+        setInviteModalVisible(true);
+    };
+
+    const sendInvite = async (friendId: string) => {
+        if (!currentUser || inviting) return;
+        setInviting(true);
+        const ids = [currentUser.id, friendId].sort();
+        const friendChatId = `${ids[0]}_${ids[1]}`;
+
+        const initialState = {
+            partyId: roomId,
+            videoId,
+            hostId: currentUser.id,
+            invite_status: 'pending',
+            createdAt: new Date().toISOString(),
+            status: playing ? 'playing' : 'paused',
+            currentTime: currentTime
+        };
+
+        const { error } = await supabase.from('messages').insert({
+            chat_id: friendChatId,
+            sender_id: currentUser.id,
+            message: JSON.stringify(initialState),
+            message_type: 'watch_party'
+        });
+
+        setInviting(false);
+        if (!error) {
+            Alert.alert("Invited! 🍿", "Movie ticket sent to your friend.");
+            setInviteModalVisible(false);
+        } else {
+            Alert.alert("Error", "Could not send invite.");
+        }
+    };
+
     return (
         <View style={styles.container}>
             {!isFullScreen && (
@@ -193,19 +282,75 @@ export default function WatchPartyScreen() {
                     </Text>
                 </View>
 
-                {/* Optional: Add a quick button to start call if not in call */}
-                {!useCallStore.getState().callSession && (
-                    <TouchableOpacity 
-                        style={styles.premiumCallBtn} 
-                        onPress={() => handleStartCall(true)}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="videocam" size={22} color="white" />
-                        <Text style={styles.callBtnText}>Start PiP Video Call</Text>
+                {/* Participants Section */}
+                <View style={styles.participantsContainer}>
+                    <Text style={styles.sectionTitle}>Watching Now ({participants.length})</Text>
+                    <FlatList
+                        data={participants}
+                        horizontal
+                        keyExtractor={(item) => item.id}
+                        renderItem={({ item }) => (
+                            <View style={styles.participantAvatar}>
+                                {item.avatar ? (
+                                    <Image source={{ uri: item.avatar }} style={styles.avatarImg} />
+                                ) : (
+                                    <View style={styles.avatarFallback}>
+                                        <Text style={styles.avatarFallbackText}>{item.name?.charAt(0) || '?'}</Text>
+                                    </View>
+                                )}
+                                <Text style={styles.participantName} numberOfLines={1}>{item.name?.split(' ')[0]}</Text>
+                                {isHost && item.id !== currentUser?.id && (
+                                    <TouchableOpacity style={styles.kickBtn} onPress={() => handleKick(item.id)}>
+                                        <Ionicons name="close-circle" size={24} color="#EF4444" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 16 }}
+                    />
+                </View>
+
+                {isHost && (
+                    <TouchableOpacity style={styles.inviteBtn} onPress={openInviteModal} activeOpacity={0.8}>
+                        <Ionicons name="person-add" size={22} color="white" />
+                        <Text style={styles.callBtnText}>Invite Friend</Text>
                     </TouchableOpacity>
                 )}
             </View>
             )}
+
+            {/* Invite Modal */}
+            <Modal visible={inviteModalVisible} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Invite Friends</Text>
+                            <TouchableOpacity onPress={() => setInviteModalVisible(false)}>
+                                <Ionicons name="close" size={24} color="white" />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={friends}
+                            keyExtractor={(item) => item.id}
+                            renderItem={({ item }) => (
+                                <View style={styles.friendRow}>
+                                    {item.image ? (
+                                        <Image source={{ uri: item.image }} style={styles.friendImg} />
+                                    ) : (
+                                        <View style={styles.friendImgFallback}><Text style={{ color: 'white' }}>{item.name?.charAt(0)}</Text></View>
+                                    )}
+                                    <Text style={styles.friendName}>{item.name}</Text>
+                                    <TouchableOpacity style={styles.sendInviteBtn} onPress={() => sendInvite(item.id)}>
+                                        <Text style={styles.sendInviteText}>Send Ticket</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                            ListEmptyComponent={<Text style={{ color: '#94A3B8', textAlign: 'center', marginTop: 20 }}>No friends found or all are already watching!</Text>}
+                        />
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -250,6 +395,113 @@ const styles = StyleSheet.create({
         padding: 24,
         alignItems: 'center',
     },
+    participantsContainer: {
+        width: '100%',
+        marginTop: 10,
+        marginBottom: 30,
+    },
+    sectionTitle: {
+        color: '#94A3B8',
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginBottom: 16,
+    },
+    participantAvatar: {
+        alignItems: 'center',
+        position: 'relative',
+        width: 60,
+    },
+    avatarImg: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        borderWidth: 2,
+        borderColor: '#10B981',
+    },
+    avatarFallback: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#3B82F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#10B981',
+    },
+    avatarFallbackText: { color: 'white', fontWeight: 'bold', fontSize: 18 },
+    participantName: {
+        color: '#E2E8F0',
+        fontSize: 12,
+        marginTop: 6,
+        textAlign: 'center',
+    },
+    kickBtn: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: '#0F172A',
+        borderRadius: 12,
+    },
+    inviteBtn: {
+        backgroundColor: '#EAB308',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 32,
+        borderRadius: 30,
+        gap: 12,
+        shadowColor: '#EAB308',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#1E293B',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+        maxHeight: '70%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    modalTitle: {
+        color: 'white',
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    friendRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        backgroundColor: '#0F172A',
+        padding: 12,
+        borderRadius: 12,
+    },
+    friendImg: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+    friendImgFallback: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    friendName: { color: 'white', fontSize: 16, flex: 1 },
+    sendInviteBtn: {
+        backgroundColor: '#EAB308',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+    },
+    sendInviteText: {
+        color: '#0F172A',
+        fontWeight: 'bold',
+        fontSize: 12,
+    }
+});
     statusText: {
         color: '#EAB308',
         fontSize: 16,

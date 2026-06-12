@@ -23,7 +23,6 @@ interface WatchPartyBubbleProps {
 export default function WatchPartyBubble({ message, currentUserId, friendName, roomId }: WatchPartyBubbleProps) {
     const router = useRouter();
     const pulseAnim = useRef(new Animated.Value(1)).current;
-    const [timeLeft, setTimeLeft] = useState(120);
     const [updating, setUpdating] = useState(false);
 
     useEffect(() => {
@@ -42,25 +41,9 @@ export default function WatchPartyBubble({ message, currentUserId, friendName, r
         return <Text style={{ color: 'red' }}>Corrupted Party Data</Text>;
     }
 
-    const { videoId, hostId, invite_status = 'active', createdAt } = partyState;
+    const { videoId, hostId, invite_status = 'active' } = partyState;
     const isHost = hostId === currentUserId;
     const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-
-    useEffect(() => {
-        if (invite_status !== 'pending' || !createdAt) return;
-
-        const interval = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
-            const remaining = Math.max(120 - elapsed, 0);
-            setTimeLeft(remaining);
-
-            if (remaining === 0 && invite_status === 'pending') {
-                if (isHost) handleUpdateStatus('expired');
-            }
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, [createdAt, invite_status, isHost]);
 
     const handleUpdateStatus = async (newStatus: string) => {
         if (updating) return;
@@ -71,8 +54,8 @@ export default function WatchPartyBubble({ message, currentUserId, friendName, r
     };
 
     const handleJoin = () => {
-        // Navigate to the split-screen Watch Party theater
-        router.push(`/chat/watch-party/${roomId}?videoId=${videoId}&messageId=${message.id}`);
+        const pId = partyState.partyId || message.id;
+        router.push(`/chat/watch-party/${pId}?videoId=${videoId}&messageId=${message.id}&hostId=${hostId}`);
     };
 
     return (
@@ -95,7 +78,7 @@ export default function WatchPartyBubble({ message, currentUserId, friendName, r
             {invite_status === 'pending' && (
                 <View style={styles.pendingArea}>
                     <Text style={styles.timerText}>
-                        {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
+                        Ticket Received 🎫
                     </Text>
                     {isHost ? (
                         <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={() => handleUpdateStatus('expired')} disabled={updating}>
@@ -213,10 +196,10 @@ const styles = StyleSheet.create({
     },
     timerText: {
         color: '#EAB308',
-        fontSize: 28,
+        fontSize: 16,
         fontWeight: 'bold',
         marginBottom: 16,
-        fontVariant: ['tabular-nums'],
+        letterSpacing: 1,
     },
     actionRow: {
         flexDirection: 'row',
