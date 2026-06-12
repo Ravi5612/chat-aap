@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +23,17 @@ export default function WatchPartyScreen() {
     
     const playerRef = useRef<any>(null);
     const channelRef = useRef<any>(null);
+    const isSyncingRef = useRef(false);
+    const pulseAnim = useRef(new Animated.Value(0.5)).current;
+    
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0.5, duration: 1500, useNativeDriver: true })
+            ])
+        ).start();
+    }, []);
 
     // Minimize call if active
     useEffect(() => {
@@ -45,15 +56,18 @@ export default function WatchPartyScreen() {
 
                 const { isPlaying, time } = payload.payload;
                 
+                isSyncingRef.current = true; // Lock outgoing syncs
+                
                 if (isPlaying !== playing) {
                     setPlaying(isPlaying);
                 }
 
-                // If time difference is > 2 seconds, sync it
+                // If time difference is > 1.5 seconds, sync it
                 playerRef.current?.getCurrentTime().then((myTime: number) => {
-                    if (Math.abs(myTime - time) > 2) {
+                    if (Math.abs(myTime - time) > 1.5) {
                         playerRef.current?.seekTo(time, true);
                     }
+                    setTimeout(() => { isSyncingRef.current = false; }, 1000); // Release lock after sync
                 });
             })
             .subscribe((status) => {
@@ -71,6 +85,8 @@ export default function WatchPartyScreen() {
     }, [roomId, currentUser]);
 
     const broadcastState = useCallback((isPlaying: boolean, time: number) => {
+        if (isSyncingRef.current) return; // Prevent echo loops
+        
         if (channelRef.current && currentUser) {
             channelRef.current.send({
                 type: 'broadcast',
@@ -96,7 +112,10 @@ export default function WatchPartyScreen() {
                 broadcastState(false, time);
             });
         } else if (state === 'buffering') {
-            // Optional: Pause others if buffering
+            // Send pause to others while we buffer
+            playerRef.current?.getCurrentTime().then((time: number) => {
+                broadcastState(false, time);
+            });
         }
     }, [broadcastState]);
 
@@ -123,6 +142,7 @@ export default function WatchPartyScreen() {
                     videoId={videoId as string}
                     onChangeState={onStateChange}
                     onReady={() => setLoading(false)}
+                    onError={(e) => setPartyStatus('Error loading video!')}
                     initialPlayerParams={{
                         controls: true,
                         modestbranding: true,
@@ -138,28 +158,31 @@ export default function WatchPartyScreen() {
 
             <View style={styles.controlsArea}>
                 {partyStatus ? (
-                    <Text style={styles.statusText}>{partyStatus}</Text>
+                    <Animated.Text style={[styles.statusText, { opacity: pulseAnim }]}>{partyStatus}</Animated.Text>
                 ) : (
-                    <Text style={styles.syncText}>
-                        <Ionicons name="sync" size={14} color="#10B981" /> Auto-sync is Active
-                    </Text>
+                    <Animated.Text style={[styles.syncText, { opacity: pulseAnim }]}>
+                        <Ionicons name="sync" size={14} color="#10B981" /> Live Sync Active
+                    </Animated.Text>
                 )}
 
-                <View style={styles.infoBox}>
-                    <Ionicons name="information-circle" size={24} color="#94A3B8" />
+                <View style={styles.premiumInfoCard}>
+                    <View style={styles.iconGlow}>
+                        <Ionicons name="film" size={24} color="#EAB308" />
+                    </View>
                     <Text style={styles.infoText}>
-                        Turn on Video Call to see your friend! If you pause or rewind the video, it will automatically sync for everyone.
+                        Watch together in real-time. If anyone pauses, rewinds, or buffers, it syncs instantly for both.
                     </Text>
                 </View>
 
                 {/* Optional: Add a quick button to start call if not in call */}
                 {!useCallStore.getState().callSession && (
                     <TouchableOpacity 
-                        style={styles.callBtn} 
+                        style={styles.premiumCallBtn} 
                         onPress={() => handleStartCall(true)}
+                        activeOpacity={0.8}
                     >
-                        <Ionicons name="videocam" size={20} color="white" />
-                        <Text style={styles.callBtnText}>Start Video Call</Text>
+                        <Ionicons name="videocam" size={22} color="white" />
+                        <Text style={styles.callBtnText}>Start PiP Video Call</Text>
                     </TouchableOpacity>
                 )}
             </View>
@@ -217,38 +240,58 @@ const styles = StyleSheet.create({
     },
     syncText: {
         color: '#10B981',
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 20,
+        fontSize: 15,
+        fontWeight: 'bold',
+        marginBottom: 24,
+        letterSpacing: 0.5,
     },
-    infoBox: {
+    premiumInfoCard: {
         backgroundColor: '#1E293B',
-        padding: 16,
-        borderRadius: 12,
+        padding: 20,
+        borderRadius: 16,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        gap: 16,
         width: '100%',
-        marginBottom: 30,
+        marginBottom: 40,
+        borderWidth: 1,
+        borderColor: '#334155',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    iconGlow: {
+        backgroundColor: 'rgba(234, 179, 8, 0.1)',
+        padding: 12,
+        borderRadius: 12,
     },
     infoText: {
-        color: '#CBD5E1',
+        color: '#E2E8F0',
         flex: 1,
         fontSize: 14,
-        lineHeight: 20,
+        lineHeight: 22,
+        fontWeight: '500',
     },
-    callBtn: {
+    premiumCallBtn: {
         backgroundColor: '#3B82F6',
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 24,
+        paddingVertical: 16,
+        paddingHorizontal: 32,
         borderRadius: 30,
-        gap: 8,
+        gap: 12,
+        shadowColor: '#3B82F6',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
     },
     callBtnText: {
         color: 'white',
         fontWeight: 'bold',
         fontSize: 16,
+        letterSpacing: 0.5,
     }
 });
