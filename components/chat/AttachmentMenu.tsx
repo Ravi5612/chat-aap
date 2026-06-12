@@ -27,23 +27,16 @@ const MENU_ITEM_CONFIG = [
 
 const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, onDocument, onSchedule, onGame, onCinema }: AttachmentMenuProps) => {
     const [visible, setVisible] = useState(false);
+    const [gameMenuVisible, setGameMenuVisible] = useState(false);
 
     const open  = useCallback(() => setVisible(true),  []);
     const close = useCallback(() => setVisible(false), []);
+    const closeGameMenu = useCallback(() => setGameMenuVisible(false), []);
 
     const handleGameClick = useCallback(() => {
         close();
         if (!onGame) return;
-        Alert.alert(
-            "Select a Game",
-            "Which game do you want to play?",
-            [
-                { text: "Tic-Tac-Toe", onPress: () => onGame('tictactoe') },
-                { text: "Chess", onPress: () => onGame('chess') },
-                { text: "Ludo 🎲", onPress: () => onGame('ludo') },
-                { text: "Cancel", style: "cancel" }
-            ]
-        );
+        setGameMenuVisible(true);
     }, [onGame, close]);
 
     // Map handlers once — only re-created if a handler prop changes
@@ -84,6 +77,36 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
+
+            <Modal transparent visible={gameMenuVisible} animationType="fade">
+                <TouchableWithoutFeedback onPress={closeGameMenu}>
+                    <View style={styles.overlayCentered}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.gameMenuCard}>
+                                <Text style={styles.gameMenuTitle}>Choose a Game 🎮</Text>
+                                
+                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('tictactoe'); }}>
+                                    <View style={[styles.gameIcon, { backgroundColor: '#3B82F6' }]}><Ionicons name="grid" size={24} color="white" /></View>
+                                    <Text style={styles.gameText}>Tic-Tac-Toe</Text>
+                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('chess'); }}>
+                                    <View style={[styles.gameIcon, { backgroundColor: '#1E293B' }]}><Ionicons name="apps" size={24} color="white" /></View>
+                                    <Text style={styles.gameText}>Chess (Shatranj)</Text>
+                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.gameBtn} activeOpacity={0.7} onPress={() => { closeGameMenu(); onGame?.('ludo'); }}>
+                                    <View style={[styles.gameIcon, { backgroundColor: '#EF4444' }]}><Ionicons name="cube" size={24} color="white" /></View>
+                                    <Text style={styles.gameText}>Ludo Multiplayer</Text>
+                                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </View>
     );
 });
@@ -113,6 +136,47 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05, shadowRadius: 2, elevation: 2,
     },
     itemLabel: { fontSize: 11, fontWeight: '500', color: '#6B7280', marginTop: 8 },
+    overlayCentered: {
+        flex: 1,
+        backgroundColor: 'rgba(15, 23, 42, 0.4)', // Darker premium overlay
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    gameMenuCard: {
+        backgroundColor: 'white',
+        width: '100%',
+        borderRadius: 24,
+        padding: 24,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+    },
+    gameMenuTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#0F172A',
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    gameBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    gameIcon: {
+        width: 44, height: 44,
+        borderRadius: 12,
+        justifyContent: 'center', alignItems: 'center',
+        marginRight: 16,
+    },
+    gameText: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#334155',
+    }
 });
 
 export default AttachmentMenu;
