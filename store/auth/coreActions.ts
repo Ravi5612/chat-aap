@@ -53,6 +53,10 @@ export const createCoreActions = (set: any, get: StoreGet) => ({
         set({ session: null, user: null, profile: null });
         AppStorage.deleteItemAsync('supabase_session').catch(() => {});
         AppStorage.deleteItemAsync('ninja_vault_passcode').catch(() => {});
+        // 🔐 Delete private E2EE key on logout (best security practice)
+        if (user?.id) {
+            AppStorage.deleteItemAsync(`private_x25519_${user.id}`).catch(() => {});
+        }
         router.replace('/login');
 
         try {

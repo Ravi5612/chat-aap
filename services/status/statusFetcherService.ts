@@ -48,6 +48,22 @@ export const processRawStatuses = async (params: ProcessStatusParams) => {
     } catch(e) {}
 
     if (!profile) {
+        // Try local DB first (offline support)
+        try {
+            const { useDbStore } = require('@/store/useDbStore');
+            const { getLocalConversations } = require('@/lib/localDb');
+            const { db } = useDbStore.getState();
+            if (db) {
+                const localConvs = await getLocalConversations(db);
+                const localConv = localConvs.find((c: any) => c.id === userId);
+                if (localConv?.friend?.public_key) {
+                    profile = { username: localConv.name, avatar_url: localConv.img, public_key: localConv.friend.public_key };
+                }
+            }
+        } catch (e) {}
+    }
+
+    if (!profile) {
         const { data } = await supabase
             .from('profiles')
             .select('username, avatar_url, public_key')

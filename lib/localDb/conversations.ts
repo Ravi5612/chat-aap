@@ -3,8 +3,8 @@ import * as SQLite from 'expo-sqlite';
 export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any) => {
     try {
         await db.runAsync(
-            `INSERT OR REPLACE INTO conversations (id, name, email, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived, is_unfriended, is_hidden) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT OR REPLACE INTO conversations (id, name, email, avatar, last_message, last_message_at, unread_count, is_group, is_locked, is_favorite, is_archived, is_unfriended, is_hidden, public_key) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 conv.id,
                 conv.name || 'Unknown',
@@ -18,7 +18,8 @@ export const saveLocalConversation = async (db: SQLite.SQLiteDatabase, conv: any
                 conv.isFavorite ? 1 : 0,
                 conv.isArchived ? 1 : 0,
                 conv.isUnfriended ? 1 : 0,
-                conv.isHidden ? 1 : 0
+                conv.isHidden ? 1 : 0,
+                conv.friend?.public_key || conv.public_key || null
             ]
         );
     } catch (error) {
@@ -43,7 +44,9 @@ export const getLocalConversations = async (db: SQLite.SQLiteDatabase) => {
             isUnfriended: row.is_unfriended === 1,
             isFriend: row.is_unfriended !== 1,
             isHidden: row.is_hidden === 1,
-            lastActivity: row.last_message_at
+            lastActivity: row.last_message_at,
+            // ✅ Include friend's public key for offline E2EE
+            friend: { public_key: row.public_key || null }
         }));
     } catch (error) {
         console.error('[ERROR] Failed to get local conversations:', error);

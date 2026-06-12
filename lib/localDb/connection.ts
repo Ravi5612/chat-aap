@@ -39,7 +39,8 @@ export const initDatabase = async () => {
                 is_locked INTEGER DEFAULT 0,
                 is_favorite INTEGER DEFAULT 0,
                 is_archived INTEGER DEFAULT 0,
-                is_hidden INTEGER DEFAULT 0
+                is_hidden INTEGER DEFAULT 0,
+                public_key TEXT
             );
 
 
@@ -257,6 +258,14 @@ export const initDatabase = async () => {
         try {
             await db.execAsync('ALTER TABLE conversations ADD COLUMN email TEXT;');
             console.log('[DB] Migration: Added email to conversations');
+        } catch (e) {
+            // Column probably already exists, ignore
+        }
+
+        // Migration: Ensure public_key exists in conversations (for offline E2EE)
+        try {
+            await db.execAsync('ALTER TABLE conversations ADD COLUMN public_key TEXT;');
+            console.log('[DB] Migration: Added public_key to conversations');
         } catch (e) {
             // Column probably already exists, ignore
         }
