@@ -37,7 +37,7 @@ interface ChatInputProps {
     isKeyboardOpen?: boolean;
     initialMessage?: string;
     onDraftChange?: (text: string) => void;
-    onPlayGame?: (gameType: 'tictactoe' | 'chess') => void;
+    onPlayGame?: (gameType: 'tictactoe' | 'chess' | 'ludo') => void;
     onCinema?: () => void;
 }
 

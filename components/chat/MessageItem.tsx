@@ -11,6 +11,7 @@ import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 import { Buffer } from 'buffer';
 import TicTacToeWidget from './games/TicTacToeWidget';
 import ChessWidget from './games/ChessWidget';
+import LudoWidget from './games/LudoWidget';
 import WatchPartyBubble from './WatchPartyBubble';
 
 import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
@@ -160,6 +161,14 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         return (
             <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
                 <ChessWidget message={message} currentUserId={currentUserId} />
+            </View>
+        );
+    }
+
+    if (message.message_type === 'game_ludo' && currentUserId) {
+        return (
+            <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
+                <LudoWidget message={message} currentUserId={currentUserId} />
             </View>
         );
     }

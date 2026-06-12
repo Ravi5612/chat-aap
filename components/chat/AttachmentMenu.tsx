@@ -9,7 +9,7 @@ interface AttachmentMenuProps {
     onCamera: () => void;
     onDocument: () => void;
     onSchedule?: () => void;
-    onGame?: (gameType: 'tictactoe' | 'chess') => void;
+    onGame?: (gameType: 'tictactoe' | 'chess' | 'ludo') => void;
     onCinema?: () => void;
 }
 
@@ -40,6 +40,7 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
             [
                 { text: "Tic-Tac-Toe", onPress: () => onGame('tictactoe') },
                 { text: "Chess", onPress: () => onGame('chess') },
+                { text: "Ludo 🎲", onPress: () => onGame('ludo') },
                 { text: "Cancel", style: "cancel" }
             ]
         );

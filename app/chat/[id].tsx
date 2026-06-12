@@ -107,7 +107,7 @@ export default function ChatScreen() {
         }
     };
 
-    const handlePlayGame = async (gameType: 'tictactoe' | 'chess') => {
+    const handlePlayGame = async (gameType: 'tictactoe' | 'chess' | 'ludo') => {
         if (!currentUser) return;
         
         let initialState: any = {};
@@ -130,6 +130,23 @@ export default function ChatScreen() {
                 winner: null
             };
             msgType = 'game_chess';
+        } else if (gameType === 'ludo') {
+            initialState = {
+                players: {
+                    R: currentUser.id,
+                    Y: isGroup === 'true' ? null : safeFriendId // Default 2nd player to Yellow for opposite corners
+                },
+                turn: 'R',
+                diceValue: null,
+                tokens: {
+                    R: [-1, -1, -1, -1],
+                    G: [-1, -1, -1, -1],
+                    Y: [-1, -1, -1, -1],
+                    B: [-1, -1, -1, -1]
+                },
+                winner: null
+            };
+            msgType = 'game_ludo';
         }
 
         try {
