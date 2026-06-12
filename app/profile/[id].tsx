@@ -164,7 +164,10 @@ export default function UserProfileScreen() {
                         <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}>
+                    <TouchableOpacity 
+                        onPress={() => router.push({ pathname: '/media-gallery/[id]', params: { id: profile.id } } as any)}
+                        style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}
+                    >
                         <View style={{ padding: 10, backgroundColor: '#DBEAFE', borderRadius: 12 }}>
                             <Ionicons name="images" size={20} color="#2563EB" />
                         </View>
