@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import Animated from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -228,12 +229,46 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
                             <MessageStatusContext statusContext={message.status_context} isCurrentUser={isCurrentUser} decryptedStatusContent={decryptedStatusContent} decryptedStatusMedia={decryptedStatusMedia} />
 
-                            {message.reply && message.reply.id && !message.status_context && (
-                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); Haptics.selectionAsync(); onReplyClick?.(message.reply); }} activeOpacity={0.7} style={{ margin: 6, padding: 8, borderRadius: 8, borderLeftWidth: 4, backgroundColor: 'rgba(0, 0, 0, 0.05)', borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537' }}>
-                                    <Text style={{ fontWeight: 'bold', fontSize: 11, color: isCurrentUser ? 'white' : '#F68537' }}>{message.reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}</Text>
-                                    <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={1}>{message?.reply?.message || 'Media'}</Text>
-                                </TouchableOpacity>
-                            )}
+                            {message.reply && message.reply.id && !message.status_context && (() => {
+                                const reply = message.reply;
+                                const isImg = reply.message_type === 'image' || reply.file_type?.startsWith('image/') || reply.message?.startsWith('[Image]');
+                                const isVid = reply.message_type === 'video' || reply.file_type?.startsWith('video/') || reply.message?.startsWith('[Video]');
+                                const isAud = reply.message_type === 'audio' || reply.file_type?.startsWith('audio/') || reply.message?.startsWith('[Voice');
+                                const isDoc = reply.message_type === 'document' || reply.message?.startsWith('[Document]');
+                                const rawMsg = reply.message || '';
+                                const isEncryptedOrId = !rawMsg || rawMsg.startsWith('{') || /^\d{8,}$/.test(rawMsg);
+                                let previewText = rawMsg;
+                                if (isImg) previewText = '📷 Photo';
+                                else if (isVid) previewText = '🎥 Video';
+                                else if (isAud) previewText = '🎵 Voice message';
+                                else if (isDoc) previewText = '📄 Document';
+                                else if (isEncryptedOrId) previewText = '💬 Message';
+
+                                // Extract image URL from reply for thumbnail
+                                let replyImgUrl = reply.file_url;
+                                if (!replyImgUrl && reply.message?.startsWith('[Image]')) {
+                                    replyImgUrl = reply.message.split(' ')[1];
+                                }
+
+                                return (
+                                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); Haptics.selectionAsync(); onReplyClick?.(reply); }} activeOpacity={0.7} style={{ margin: 6, padding: 8, borderRadius: 8, borderLeftWidth: 4, backgroundColor: 'rgba(0, 0, 0, 0.05)', borderLeftColor: isCurrentUser ? 'rgba(255, 255, 255, 0.5)' : '#F68537', flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontWeight: 'bold', fontSize: 11, color: isCurrentUser ? 'white' : '#F68537' }}>{reply.sender_id === message.sender_id ? 'Self' : (friendName || 'Friend')}</Text>
+                                            <Text style={{ fontSize: 12, opacity: 0.8, color: isCurrentUser ? 'white' : '#4B5563' }} numberOfLines={1}>{previewText}</Text>
+                                        </View>
+                                        {/* Thumbnail for image replies */}
+                                        {isImg && replyImgUrl ? (
+                                            <View style={{ width: 40, height: 40, borderRadius: 6, overflow: 'hidden', marginLeft: 8, backgroundColor: 'rgba(0,0,0,0.1)' }}>
+                                                <Image source={{ uri: replyImgUrl }} style={{ width: 40, height: 40 }} contentFit="cover" cachePolicy="memory-disk" />
+                                            </View>
+                                        ) : isVid ? (
+                                            <View style={{ width: 40, height: 40, borderRadius: 6, marginLeft: 8, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Ionicons name="videocam" size={18} color="white" />
+                                            </View>
+                                        ) : null}
+                                    </TouchableOpacity>
+                                );
+                            })()}
 
                             <MessageContent
                                 message={message} isCurrentUser={isCurrentUser} formatTime={formatTime} handleLongPress={handleLongPress} onImagePress={onImagePress}
