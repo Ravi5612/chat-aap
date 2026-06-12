@@ -37,12 +37,13 @@ interface ChatInputProps {
     isKeyboardOpen?: boolean;
     initialMessage?: string;
     onDraftChange?: (text: string) => void;
+    onPlayGame?: () => void;
 }
 
 const ChatInput = memo(({
     onSendMessage, onTyping, disabled = false,
     replyingTo, onCancelReply, editingMessage, onCancelEdit, onSaveEdit,
-    isMember = true, isKeyboardOpen = false, initialMessage = '', onDraftChange
+    isMember = true, isKeyboardOpen = false, initialMessage = '', onDraftChange, onPlayGame
 }: ChatInputProps) => {
     const [selectedMedia, setSelectedMedia] = useState<{ uri: string, type: 'image' | 'video' } | null>(null);
     const [isRecording, setIsRecording] = useState(false);
@@ -172,6 +173,7 @@ const ChatInput = memo(({
                             onContact={openContacts}
                             onDocument={handleDocument}
                             onSchedule={openSchedule}
+                            onGame={onPlayGame}
                         />
 
                         {!hasContent && (

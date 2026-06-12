@@ -9,11 +9,13 @@ import * as Speech from 'expo-speech';
 import FlyingReaction from './FlyingReaction';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 import { Buffer } from 'buffer';
+import TicTacToeWidget from './games/TicTacToeWidget';
 
 import { useMessageMediaCache } from '@/hooks/useMessageMediaCache';
 import { useMessageGestures } from '@/hooks/useMessageGestures';
 import { useStatusContext } from '@/hooks/useStatusContext';
 import { useChatStore } from '@/store/useChatStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import MessageStatusContext from './MessageStatusContext';
 import MessageContent from './MessageContent';
 
@@ -138,6 +140,16 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
                         {isScreenshot ? (isCurrentUser ? 'You took a screenshot' : 'Screenshot taken by friend') : (isCurrentUser ? 'You deleted this message' : 'This message was deleted')}
                     </Text>
                 </View>
+            </View>
+        );
+    }
+
+    const currentUserId = useAuthStore(state => state.user?.id);
+
+    if (message.message_type === 'game_tictactoe' && currentUserId) {
+        return (
+            <View style={{ flexDirection: 'row', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
+                <TicTacToeWidget message={message} currentUserId={currentUserId} />
             </View>
         );
     }

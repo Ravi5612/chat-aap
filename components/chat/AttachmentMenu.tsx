@@ -9,6 +9,7 @@ interface AttachmentMenuProps {
     onCamera: () => void;
     onDocument: () => void;
     onSchedule?: () => void;
+    onGame?: () => void;
 }
 
 // Static config outside component — never recreated
@@ -19,9 +20,10 @@ const MENU_ITEM_CONFIG = [
     { label: 'Schedule', icon: 'time',            color: '#F59E0B', key: 'schedule' },
     { label: 'Location', icon: 'location',        color: '#10B981', key: 'location' },
     { label: 'Contact',  icon: 'person',          color: '#3B82F6', key: 'contact' },
+    { label: 'Games',    icon: 'game-controller', color: '#EF4444', key: 'game' },
 ] as const;
 
-const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, onDocument, onSchedule }: AttachmentMenuProps) => {
+const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, onDocument, onSchedule, onGame }: AttachmentMenuProps) => {
     const [visible, setVisible] = useState(false);
 
     const open  = useCallback(() => setVisible(true),  []);
@@ -35,7 +37,8 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
         { ...MENU_ITEM_CONFIG[3], onPress: onSchedule ?? close },
         { ...MENU_ITEM_CONFIG[4], onPress: onLocation },
         { ...MENU_ITEM_CONFIG[5], onPress: onContact },
-    ], [onDocument, onCamera, onImage, onSchedule, onLocation, onContact, close]);
+        { ...MENU_ITEM_CONFIG[6], onPress: onGame ?? close },
+    ], [onDocument, onCamera, onImage, onSchedule, onLocation, onContact, onGame, close]);
 
     return (
         <View>

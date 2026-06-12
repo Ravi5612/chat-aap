@@ -107,6 +107,22 @@ export default function ChatScreen() {
         }
     };
 
+    const handlePlayGame = async () => {
+        if (!currentUser) return;
+        const initialState = {
+            board: [null, null, null, null, null, null, null, null, null],
+            turn: 'X',
+            playerX: currentUser.id,
+            playerO: isGroup === 'true' ? null : safeFriendId, // Simple logic for 1v1
+            winner: null
+        };
+        try {
+            await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, 'game_tictactoe');
+        } catch (e) {
+            console.error('Failed to start game', e);
+        }
+    };
+
     const onSaveEdit = (text: string) => {
         if (editingMessage) {
             handleSaveEdit(editingMessage.id, text);
@@ -201,6 +217,7 @@ export default function ChatScreen() {
                         isKeyboardOpen={keyboardVisible}
                         initialMessage={draft}
                         onDraftChange={handleDraftChange}
+                        onPlayGame={handlePlayGame}
                     />
                 )}
 
