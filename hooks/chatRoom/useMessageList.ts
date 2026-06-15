@@ -26,15 +26,17 @@ export const useMessageList = (messages: any[], currentUser: any) => {
     const hideBtn = useCallback(() => setShowScrollBtn(false), []);
 
     const handleScroll = useCallback((event: any) => {
-        const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-        const atBottom = contentOffset.y < 60;
+        const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent || {};
+        const y = contentOffset?.y || 0;
+        const atBottom = y < 60;
         isAtBottomRef.current = atBottom;
         if (atBottom) { setUnreadCount(0); hideBtn(); }
         else { showBtn(); }
 
-        const maxScroll = Math.max(0, contentSize.height - layoutMeasurement.height);
+        const maxScroll = Math.max(0, (contentSize?.height || 0) - (layoutMeasurement?.height || 0));
         if (maxScroll > 0) {
-            let percentage = contentOffset.y / maxScroll;
+            let percentage = y / maxScroll;
+            if (isNaN(percentage) || !isFinite(percentage)) percentage = 0;
             percentage = Math.max(0, Math.min(1, percentage));
             setScrollPercentage(percentage);
         } else {

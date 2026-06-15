@@ -83,7 +83,7 @@ export default React.memo(function MessageList({
                 onEndReachedThreshold={0.2}
                 keyboardShouldPersistTaps="handled"
                 onScroll={handleScroll}
-                scrollEventThrottle={16}
+                scrollEventThrottle={100}
                 estimatedItemSize={70}
             />
 
