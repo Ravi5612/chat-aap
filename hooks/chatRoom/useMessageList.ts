@@ -2,13 +2,12 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { FlatList } from 'react-native';
 import { useChatStore } from '@/store/useChatStore';
 
-export const useMessageList = (messages: any[], currentUser: any) => {
+export const useMessageList = (messages: any[], currentUser: any, scrollBtnRef: any) => {
     const flatListRef = useRef<FlatList>(null);
 
     // Scroll-to-bottom button state
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [scrollPercentage, setScrollPercentage] = useState(0);
     const isAtBottomRef = useRef(true);
     const prevMsgCountRef = useRef(messages.length);
 
@@ -26,23 +25,36 @@ export const useMessageList = (messages: any[], currentUser: any) => {
     const hideBtn = useCallback(() => setShowScrollBtn(false), []);
 
     const handleScroll = useCallback((event: any) => {
-        const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent || {};
-        const y = contentOffset?.y || 0;
-        const atBottom = y < 60;
-        isAtBottomRef.current = atBottom;
-        if (atBottom) { setUnreadCount(0); hideBtn(); }
-        else { showBtn(); }
+        try {
+            const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent || {};
+            const y = contentOffset?.y || 0;
+            
+            // User requested scroll debug logs
+            console.log(`[DEBUG SCROLL] Offset Y: ${Math.round(y)}, ContentHeight: ${Math.round(contentSize?.height || 0)}, LayoutHeight: ${Math.round(layoutMeasurement?.height || 0)}`);
 
-        const maxScroll = Math.max(0, (contentSize?.height || 0) - (layoutMeasurement?.height || 0));
-        if (maxScroll > 0) {
-            let percentage = y / maxScroll;
-            if (isNaN(percentage) || !isFinite(percentage)) percentage = 0;
-            percentage = Math.max(0, Math.min(1, percentage));
-            setScrollPercentage(percentage);
-        } else {
-            setScrollPercentage(0);
+            const atBottom = y < 60;
+            isAtBottomRef.current = atBottom;
+            if (atBottom) { setUnreadCount(0); hideBtn(); }
+            else { showBtn(); }
+
+            const maxScroll = Math.max(0, (contentSize?.height || 0) - (layoutMeasurement?.height || 0));
+            
+            if (maxScroll > 0) {
+                let percentage = y / maxScroll;
+                if (isNaN(percentage) || !isFinite(percentage)) percentage = 0;
+                percentage = Math.max(0, Math.min(1, percentage));
+                try {
+                    scrollBtnRef.current?.setScrollPercentage?.(percentage);
+                } catch (err) {
+                    console.error(`[DEBUG SCROLL ERROR in btn ref]`, err);
+                }
+            } else {
+                scrollBtnRef.current?.setScrollPercentage?.(0);
+            }
+        } catch (error) {
+            console.error(`[FATAL SCROLL ERROR]`, error);
         }
-    }, [showBtn, hideBtn]);
+    }, [showBtn, hideBtn, scrollBtnRef]);
 
     const scrollToBottom = useCallback(() => {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -137,7 +149,6 @@ export const useMessageList = (messages: any[], currentUser: any) => {
         flatListRef,
         showScrollBtn,
         unreadCount,
-        scrollPercentage,
         groupedMessages,
         handleScroll,
         scrollToBottom,

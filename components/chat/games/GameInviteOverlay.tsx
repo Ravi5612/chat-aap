@@ -42,6 +42,22 @@ export default function GameInviteOverlay({ gameName, gameState, currentUserId, 
         // Start the turn timer when game is accepted
         if (newStatus === 'active') {
             newState.lastMoveAt = Date.now();
+            if (!isHost) {
+                // Auto-assign guest for group chats
+                if (gameName.includes('Tic-Tac-Toe') && !newState.playerO) newState.playerO = currentUserId;
+                if (gameName.includes('Chess') && !newState.playerBlack) newState.playerBlack = currentUserId;
+                if (gameName.includes('Racing') && !newState.playerGuest) newState.playerGuest = currentUserId;
+                if (gameName.includes('Ludo')) {
+                    if (!newState.players) newState.players = {};
+                    if (newState.opponentColors && Array.isArray(newState.opponentColors)) {
+                        newState.opponentColors.forEach((c: string) => {
+                            if (!newState.players[c]) newState.players[c] = currentUserId;
+                        });
+                    } else if (!newState.players.Y) {
+                        newState.players.Y = currentUserId; // fallback for older games
+                    }
+                }
+            }
         }
 
         await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', messageId);
@@ -70,6 +86,21 @@ export default function GameInviteOverlay({ gameName, gameState, currentUserId, 
                     <Text style={styles.subtitle}>
                         {isHost ? "Waiting for opponent..." : "You have been challenged!"}
                     </Text>
+                    
+                    {gameName.includes('Ludo') && gameState.hostColors && (
+                        <View style={{ marginBottom: 12, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 13, color: '#475569', fontWeight: 'bold' }}>
+                                Mode: {gameState.hostColors.length === 1 ? '1v1 (Single Box)' : '2v2 (Dual Box)'}
+                            </Text>
+                            {!isHost && (
+                                <Text style={{ fontSize: 12, color: '#64748B', textAlign: 'center', marginTop: 4 }}>
+                                    Host took: {gameState.hostColors.join(' & ')}{'\n'}
+                                    You will get: {gameState.opponentColors?.join(' & ')}
+                                </Text>
+                            )}
+                        </View>
+                    )}
+
                     <Text style={styles.timer}>{formatTime(timeLeft)}</Text>
 
                     <View style={styles.actionRow}>

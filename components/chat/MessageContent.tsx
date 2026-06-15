@@ -146,7 +146,6 @@ const MessageContent = memo(({
                             source={{ uri: (localImageUrl || imageUrl)?.trim() || '' }} 
                             style={styles.mediaImage} 
                             contentFit="cover" 
-                            transition={300}
                         />
                         {imageLoading && uploadProgress === undefined && (
                             <View style={styles.mediaLoadingOverlay}>
@@ -175,14 +174,11 @@ const MessageContent = memo(({
             {isVideoMessage && videoUrl && (
                 <TouchableOpacity onPress={handleVideoContentPress} onLongPress={handleLongPress} delayLongPress={200}>
                     <View style={styles.videoContainer}>
-                        <Video
-                            ref={videoRef}
-                            source={{ uri: videoUrl }}
-                            style={styles.videoPlayer}
-                            useNativeControls={false}
-                            resizeMode={ResizeMode.COVER}
-                            shouldPlay={false}
-                        />
+                        {/* 
+                          Avoid rendering <Video> here to prevent MediaCodec crashes during scrolling on Android.
+                          We just show a black thumbnail box. The actual video plays when the user taps it. 
+                        */}
+                        <View style={[styles.videoPlayer, { backgroundColor: '#111827' }]} />
                         {/* Play Icon Overlay */}
                         {uploadProgress === undefined && (
                             <View style={styles.playIconOverlay}>

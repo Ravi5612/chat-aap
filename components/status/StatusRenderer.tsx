@@ -30,12 +30,13 @@ export default function StatusRenderer({
                         shouldPlay={true}
                         isLooping={true}
                         onPlaybackStatusUpdate={onViewerPlaybackStatusUpdate}
-                        style={{ width: '100%', height: '100%' }}
+                        style={{ flex: 1, width: '100%', height: '100%' }}
                     />
                 ) : (
                     <Image
                         source={{ uri: currentStatusUI.media_url }}
-                        style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                        style={{ flex: 1, width: '100%', height: '100%' }}
+                        contentFit="contain"
                         cachePolicy="memory-disk"
                     />
                 )}

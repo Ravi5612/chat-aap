@@ -99,7 +99,9 @@ export default function StatusOverlay({
                             <Image
                                 source={{ uri: currentStatusUI.profiles?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentStatusUI.profiles?.username || 'User')}&backgroundColor=F68537` }}
                                 style={{ width: 42, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: 'white' }}
-                             cachePolicy="memory-disk" />
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                            />
                             <View style={{ marginLeft: 12 }}>
                                 <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{currentStatusUI.profiles?.username || 'Unknown'}</Text>
                                 <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: 12 }}>

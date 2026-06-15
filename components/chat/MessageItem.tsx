@@ -34,6 +34,7 @@ interface MessageItemProps {
     flyingEmoji?: any;
     translatedText?: { text: string; lang: string } | null;
     autoListenMode?: boolean;
+    onStartCall?: (type: 'audio' | 'video') => void;
 }
 
 const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
@@ -50,7 +51,7 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
     );
 };
 
-const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji, translatedText, autoListenMode }: MessageItemProps) => {
+const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji, translatedText, autoListenMode, onStartCall }: MessageItemProps) => {
     const { panGesture, animatedStyle, iconAnimatedStyle } = useMessageGestures(isCurrentUser, message, onReply);
     const uploadProgressObj = useChatStore(state => state.uploadProgress[message.id]);
     const uploadProgress = typeof uploadProgressObj === 'number' ? uploadProgressObj : uploadProgressObj?.percent;
@@ -171,7 +172,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
     if (message.message_type === 'game_ludo' && currentUserId) {
         return (
             <View style={{ width: '100%', alignItems: 'center', marginVertical: 12 }}>
-                <LudoWidget message={message} currentUserId={currentUserId} />
+                <LudoWidget message={message} currentUserId={currentUserId} onStartCall={onStartCall} />
             </View>
         );
     }

@@ -73,6 +73,16 @@ export default function CallScreen({
         callState, callType, friend, currentUser, isGroup, endReason, onAcceptCall, onEndCall, onRetry
     );
 
+    React.useEffect(() => {
+        const session = useCallStore.getState().callSession;
+        if (session?.autoMinimize && !useCallStore.getState().isMinimized && callState !== 'ended') {
+            const timer = setTimeout(() => {
+                onMinimize?.();
+            }, 800);
+            return () => clearTimeout(timer);
+        }
+    }, [callState, onMinimize]);
+
     // Memoized — only re-renders when remoteUids/callState/friend changes
     const RemoteVideoArea = useCallback(() => {
         if (remoteUids.length === 0) {

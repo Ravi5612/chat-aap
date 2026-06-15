@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useState, useImperativeHandle, forwardRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
 
 // System event message (e.g. "User joined the group")
 export const SystemMessage = React.memo(function SystemMessage({ message, createdAt }: { message: string; createdAt: string }) {
@@ -37,46 +36,48 @@ export const DateSeparator = React.memo(function DateSeparator({ date }: { date:
     );
 });
 
+export interface ScrollToBottomButtonRef {
+    setScrollPercentage: (p: number) => void;
+}
+
 // Floating scroll-to-bottom button with circular progress and unread badge
-export const ScrollToBottomButton = React.memo(function ScrollToBottomButton({ 
-    onPress, unreadCount, scrollPercentage = 0 
-}: { 
+export const ScrollToBottomButton = React.memo(forwardRef<ScrollToBottomButtonRef, { 
     onPress: () => void; 
     unreadCount: number;
-    scrollPercentage?: number;
-}) {
+}>(({ onPress, unreadCount }, ref) => {
+    const circleRef = React.useRef<any>(null);
+
+    useImperativeHandle(ref, () => ({
+        setScrollPercentage: (p: number) => {
+            // Disabled native props update on SVG Circle as it causes frequent native crashes during fast scrolling
+            // on some Android devices with react-native-svg.
+            // if (!isNaN(p) && isFinite(p)) {
+            //     const offset = circumference - (p * circumference);
+            //     circleRef.current?.setNativeProps({ strokeDashoffset: offset });
+            // }
+        }
+    }));
+
     const size = 52;
     const strokeWidth = 3;
     const center = size / 2;
     const radius = center - strokeWidth;
     const circumference = 2 * Math.PI * radius;
-    const strokeDashoffset = circumference - (scrollPercentage * circumference);
+    const initialOffset = circumference;
 
     return (
         <View style={styles.scrollBtnWrapper}>
-            <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-                <Svg width={size} height={size} style={{ position: 'absolute' }}>
-                    <Circle
-                        cx={center}
-                        cy={center}
-                        r={radius}
-                        stroke="#E5E7EB" // Light gray track
-                        strokeWidth={strokeWidth}
-                        fill="white" // White inner background
-                    />
-                    <Circle
-                        cx={center}
-                        cy={center}
-                        r={radius}
-                        stroke="#F68537" // App theme orange progress
-                        strokeWidth={strokeWidth}
-                        fill="none"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={strokeDashoffset}
-                        strokeLinecap="round"
-                        transform={`rotate(-90 ${center} ${center})`}
-                    />
-                </Svg>
+            <View style={{ 
+                width: size, 
+                height: size, 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                backgroundColor: 'white',
+                borderRadius: size / 2,
+                borderWidth: strokeWidth,
+                borderColor: '#F68537',
+                shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 4
+            }}>
                 <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.scrollBtnInner}>
                     <Ionicons name="chevron-down" size={28} color="#F68537" />
                 </TouchableOpacity>
@@ -88,7 +89,7 @@ export const ScrollToBottomButton = React.memo(function ScrollToBottomButton({
             )}
         </View>
     );
-});
+}));
 
 const styles = StyleSheet.create({
     // System message

@@ -7,6 +7,7 @@ interface CallSession {
     offer?: any;
     isGroup?: boolean;
     endReason?: string;
+    autoMinimize?: boolean;
 }
 
 interface CallState {

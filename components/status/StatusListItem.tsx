@@ -54,22 +54,12 @@ export const StatusListItem = React.memo(({ item, onPress, onOptionsPress }: { i
                     styles.avatarRing,
                     { borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537' }
                 ]}>
-                    {item.mediaType === 'text' ? (
-                        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: item.bgColor || '#F68537', borderRadius: 30, padding: 4 }}>
-                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 9, textAlign: 'center' }} numberOfLines={3}>
-                                {item.text || 'T'}
-                            </Text>
-                        </View>
-                    ) : item.mediaType === 'video' ? (
-                        <View style={{ width: '100%', height: '100%', borderRadius: 30, overflow: 'hidden', position: 'relative' }}>
-                            {videoThumbnail}
-                        </View>
-                    ) : (
-                        <Image
-                            source={{ uri: thumbnailToRender }}
-                            style={styles.avatar}
-                         cachePolicy="memory-disk" />
-                    )}
+                    <Image
+                        source={{ uri: item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
+                        style={styles.avatar}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                    />
                 </View>
                 <View style={styles.statusCountBadge}>
                     <Text style={styles.statusCountText}>{item.statusCount}</Text>
@@ -101,7 +91,9 @@ export const StatusListItem = React.memo(({ item, onPress, onOptionsPress }: { i
                         <Image
                             source={{ uri: thumbnailToRender }}
                             style={{ width: '100%', height: '100%' }}
-                         cachePolicy="memory-disk" />
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                        />
                     )}
                 </View>
                 

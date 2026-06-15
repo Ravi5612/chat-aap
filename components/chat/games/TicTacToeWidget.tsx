@@ -19,19 +19,29 @@ interface TicTacToeState {
 interface TicTacToeWidgetProps {
     message: any;
     currentUserId: string;
+    onStartCall?: (type: 'audio' | 'video') => void;
 }
 
-export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWidgetProps) {
+export default function TicTacToeWidget({ message, currentUserId, onStartCall }: TicTacToeWidgetProps) {
     const [updating, setUpdating] = useState(false);
     const [timeLeft, setTimeLeft] = useState(120);
+    const [optimisticState, setOptimisticState] = useState<TicTacToeState | null>(null);
 
-    let gameState: TicTacToeState;
+    let serverState: TicTacToeState;
     try {
-        gameState = JSON.parse(message.message);
+        serverState = JSON.parse(message.message);
     } catch (e) {
         return <Text style={{ color: 'red' }}>Corrupted Game Data</Text>;
     }
 
+    // Clear optimistic state if server catches up
+    useEffect(() => {
+        if (optimisticState && serverState.lastMoveAt && optimisticState.lastMoveAt && serverState.lastMoveAt >= optimisticState.lastMoveAt) {
+            setOptimisticState(null);
+        }
+    }, [serverState.lastMoveAt, optimisticState]);
+
+    const gameState = optimisticState || serverState;
     const { board, turn, playerX, playerO, winner } = gameState;
     const isMyTurn = (turn === 'X' && playerX === currentUserId) || (turn === 'O' && playerO === currentUserId);
     const iAmPlayerX = playerX === currentUserId;
@@ -51,7 +61,7 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
             }
         }, 1000);
         return () => clearInterval(interval);
-    }, [gameState.lastMoveAt, winner, isMyTurn, gameState.status]);
+    }, [gameState.lastMoveAt, winner, isMyTurn, gameState.status, updating]);
 
     const claimTimeoutWin = async () => {
         setUpdating(true);
@@ -60,6 +70,7 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
             winner: mySymbol,
             timeoutWinner: mySymbol
         };
+        setOptimisticState(newState);
         await supabase.from('messages').update({ message: JSON.stringify(newState) }).eq('id', message.id);
         setUpdating(false);
     };
@@ -100,6 +111,8 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
             lastMoveAt: Date.now()
         };
 
+        setOptimisticState(newState);
+
         const { error } = await supabase
             .from('messages')
             .update({ message: JSON.stringify(newState) })
@@ -107,6 +120,7 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
 
         if (error) {
             console.error('Failed to update game state:', error);
+            setOptimisticState(null); // Revert on failure
         }
         setUpdating(false);
     };
@@ -127,15 +141,25 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
                              (winner === mySymbol ? '🎉 You Won!' : '😔 You Lost!'))}
                         </Text>
                     ) : (
-                        <View style={{ alignItems: 'center' }}>
-                            <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
-                                {isMyTurn ? "Your Turn" : "Opponent's Turn"}
-                            </Text>
-                            {gameState.status === 'active' && gameState.lastMoveAt && (
-                                <Text style={styles.timerText}>
-                                    {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 }}>
+                            <View style={{ alignItems: 'center' }}>
+                                <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
+                                    {isMyTurn ? "Your Turn" : "Opponent's Turn"}
                                 </Text>
-                            )}
+                                {gameState.status === 'active' && gameState.lastMoveAt && (
+                                    <Text style={styles.timerText}>
+                                        {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
+                                    </Text>
+                                )}
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <TouchableOpacity onPress={() => onStartCall?.('audio')} style={styles.callBtn}>
+                                    <Ionicons name="mic" size={18} color="#3B82F6" />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => onStartCall?.('video')} style={styles.callBtn}>
+                                    <Ionicons name="videocam" size={18} color="#10B981" />
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     )}
                 </View>
@@ -161,12 +185,6 @@ export default function TicTacToeWidget({ message, currentUserId }: TicTacToeWid
                             </Text>
                         </TouchableOpacity>
                     ))}
-                    
-                    {updating && (
-                        <View style={styles.loadingOverlay}>
-                            <ActivityIndicator color="#F68537" />
-                        </View>
-                    )}
                 </View>
             </View>
         </GameInviteOverlay>
@@ -250,5 +268,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-    }
+    },
+    callBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }
 });

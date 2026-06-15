@@ -77,7 +77,10 @@ function RacingEngine({ gameState, currentUserId, isHost, isPlaying, messageId }
     // Sync loop
     const lastSyncRef = useRef<number>(0);
 
+    const isMountedRef = useRef(true);
+
     useEffect(() => {
+        isMountedRef.current = true;
         if (!isPlaying) return;
 
         // Setup Supabase Realtime
@@ -100,12 +103,14 @@ function RacingEngine({ gameState, currentUserId, isHost, isPlaying, messageId }
         requestRef.current = requestAnimationFrame(gameLoop);
 
         return () => {
+            isMountedRef.current = false;
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
             supabase.removeChannel(channel);
         };
     }, [isPlaying]);
 
     const gameLoop = (time: number) => {
+        if (!isMountedRef.current) return;
         if (!lastTimeRef.current) lastTimeRef.current = time;
         const dt = (time - lastTimeRef.current) / 1000;
         lastTimeRef.current = time;

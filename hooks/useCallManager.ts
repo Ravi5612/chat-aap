@@ -44,7 +44,7 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
         safeLogCallHistory
     );
 
-    const handleStartCall = async (friend: any, type: 'audio' | 'video' = 'video', isGroup: boolean = false) => {
+    const handleStartCall = async (friend: any, type: 'audio' | 'video' = 'video', isGroup: boolean = false, autoMinimize: boolean = false) => {
         const networkState = await Network.getNetworkStateAsync();
         // isInternetReachable can be null on some devices, so we primarily check isConnected
         if (!networkState.isConnected) {
@@ -58,7 +58,8 @@ export const useCallManager = (currentUser: any, combinedItems: any[], isListene
             status: 'outgoing',
             type,
             friend,
-            isGroup
+            isGroup,
+            autoMinimize
         });
 
         const offerPayload = {

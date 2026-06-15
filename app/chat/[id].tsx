@@ -28,6 +28,7 @@ import { UnfriendedBanner, BlockedBanner } from '@/components/chat/ChatBanners';
 import DisappearingMessagesModal from '@/components/chat/DisappearingMessagesModal';
 import ScheduledMessagesListModal from '@/components/chat/ScheduledMessagesListModal';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
+import LudoSetupModal, { LudoSetupConfig } from '@/components/chat/games/LudoSetupModal';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
@@ -78,6 +79,7 @@ export default function ChatScreen() {
     const [viewerIsVideo, setViewerIsVideo] = useState(false);
     const [ledgerVisible, setLedgerVisible] = useState(false);
     const [scheduledListModalVisible, setScheduledListModalVisible] = useState(false);
+    const [ludoSetupVisible, setLudoSetupVisible] = useState(false);
 
     const handleImagePress = (uri: string, isVideo: boolean = false) => {
         setViewerImage(uri);
@@ -137,25 +139,8 @@ export default function ChatScreen() {
             };
             msgType = 'game_chess';
         } else if (gameType === 'ludo') {
-            initialState = {
-                status: 'pending',
-                hostId: currentUser.id,
-                createdAt: new Date().toISOString(),
-                players: {
-                    R: currentUser.id,
-                    Y: isGroup === 'true' ? null : safeFriendId // Default 2nd player to Yellow for opposite corners
-                },
-                turn: 'R',
-                diceValue: null,
-                tokens: {
-                    R: [-1, -1, -1, -1],
-                    G: [-1, -1, -1, -1],
-                    Y: [-1, -1, -1, -1],
-                    B: [-1, -1, -1, -1]
-                },
-                winner: null
-            };
-            msgType = 'game_ludo';
+            setLudoSetupVisible(true);
+            return;
         } else if (gameType === 'racing') {
             initialState = {
                 status: 'pending',
@@ -173,6 +158,46 @@ export default function ChatScreen() {
             await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, msgType);
         } catch (e) {
             console.error('Failed to start game', e);
+        }
+    };
+
+    const handleStartLudoGame = async (config: LudoSetupConfig) => {
+        if (!currentUser) return;
+        
+        const players: Record<string, string | null> = {
+            R: null, G: null, Y: null, B: null
+        };
+        
+        // Host colors
+        config.hostColors.forEach(c => players[c] = currentUser.id);
+        
+        // Opponent colors (if 1-on-1, assign immediately. If group, leave null for GameInviteOverlay)
+        if (isGroup !== 'true') {
+            config.opponentColors.forEach(c => players[c] = safeFriendId);
+        }
+
+        const initialState = {
+            status: 'pending',
+            hostId: currentUser.id,
+            createdAt: new Date().toISOString(),
+            hostColors: config.hostColors,
+            opponentColors: config.opponentColors,
+            players,
+            turn: config.hostColors[0], // Host goes first
+            diceValue: null,
+            tokens: {
+                R: [-1, -1, -1, -1],
+                G: [-1, -1, -1, -1],
+                Y: [-1, -1, -1, -1],
+                B: [-1, -1, -1, -1]
+            },
+            winner: null
+        };
+
+        try {
+            await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, 'game_ludo');
+        } catch (e) {
+            console.error('Failed to start Ludo game', e);
         }
     };
 
@@ -285,6 +310,7 @@ export default function ChatScreen() {
                     loadingMore={loadingMore}
                     translatedMessages={translatedMessages}
                     autoListenMode={autoListenMode}
+                    onStartCall={handleStartCall}
                 />
                 
                 {isTyping && <TypingIndicator friendName={friendName as string} />}
@@ -352,6 +378,12 @@ export default function ChatScreen() {
                 friendId={safeFriendId}
                 isGroup={isGroup === 'true'}
                 chatKey={chatKey}
+            />
+
+            <LudoSetupModal 
+                visible={ludoSetupVisible} 
+                onClose={() => setLudoSetupVisible(false)} 
+                onStartGame={handleStartLudoGame} 
             />
         </KeyboardAvoidingView>
     );
