@@ -140,9 +140,9 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                         localUri,
                         uploadType,
                         currentUser.id,
-                        (percent) => {
+                        (percent, timeLeftStr) => {
                             set((state: any) => ({
-                                uploadProgress: { ...state.uploadProgress, [tempId]: percent }
+                                uploadProgress: { ...state.uploadProgress, [tempId]: { percent, timeLeftStr } }
                             }));
                         },
                         originalName,

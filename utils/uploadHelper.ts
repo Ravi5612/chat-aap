@@ -32,7 +32,7 @@ export const uploadChatMessageMedia = async (
     userId: string,
     originalFileName?: string,
     mimeType?: string,
-    onProgress?: (percent: number) => void,
+    onProgress?: (percent: number, timeLeftStr?: string) => void,
     chatKey?: Uint8Array
 ) => {
     try {
@@ -102,7 +102,7 @@ export const uploadWithProgressToCloudinary = (
     uri: string,
     uploadUrl: string,
     uploadPreset: string,
-    onProgress: (percent: number) => void,
+    onProgress: (percent: number, timeLeftStr?: string) => void,
     fileName: string,
     mimeType: string
 ): Promise<any> => {
@@ -117,13 +117,29 @@ export const uploadWithProgressToCloudinary = (
             xhr.timeout = 60000; // 60 seconds timeout
 
             let lastProgressTime = 0;
+            const startTime = Date.now();
             xhr.upload.onprogress = (event) => {
                 if (event.lengthComputable) {
                     const percent = Math.round((event.loaded / event.total) * 100);
                     const now = Date.now();
+                    
+                    let timeLeftStr = "";
+                    const elapsedMs = now - startTime;
+                    if (elapsedMs > 500 && event.loaded > 0) {
+                        const bytesPerMs = event.loaded / elapsedMs;
+                        const remainingBytes = event.total - event.loaded;
+                        const remainingMs = remainingBytes / bytesPerMs;
+                        
+                        if (remainingMs < 60000) {
+                            timeLeftStr = `${Math.ceil(remainingMs / 1000)}s left`;
+                        } else {
+                            timeLeftStr = `${Math.ceil(remainingMs / 60000)}m left`;
+                        }
+                    }
+
                     // Throttle updates to max 1 per 200ms to prevent UI freezing, unless it's 100%
                     if (now - lastProgressTime > 200 || percent === 100) {
-                        onProgress(percent);
+                        onProgress(percent, timeLeftStr);
                         lastProgressTime = now;
                     }
                 }
@@ -151,7 +167,7 @@ export const uploadChatMessageMediaWithProgress = async (
     uri: string,
     type: 'image' | 'voice' | 'document' | 'video',
     userId: string,
-    onProgress: (percent: number) => void,
+    onProgress: (percent: number, timeLeftStr?: string) => void,
     originalFileName?: string,
     mimeType?: string,
     mediaKey?: Uint8Array

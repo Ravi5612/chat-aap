@@ -15,7 +15,7 @@ interface ChatState {
     activeChannel: any | null;
     activeChatId: string | null;
     cache: Record<string, { messages: any[], key: Uint8Array }>;
-    uploadProgress: Record<string, number>; // ✅ tempId -> 0-100 percent
+    uploadProgress: Record<string, { percent: number; timeLeftStr?: string }>; // ✅ tempId -> progress info
 
     // Actions
     initChat: (friendId: string, currentUser: any, isGroup: boolean) => Promise<void>;

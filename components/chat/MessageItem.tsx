@@ -52,7 +52,9 @@ const areEqual = (prevProps: MessageItemProps, nextProps: MessageItemProps) => {
 
 const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, onReplyClick, onImagePress, friendName, flyingEmoji, translatedText, autoListenMode }: MessageItemProps) => {
     const { panGesture, animatedStyle, iconAnimatedStyle } = useMessageGestures(isCurrentUser, message, onReply);
-    const uploadProgress = useChatStore(state => state.uploadProgress[message.id]);
+    const uploadProgressObj = useChatStore(state => state.uploadProgress[message.id]);
+    const uploadProgress = typeof uploadProgressObj === 'number' ? uploadProgressObj : uploadProgressObj?.percent;
+    const uploadTimeLeft = uploadProgressObj?.timeLeftStr;
 
     // Parse Message
     const parsedData = React.useMemo(() => {
@@ -320,7 +322,7 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
 
                             <MessageContent
                                 message={message} isCurrentUser={isCurrentUser} formatTime={formatTime} handleLongPress={handleLongPress} onImagePress={onImagePress}
-                                imageUrl={parsedData.imageUrl} localImageUrl={localImageUrl} imageLoading={imageLoading} uploadProgress={uploadProgress}
+                                imageUrl={parsedData.imageUrl} localImageUrl={localImageUrl} imageLoading={imageLoading} uploadProgress={uploadProgress} uploadTimeLeft={uploadTimeLeft}
                                 isVoiceMessage={parsedData.isVoiceMessage} voiceUri={parsedData.voiceUri} localVoiceUrl={localVoiceUrl} textContent={parsedData.textContent}
                                 isContactMessage={parsedData.isContactMessage} contactName={parsedData.contactName} contactPhone={parsedData.contactPhone}
                                 isLocationMessage={parsedData.isLocationMessage} locationCoords={parsedData.locationCoords} locationAddress={parsedData.locationAddress}

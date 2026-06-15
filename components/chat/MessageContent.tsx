@@ -17,9 +17,10 @@ interface MessageContentProps {
     onImagePress?: (uri: string, isVideo?: boolean) => void;
     imageUrl: string | null;
     localImageUrl: string | null;
-    imageLoading: boolean;
+    imageLoading?: boolean;
     uploadProgress?: number;
-    isVoiceMessage: boolean;
+    uploadTimeLeft?: string;
+    isVoiceMessage?: boolean;
     voiceUri: string | null;
     localVoiceUrl: string | null;
     textContent: string;
@@ -40,7 +41,7 @@ interface MessageContentProps {
 
 const MessageContent = memo(({
     message, isCurrentUser, formatTime, handleLongPress, onImagePress,
-    imageUrl, localImageUrl, imageLoading, uploadProgress,
+    imageUrl, localImageUrl, imageLoading, uploadProgress, uploadTimeLeft,
     isVoiceMessage, voiceUri, localVoiceUrl, textContent,
     isContactMessage, contactName, contactPhone,
     isLocationMessage, locationCoords, locationAddress,
@@ -154,9 +155,10 @@ const MessageContent = memo(({
                         )}
                         {uploadProgress !== undefined && uploadProgress < 100 && (
                             <View style={styles.uploadOverlay}>
-                                <View style={styles.uploadCircle}>
+                                <View style={styles.uploadProgressOverlay}>
                                     <View style={[styles.uploadProgressFill, { height: `${uploadProgress}%` }]} />
                                     <Text style={styles.uploadProgressText}>{uploadProgress}%</Text>
+                                    {uploadTimeLeft && <Text style={styles.uploadTimeText}>{uploadTimeLeft}</Text>}
                                 </View>
                             </View>
                         )}
@@ -191,9 +193,10 @@ const MessageContent = memo(({
                         )}
                         {uploadProgress !== undefined && uploadProgress < 100 && (
                             <View style={styles.uploadOverlayHeavy}>
-                                <View style={styles.uploadCircle}>
+                                <View style={styles.uploadProgressOverlay}>
                                     <View style={[styles.uploadProgressFill, { height: `${uploadProgress}%` }]} />
                                     <Text style={styles.uploadProgressTextHeavy}>{uploadProgress}%</Text>
+                                    {uploadTimeLeft && <Text style={styles.uploadTimeTextHeavy}>{uploadTimeLeft}</Text>}
                                 </View>
                             </View>
                         )}
@@ -240,7 +243,7 @@ const MessageContent = memo(({
             {isLocationMessage && (
                 <View style={styles.contactContainer}>
                     <View style={[styles.cardHeader, { borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }]}>
-                        <View style={[styles.cardIcon, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(16, 185, 129, 0.1)' }]}>
+                        <View style={[styles.cardIcon, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(10, 185, 129, 0.1)' }]}>
                             <Ionicons name="location" size={20} color={isCurrentUser ? 'white' : '#10B981'} />
                         </View>
                         <View style={styles.flex1}>
@@ -386,7 +389,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderRadius: 12
     },
-    uploadCircle: {
+    uploadProgressOverlay: {
         width: 72,
         height: 72,
         borderRadius: 36,
@@ -407,10 +410,22 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         letterSpacing: -0.5
     },
+    uploadTimeText: {
+        color: '#E2E8F0',
+        fontSize: 10,
+        fontWeight: 'bold',
+        marginTop: 2
+    },
     uploadProgressTextHeavy: {
         color: 'white',
         fontSize: 14,
         fontWeight: '900'
+    },
+    uploadTimeTextHeavy: {
+        color: '#E2E8F0',
+        fontSize: 10,
+        fontWeight: 'bold',
+        marginTop: 2
     },
     videoContainer: {
         width: 256,
