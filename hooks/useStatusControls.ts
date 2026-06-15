@@ -20,7 +20,8 @@ export function useStatusControls(
     const getActiveUsersList = useCallback(() => {
         const friendsStore = useFriendsStore.getState();
         const myActiveStatuses = friendsStore.myStatuses?.active || [];
-        const friendsWithStatus = friendsStore.combinedItems.filter((f: any) => f.statusCount > 0);
+        const statusInfo = friendsStore.statusInfo || {};
+        const friendsWithStatus = friendsStore.combinedItems.filter((f: any) => (statusInfo[f.id]?.count || 0) > 0);
         
         const allUsersList: string[] = [];
         if (myActiveStatuses.length > 0 && currentUser) {

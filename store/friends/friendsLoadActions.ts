@@ -43,14 +43,25 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
         const { db } = useDbStore.getState();
 
         // SILENT LOCAL LOAD FIRST
-        if (db && existingItems.length === 0) {
+        let dbInstance = db;
+        if (!dbInstance) {
+            get().addDebugLog('[LoadFriends] DB not ready yet, waiting for initialization...');
+            // Wait up to 6 seconds for DB to initialize
+            for (let i = 0; i < 30; i++) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+                dbInstance = useDbStore.getState().db;
+                if (dbInstance) break;
+            }
+        }
+
+        if (dbInstance && existingItems.length === 0) {
             get().addDebugLog('[LoadFriends] Starting local DB fetch');
             const { getLocalStatuses } = require('@/lib/localDb');
             try {
                 const [localConv, localBlocked, localStatuses] = await Promise.all([
-                    getLocalConversations(db),
-                    getLocalBlocks(db, userId),
-                    getLocalStatuses(db)
+                    getLocalConversations(dbInstance),
+                    getLocalBlocks(dbInstance, userId),
+                    getLocalStatuses(dbInstance)
                 ]);
 
                 get().addDebugLog(`[LoadFriends] Local fetch done: ${localConv.length} convs, ${localStatuses.length} statuses`);
@@ -73,7 +84,7 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
                     
                     if (!myProfile) {
                         const { getLocalProfile } = require('@/lib/localDb');
-                        myProfile = await getLocalProfile(db, userId);
+                        myProfile = await getLocalProfile(dbInstance, userId);
                         if (myProfile) {
                             useAuthStore.setState({ profile: myProfile });
                         }
@@ -111,8 +122,8 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
             } catch (err: any) {
                 get().addDebugLog(`[LoadFriends] Error fetching local DB: ${err.message}`);
             }
-        } else if (!db) {
-            get().addDebugLog('[LoadFriends] ERROR: db is NULL. Skipping local load.');
+        } else if (!dbInstance) {
+            get().addDebugLog('[LoadFriends] WARNING: DB still null after waiting. Skipping local load.');
         }
 
         const currentItems = get().combinedItems;
@@ -132,7 +143,7 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
             const timeoutPromise = new Promise<any>((_, reject) => {
                 setTimeout(() => reject(new Error('Network request timed out')), 10000);
             });
-            const fetchPromise = fetchAndFormatFriendsData(userId, existingItems, db, onlineUsers, currentUserId);
+            const fetchPromise = fetchAndFormatFriendsData(userId, existingItems, dbInstance, onlineUsers, currentUserId);
             
             const data = await Promise.race([fetchPromise, timeoutPromise]);
             

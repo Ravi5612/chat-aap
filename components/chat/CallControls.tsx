@@ -16,13 +16,12 @@ interface CallControlsProps {
     onScreenShare: () => void;
     onAccept: () => void;
     onEnd: () => void;
-    onSetAudioRoute?: (route: number) => void;
     onRequestVideoUpgrade?: () => void;
 }
 
 export const CallControls = memo(({ 
     callState, callType, isMuted, isVideoOff, isSpeakerphone, audioRoute, isScreenSharing, 
-    onMute, onVideo, onSpeaker, onScreenShare, onAccept, onEnd, onSetAudioRoute, onRequestVideoUpgrade
+    onMute, onVideo, onSpeaker, onScreenShare, onAccept, onEnd, onRequestVideoUpgrade
 }: CallControlsProps) => {
     const [showMore, setShowMore] = useState(false);
     const [showAudioMenu, setShowAudioMenu] = useState(false);
@@ -58,7 +57,7 @@ export const CallControls = memo(({
                 <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color={isMuted ? "#EF4444" : "white"} />
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={() => { setShowAudioMenu(!showAudioMenu); setShowMore(false); }} style={[styles.controlButton, (audioRoute === 3 || isSpeakerphone) && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
+            <TouchableOpacity onPress={onSpeaker} style={[styles.controlButton, (audioRoute === 3 || isSpeakerphone) && { backgroundColor: 'rgba(255,255,255,0.4)' }]}>
                 <Ionicons 
                     name={audioRoute === 5 ? "bluetooth" : (audioRoute === 3 || isSpeakerphone ? "volume-high" : "phone-portrait-outline")} 
                     size={24} 
@@ -74,23 +73,6 @@ export const CallControls = memo(({
                 <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
             </TouchableOpacity>
 
-            {/* AUDIO ROUTING MENU */}
-            {showAudioMenu && onSetAudioRoute && (
-                <View style={[styles.moreMenuContainer, { right: 80 }]}>
-                    <TouchableOpacity onPress={() => { setShowAudioMenu(false); onSetAudioRoute(5); }} style={styles.moreMenuItem}>
-                        <Ionicons name="bluetooth" size={20} color="white" />
-                        <Text style={styles.moreMenuText}>Bluetooth</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => { setShowAudioMenu(false); onSetAudioRoute(3); }} style={styles.moreMenuItem}>
-                        <Ionicons name="volume-high" size={20} color="white" />
-                        <Text style={styles.moreMenuText}>Speaker</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => { setShowAudioMenu(false); onSetAudioRoute(1); }} style={styles.moreMenuItem}>
-                        <Ionicons name="phone-portrait-outline" size={20} color="white" />
-                        <Text style={styles.moreMenuText}>Phone</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
 
             {/* MORE OPTIONS MENU */}
             {showMore && (

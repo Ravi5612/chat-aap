@@ -9,26 +9,30 @@ export const useDbNotifications = () => {
         let channel: any;
 
         const init = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const { useAuthStore } = require('@/store/useAuthStore');
+            const user = useAuthStore.getState().user;
             if (!user) return;
 
-            await loadNotifications(user.id);
+            // Wait 3 seconds before fetching to avoid slowing down app startup
+            setTimeout(async () => {
+                await loadNotifications(user.id);
 
-            // Realtime listener - nai notification aate hi list update ho
-            channel = supabase
-                .channel(`db-notifications-${user.id}`)
-                .on('postgres_changes',
-                    {
-                        event: '*',
-                        schema: 'public',
-                        table: 'notifications',
-                        filter: `user_id=eq.${user.id}`
-                    },
-                    () => {
-                        loadNotifications(user.id);
-                    }
-                )
-                .subscribe();
+                // Realtime listener - nai notification aate hi list update ho
+                channel = supabase
+                    .channel(`db-notifications-${user.id}`)
+                    .on('postgres_changes',
+                        {
+                            event: '*',
+                            schema: 'public',
+                            table: 'notifications',
+                            filter: `user_id=eq.${user.id}`
+                        },
+                        () => {
+                            loadNotifications(user.id);
+                        }
+                    )
+                    .subscribe();
+            }, 3000);
         };
 
         init();

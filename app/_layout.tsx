@@ -15,8 +15,8 @@ import * as NativeSplashScreen from 'expo-splash-screen';
 // Prevent native splash screen from auto-hiding
 NativeSplashScreen.preventAutoHideAsync().catch(() => {});
 
-import { BackgroundServices } from '@/components/BackgroundServices';
-import { CallOverlay } from '@/components/CallOverlay';
+const BackgroundServices = React.lazy(() => import('@/components/BackgroundServices').then(m => ({ default: m.BackgroundServices })));
+const CallOverlay = React.lazy(() => import('@/components/CallOverlay').then(m => ({ default: m.CallOverlay })));
 import { useNearbyNotifications } from '@/hooks/useNearbyNotifications';
 
 // Modular Layout Hooks
@@ -118,8 +118,10 @@ export default function RootLayout() {
             <Stack.Screen name="group-info" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
-          <BackgroundServices />
-          <CallOverlay />
+          <React.Suspense fallback={null}>
+            <BackgroundServices />
+            <CallOverlay />
+          </React.Suspense>
           <StatusBar style="auto" />
         </ThemeProvider>
     </GestureHandlerRootView>

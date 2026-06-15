@@ -6,17 +6,18 @@ import { useGlobalRealtime } from '@/hooks/useGlobalRealtime';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useInitialPermissions } from '@/hooks/useInitialPermissions';
 import { useDeviceTracker } from '@/hooks/useDeviceTracker';
-import CallScreen from '@/components/chat/CallScreen';
-import { useCallStore } from '@/store/useCallStore';
 import { useEmergencySystem } from '@/hooks/useEmergencySystem';
-import EmergencyReceiverModal from '@/components/home/EmergencyReceiverModal';
 import { TouchableOpacity, Text, View, StatusBar, AppState } from 'react-native';
+
+const CallScreen = React.lazy(() => import('@/components/chat/CallScreen'));
+const EmergencyReceiverModal = React.lazy(() => import('@/components/home/EmergencyReceiverModal'));
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { useCallStore } from '@/store/useCallStore';
 
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useDbStore } from '@/store/useDbStore';
-import InAppNotification from '@/components/ui/InAppNotification';
+const InAppNotification = React.lazy(() => import('@/components/ui/InAppNotification'));
 import { supabase } from '@/lib/supabase';
 import { batchMarkMessageDeliveredLocally } from '@/lib/localDb';
 
@@ -122,30 +123,36 @@ export const BackgroundServices = () => {
 
     return (
         <>
-            <InAppNotification 
-                notification={currentNotification} 
-                onClose={clearNotification} 
-            />
-            <EmergencyReceiverModal />
-            <CallScreen
-                visible={!!callSession && !isMinimized}
-                callState={callSession?.status}
-                onEndCall={endCall}
-                onAcceptCall={setCallActive}
-                onMinimize={() => setMinimized(true)}
-                onMaximize={() => setMinimized(false)}
-                onRetry={() => {
-                    if (callSession?.friend && callSession?.type) {
-                        // Restart the call using previous call's info
-                        handleStartCall(callSession.friend, callSession.type, callSession.isGroup || false);
-                    }
-                }}
-                currentUser={session?.user}
-                callType={callSession?.type || 'video'}
-                friend={callSession?.friend || {}}
-                offer={callSession?.offer}
-                isGroup={callSession?.isGroup}
-            />
+            <React.Suspense fallback={null}>
+                <InAppNotification 
+                    notification={currentNotification} 
+                    onClose={clearNotification} 
+                />
+            </React.Suspense>
+            <React.Suspense fallback={null}>
+                <EmergencyReceiverModal />
+            </React.Suspense>
+            <React.Suspense fallback={null}>
+                <CallScreen
+                    visible={!!callSession && !isMinimized}
+                    callState={callSession?.status}
+                    onEndCall={endCall}
+                    onAcceptCall={setCallActive}
+                    onMinimize={() => setMinimized(true)}
+                    onMaximize={() => setMinimized(false)}
+                    onRetry={() => {
+                        if (callSession?.friend && callSession?.type) {
+                            // Restart the call using previous call's info
+                            handleStartCall(callSession.friend, callSession.type, callSession.isGroup || false);
+                        }
+                    }}
+                    currentUser={session?.user}
+                    callType={callSession?.type || 'video'}
+                    friend={callSession?.friend || {}}
+                    offer={callSession?.offer}
+                    isGroup={callSession?.isGroup}
+                />
+            </React.Suspense>
             {isMinimized && callSession && callSession.status !== 'ended' && callSession.type === 'audio' && (
                 <>
                     <TouchableOpacity 

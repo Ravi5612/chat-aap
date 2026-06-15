@@ -25,7 +25,11 @@ const ActiveStatusBubble = React.memo(({
 }: ActiveStatusBubbleProps) => {
     const isViewed = status.isViewed;
     const isUploading = status.isUploading;
-    const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentProfile?.username || 'User')}&backgroundColor=F68537`;
+    const avatarSource = currentProfile?.avatar_url
+        ? { uri: currentProfile.avatar_url }
+        : (currentProfile?.gender === 'female' 
+            ? require('@/assets/images/default-avatar-female.jpg') 
+            : require('@/assets/images/default-avatar-male.jpg'));
 
     // Decrypt the thumbnail/media for preview
     const { localImageUrl } = useMessageMediaCache(
@@ -52,7 +56,7 @@ const ActiveStatusBubble = React.memo(({
                     <View style={styles.thumbnailInner}>
                         <StatusThumbnail
                             mediaType={status.media_type || 'image'}
-                            mediaUrl={localImageUrl || currentProfile?.avatar_url || defaultAvatar}
+                            mediaUrl={localImageUrl || avatarSource}
                             text={status.content}
                             bgColor={status.background_color}
                             isUploading={isUploading}

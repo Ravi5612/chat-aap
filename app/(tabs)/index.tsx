@@ -7,22 +7,22 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useStatusActions } from '@/hooks/useStatusActions';
 import { useNotifications } from '@/hooks/useNotifications';
 import FilterTabs from '@/components/chat/FilterTabs';
-import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
-import FriendContextMenu from '@/components/chat/FriendContextMenu';
 import { useReceivedRequests } from '@/hooks/useReceivedRequests';
 import { useSentRequests } from '@/hooks/useSentRequests';
 import * as Haptics from 'expo-haptics';
-import ChatLockModal from '@/components/chat/ChatLockModal';
+import { useSwipeNavigation } from '@/hooks/useSwipeNavigation';
 import { useFriends } from '@/hooks/useFriends';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 
-// Extracted UI Components
 import HomeHeader from '@/components/home/HomeHeader';
-import ImageZoomModal from '@/components/home/ImageZoomModal';
 import HomeSuggestions from '@/components/home/HomeSuggestions';
-import SOSButton from '@/components/home/SOSButton';
-import NinjaVaultHeader from '@/components/home/NinjaVaultHeader';
 import EmptyChatState from '@/components/home/EmptyChatState';
+
+const ImageZoomModal = React.lazy(() => import('@/components/home/ImageZoomModal'));
+const SOSButton = React.lazy(() => import('@/components/home/SOSButton'));
+const NinjaVaultHeader = React.lazy(() => import('@/components/home/NinjaVaultHeader'));
+const FriendContextMenu = React.lazy(() => import('@/components/chat/FriendContextMenu'));
+const ChatLockModal = React.lazy(() => import('@/components/chat/ChatLockModal'));
 
 // Extracted Hooks
 import { useHomeMenuActions } from '@/hooks/home/useHomeMenuActions';
@@ -159,7 +159,9 @@ function HomeScreen() {
                             <View>
                                 {isVaultOpen ? (
                                     <ComponentErrorBoundary fallbackName="NinjaVaultHeader">
-                                        <NinjaVaultHeader onClose={() => setSearchQuery('')} />
+                                        <React.Suspense fallback={<View style={{height: 60}} />}>
+                                            <NinjaVaultHeader onClose={() => setSearchQuery('')} />
+                                        </React.Suspense>
                                     </ComponentErrorBoundary>
                                 ) : (
                                     <ComponentErrorBoundary fallbackName="FilterTabs">
@@ -197,35 +199,43 @@ function HomeScreen() {
                 </ComponentErrorBoundary>
 
                 <ComponentErrorBoundary fallbackName="FriendContextMenu">
-                    <FriendContextMenu
-                        visible={menuVisible}
-                        friend={selectedFriendForMenu}
-                        onClose={() => setMenuVisible(false)}
-                        onAction={handleMenuAction}
-                    />
+                    <React.Suspense fallback={null}>
+                        <FriendContextMenu
+                            visible={menuVisible}
+                            friend={selectedFriendForMenu}
+                            onClose={() => setMenuVisible(false)}
+                            onAction={handleMenuAction}
+                        />
+                    </React.Suspense>
                 </ComponentErrorBoundary>
 
                 <ComponentErrorBoundary fallbackName="ChatLockModal">
-                    <ChatLockModal
-                        visible={lockModalVisible}
-                        mode={lockModalMode}
-                        onClose={() => {
-                            setLockModalVisible(false);
-                            setPendingLockedFriend(null);
-                        }}
-                        onSuccess={handleLockModalSuccess}
-                    />
+                    <React.Suspense fallback={null}>
+                        <ChatLockModal
+                            visible={lockModalVisible}
+                            mode={lockModalMode}
+                            onClose={() => {
+                                setLockModalVisible(false);
+                                setPendingLockedFriend(null);
+                            }}
+                            onSuccess={handleLockModalSuccess}
+                        />
+                    </React.Suspense>
                 </ComponentErrorBoundary>
 
                 <ComponentErrorBoundary fallbackName="ImageZoomModal">
-                    <ImageZoomModal
-                        imageUrl={selectedImageForZoom}
-                        onClose={() => setSelectedImageForZoom(null)}
-                    />
+                    <React.Suspense fallback={null}>
+                        <ImageZoomModal
+                            imageUrl={selectedImageForZoom}
+                            onClose={() => setSelectedImageForZoom(null)}
+                        />
+                    </React.Suspense>
                 </ComponentErrorBoundary>
 
                 <ComponentErrorBoundary fallbackName="SOSButton">
-                    <SOSButton />
+                    <React.Suspense fallback={null}>
+                        <SOSButton />
+                    </React.Suspense>
                 </ComponentErrorBoundary>
             </View>
         </View>

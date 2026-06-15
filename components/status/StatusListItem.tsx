@@ -55,7 +55,13 @@ export const StatusListItem = React.memo(({ item, onPress, onOptionsPress }: { i
                     { borderColor: item.allStatusesViewed ? '#E2E8F0' : '#F68537' }
                 ]}>
                     <Image
-                        source={{ uri: item.img || `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
+                        source={
+                            item.img 
+                                ? (typeof item.img === 'string' ? { uri: item.img } : item.img)
+                                : (item.gender === 'female' 
+                                    ? require('@/assets/images/default-avatar-female.jpg') 
+                                    : require('@/assets/images/default-avatar-male.jpg'))
+                        }
                         style={styles.avatar}
                         contentFit="cover"
                         cachePolicy="memory-disk"

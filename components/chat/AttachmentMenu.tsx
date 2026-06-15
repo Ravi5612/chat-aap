@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Modal, TouchableWithoutFeedback, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, TouchableWithoutFeedback, StyleSheet, Alert, ScrollView, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface AttachmentMenuProps {
@@ -15,21 +15,24 @@ interface AttachmentMenuProps {
 
 // Static config outside component — never recreated
 const MENU_ITEM_CONFIG = [
+    { label: 'Games',    icon: 'game-controller', color: '#EF4444', key: 'game' },
+    { label: 'Cinema',   icon: 'film',            color: '#EAB308', key: 'cinema' },
     { label: 'Document', icon: 'document-text', color: '#7C3AED', key: 'document' },
     { label: 'Camera',   icon: 'camera',         color: '#EC4899', key: 'camera' },
     { label: 'Gallery',  icon: 'image',           color: '#8B5CF6', key: 'image' },
     { label: 'Schedule', icon: 'time',            color: '#F59E0B', key: 'schedule' },
     { label: 'Location', icon: 'location',        color: '#10B981', key: 'location' },
     { label: 'Contact',  icon: 'person',          color: '#3B82F6', key: 'contact' },
-    { label: 'Games',    icon: 'game-controller', color: '#EF4444', key: 'game' },
-    { label: 'Cinema',   icon: 'film',            color: '#EAB308', key: 'cinema' },
 ] as const;
 
 const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, onDocument, onSchedule, onGame, onCinema }: AttachmentMenuProps) => {
     const [visible, setVisible] = useState(false);
     const [gameMenuVisible, setGameMenuVisible] = useState(false);
 
-    const open  = useCallback(() => setVisible(true),  []);
+    const open  = useCallback(() => {
+        Keyboard.dismiss();
+        setVisible(true);
+    }, []);
     const close = useCallback(() => setVisible(false), []);
     const closeGameMenu = useCallback(() => setGameMenuVisible(false), []);
 
@@ -41,14 +44,14 @@ const AttachmentMenu = React.memo(({ onLocation, onContact, onImage, onCamera, o
 
     // Map handlers once — only re-created if a handler prop changes
     const items = useMemo(() => [
-        { ...MENU_ITEM_CONFIG[0], onPress: onDocument },
-        { ...MENU_ITEM_CONFIG[1], onPress: onCamera },
-        { ...MENU_ITEM_CONFIG[2], onPress: onImage },
-        { ...MENU_ITEM_CONFIG[3], onPress: onSchedule ?? close },
-        { ...MENU_ITEM_CONFIG[4], onPress: onLocation },
-        { ...MENU_ITEM_CONFIG[5], onPress: onContact },
-        { ...MENU_ITEM_CONFIG[6], onPress: handleGameClick },
-        { ...MENU_ITEM_CONFIG[7], onPress: () => { close(); onCinema?.(); } },
+        { ...MENU_ITEM_CONFIG[0], onPress: handleGameClick },
+        { ...MENU_ITEM_CONFIG[1], onPress: () => { close(); onCinema?.(); } },
+        { ...MENU_ITEM_CONFIG[2], onPress: onDocument },
+        { ...MENU_ITEM_CONFIG[3], onPress: onCamera },
+        { ...MENU_ITEM_CONFIG[4], onPress: onImage },
+        { ...MENU_ITEM_CONFIG[5], onPress: onSchedule ?? close },
+        { ...MENU_ITEM_CONFIG[6], onPress: onLocation },
+        { ...MENU_ITEM_CONFIG[7], onPress: onContact },
     ], [onDocument, onCamera, onImage, onSchedule, onLocation, onContact, handleGameClick, onCinema, close]);
 
     return (

@@ -32,9 +32,11 @@ export default function StatusScreen() {
     const friendsWithStatus = useMemo(() => {
         if (!currentUser) return [];
         return combinedItems
-            .filter(item => item.id !== currentUser.id && item.statusCount > 0)
+            .filter(item => item.id !== currentUser.id && (statusInfo[item.id]?.count > 0))
             .map(item => ({
                 ...item,
+                statusCount: statusInfo[item.id]?.count || 0,
+                allStatusesViewed: statusInfo[item.id]?.count === statusInfo[item.id]?.viewedCount,
                 thumbnail: statusInfo[item.id]?.thumbnail,
                 mediaType: statusInfo[item.id]?.mediaType,
                 text: statusInfo[item.id]?.text,
