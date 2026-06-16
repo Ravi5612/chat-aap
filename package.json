@@ -37,7 +37,7 @@
     "chess.js": "^1.4.0",
     "date-fns": "^4.3.0",
     "expo": "~52.0.49",
-    "expo-asset": "^56.0.17",
+    "expo-asset": "~11.0.5",
     "expo-av": "~15.0.2",
     "expo-battery": "~9.0.2",
     "expo-blur": "~14.0.3",
