@@ -155,11 +155,11 @@
         "origin": false
       },
       "eas": {
-        "projectId": "50cc90b0-096a-4138-a7ff-b29b9869b400"
+        "projectId": "2eb577a5-0aa5-401b-934a-651692bbdd05"
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/50cc90b0-096a-4138-a7ff-b29b9869b400",
+      "url": "https://u.expo.dev/2eb577a5-0aa5-401b-934a-651692bbdd05",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
