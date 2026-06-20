@@ -29,6 +29,9 @@ import DisappearingMessagesModal from '@/components/chat/DisappearingMessagesMod
 import ScheduledMessagesListModal from '@/components/chat/ScheduledMessagesListModal';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 import LudoSetupModal, { LudoSetupConfig } from '@/components/chat/games/LudoSetupModal';
+import RacingSetupModal, { RacingSetupConfig } from '@/components/chat/games/RacingSetupModal';
+import TicTacToeSetupModal, { TicTacToeSetupConfig } from '@/components/chat/games/TicTacToeSetupModal';
+import CinemaInviteModal from '@/components/chat/CinemaInviteModal';
 
 export default function ChatScreen() {
     const params = useLocalSearchParams<{ id: string, name: string, isGroup?: string, image?: string }>();
@@ -80,6 +83,9 @@ export default function ChatScreen() {
     const [ledgerVisible, setLedgerVisible] = useState(false);
     const [scheduledListModalVisible, setScheduledListModalVisible] = useState(false);
     const [ludoSetupVisible, setLudoSetupVisible] = useState(false);
+    const [racingSetupVisible, setRacingSetupVisible] = useState(false);
+    const [ticTacToeSetupVisible, setTicTacToeSetupVisible] = useState(false);
+    const [cinemaModalVisible, setCinemaModalVisible] = useState(false);
 
     const handleImagePress = (uri: string, isVideo: boolean = false) => {
         setViewerImage(uri);
@@ -109,24 +115,15 @@ export default function ChatScreen() {
         }
     };
 
-    const handlePlayGame = async (gameType: 'tictactoe' | 'chess' | 'ludo') => {
+    const handleStartGameAction = async (gameType: string) => {
         if (!currentUser) return;
-        
+
         let initialState: any = {};
         let msgType = '';
 
         if (gameType === 'tictactoe') {
-            initialState = {
-                status: 'pending', // 'pending' | 'active' | 'declined' | 'expired'
-                hostId: currentUser.id,
-                createdAt: new Date().toISOString(),
-                board: [null, null, null, null, null, null, null, null, null],
-                turn: 'X',
-                playerX: currentUser.id,
-                playerO: isGroup === 'true' ? null : safeFriendId,
-                winner: null
-            };
-            msgType = 'game_tictactoe';
+            setTicTacToeSetupVisible(true);
+            return;
         } else if (gameType === 'chess') {
             initialState = {
                 status: 'pending',
@@ -142,16 +139,8 @@ export default function ChatScreen() {
             setLudoSetupVisible(true);
             return;
         } else if (gameType === 'racing') {
-            initialState = {
-                status: 'pending',
-                hostId: currentUser.id,
-                createdAt: new Date().toISOString(),
-                playerHost: currentUser.id,
-                playerGuest: isGroup === 'true' ? null : safeFriendId,
-                seed: Math.floor(Math.random() * 1000000), // Seed for matching obstacles
-                winner: null
-            };
-            msgType = 'game_racing';
+            setRacingSetupVisible(true);
+            return;
         }
 
         try {
@@ -191,7 +180,9 @@ export default function ChatScreen() {
                 Y: [-1, -1, -1, -1],
                 B: [-1, -1, -1, -1]
             },
-            winner: null
+            winner: null,
+            rules: config.rules,
+            consecutiveSixes: 0
         };
 
         try {
@@ -201,21 +192,57 @@ export default function ChatScreen() {
         }
     };
 
-    const handleCinemaClick = async () => {
+    const handleStartTicTacToeGame = async (config: TicTacToeSetupConfig) => {
         if (!currentUser) return;
         
-        const extractVideoId = (url: string) => {
-            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
-            const match = url.match(regex);
-            return match ? match[1] : null;
+        const initialState = {
+            status: 'pending',
+            hostId: currentUser.id,
+            createdAt: new Date().toISOString(),
+            board: Array(9).fill(null),
+            turn: 'X',
+            playerX: currentUser.id,
+            playerO: isGroup === 'true' ? null : safeFriendId,
+            winner: null,
+            historyX: [], // For infinite mode
+            historyO: [],
+            config
         };
 
-        const videoId = extractVideoId(draft);
-
-        if (!videoId) {
-            Alert.alert("No Video Link Found", "Please paste a YouTube video link in the message box below, then click the Cinema Mode button again.");
-            return;
+        try {
+            await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, 'game_tictactoe');
+        } catch (e) {
+            console.error('Failed to start Tic Tac Toe game', e);
         }
+    };
+
+    const handleStartRacingGame = async (config: RacingSetupConfig) => {
+        if (!currentUser) return;
+        
+        const initialState = {
+            status: 'pending',
+            hostId: currentUser.id,
+            createdAt: new Date().toISOString(),
+            playerHost: currentUser.id,
+            playerGuest: isGroup === 'true' ? null : safeFriendId,
+            seed: Math.floor(Math.random() * 1000000),
+            winner: null,
+            config
+        };
+
+        try {
+            await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, 'game_racing');
+        } catch (e) {
+            console.error('Failed to start Racing game', e);
+        }
+    };
+
+    const handleCinemaClick = () => {
+        setCinemaModalVisible(true);
+    };
+
+    const handleStartCinema = async (videoId: string) => {
+        if (!currentUser) return;
 
         const partyId = `party_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
@@ -223,15 +250,14 @@ export default function ChatScreen() {
             partyId,
             videoId,
             hostId: currentUser.id,
-            invite_status: 'pending', // 'pending' | 'active' | 'declined' | 'expired'
+            invite_status: 'pending',
             createdAt: new Date().toISOString(),
-            status: 'playing', // playback status
+            status: 'playing',
             currentTime: 0
         };
 
         try {
             await handleSendMessageOriginal(JSON.stringify(initialState), undefined, disappearingDuration, 'watch_party');
-            handleDraftChange('');
         } catch (e) {
             console.error('Failed to start watch party', e);
         }
@@ -311,10 +337,9 @@ export default function ChatScreen() {
                     translatedMessages={translatedMessages}
                     autoListenMode={autoListenMode}
                     onStartCall={handleStartCall}
+                    isTyping={isTyping || !!friendData?.isTyping}
                 />
                 
-                {isTyping && <TypingIndicator friendName={friendName as string} />}
-
                 {isFriend === false && isGroup !== 'true' && (
                     <UnfriendedBanner safeFriendId={safeFriendId} onAddFriend={() => router.push(`/profile/${safeFriendId}` as any)} />
                 )}
@@ -332,7 +357,7 @@ export default function ChatScreen() {
                         isKeyboardOpen={keyboardVisible}
                         initialMessage={draft}
                         onDraftChange={handleDraftChange}
-                        onPlayGame={handlePlayGame}
+                        onPlayGame={handleStartGameAction}
                         onCinema={handleCinemaClick}
                     />
                 )}
@@ -384,6 +409,24 @@ export default function ChatScreen() {
                 visible={ludoSetupVisible} 
                 onClose={() => setLudoSetupVisible(false)} 
                 onStartGame={handleStartLudoGame} 
+            />
+
+            <RacingSetupModal 
+                visible={racingSetupVisible} 
+                onClose={() => setRacingSetupVisible(false)} 
+                onStartGame={handleStartRacingGame} 
+            />
+
+            <TicTacToeSetupModal 
+                visible={ticTacToeSetupVisible} 
+                onClose={() => setTicTacToeSetupVisible(false)} 
+                onStartGame={handleStartTicTacToeGame} 
+            />
+
+            <CinemaInviteModal
+                visible={cinemaModalVisible}
+                onClose={() => setCinemaModalVisible(false)}
+                onStart={handleStartCinema}
             />
         </KeyboardAvoidingView>
     );

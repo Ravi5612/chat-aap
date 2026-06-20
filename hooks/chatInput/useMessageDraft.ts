@@ -69,6 +69,10 @@ export const useMessageDraft = ({
 
     const handleSubmit = useCallback((scheduledDate?: Date) => {
         if (!message.trim() && !selectedMedia) {
+            if (scheduledDate) {
+                require('react-native').Alert.alert('Empty Message', 'Please enter a message to schedule.');
+                return;
+            }
             if (Date.now() - lastSentTimeRef.current < 500) return;
             setIsRecording(true);
             return;

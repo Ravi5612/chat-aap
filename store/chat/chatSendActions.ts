@@ -39,16 +39,14 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             created_at: new Date().toISOString(),
             file_url: text.startsWith('[Voice Message]') ? text.split(' ')[2] : (text.startsWith('[Image]') ? text.split(' ')[1] : (text.startsWith('[Document]') ? text.split(' | ')[0].replace('[Document] ', '').trim() : null)),
             file_type: text.startsWith('[Voice Message]') ? 'audio/m4a' : (text.startsWith('[Image]') ? 'image/jpeg' : (text.startsWith('[Document]') ? text.split(' | ')[2].trim() : null)),
-            file_name: text.startsWith('[Document]') ? text.split(' | ')[1].trim() : null
+            file_name: text.startsWith('[Document]') ? text.split(' | ')[1].trim() : null,
+            scheduled_at: scheduledAt ? scheduledAt.toISOString() : null
         };
 
-        const updatedMessages = scheduledAt ? messages : [...messages, tempMsg];
-        if (!scheduledAt) {
-            set((state: any) => ({
-                messages: [...(state.messages || []), tempMsg],
-                cache: { ...state.cache, [friendId]: { messages: [...(state.messages || []), tempMsg], key: state.chatKey } }
-            }));    
-        }
+        set((state: any) => ({
+            messages: [...(state.messages || []), tempMsg],
+            cache: { ...state.cache, [friendId]: { messages: [...(state.messages || []), tempMsg], key: state.chatKey } }
+        }));
 
         const { db } = useDbStore.getState();
         if (db) {
@@ -182,16 +180,16 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
             const { data, error } = await supabase.from(targetTable).insert([insertData]).select().single();
             if (error) throw error;
 
-            if (!scheduledAt) {
-                const finalMsg = { 
-                    ...data, 
-                    message: messageToEncrypt, 
-                    file_url: fileData?.url || null, // FIX 1: Pass the raw URL, not the encrypted JSON string
-                    reply: replyObject, 
-                    reply_to_id: replyToId 
-                };
+            const finalMsg = { 
+                ...data, 
+                message: messageToEncrypt, 
+                file_url: fileData?.url || null, 
+                reply: replyObject, 
+                reply_to_id: replyToId,
+                scheduled_at: scheduledAt ? scheduledAt.toISOString() : null
+            };
 
-                // FIX 2: Cache the local file using the remote URL as the key, so we don't re-download what we just uploaded!
+            if (!scheduledAt) {
                 if (fileData?.url && localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
                     if (db) {
                         try {
@@ -201,35 +199,31 @@ export const createChatSendActions = (set: StoreSet, get: StoreGet) => ({
                         }
                     }
                 }
+            }
 
-                set((state: any) => {
-                    const newMessages = state.messages.map((m: any) => m.id === tempId ? finalMsg : m);
-                    saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
-                    const newProgress = { ...state.uploadProgress };
-                    delete newProgress[tempId];
-                    return {
-                        messages: newMessages,
-                        uploadProgress: newProgress,
-                        cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
-                    };
-                });
+            set((state: any) => {
+                const newMessages = state.messages.map((m: any) => m.id === tempId ? finalMsg : m);
+                saveToCache(`chat_messages_${friendId}`, { messages: newMessages });
+                const newProgress = { ...state.uploadProgress };
+                delete newProgress[tempId];
+                return {
+                    messages: newMessages,
+                    uploadProgress: newProgress,
+                    cache: { ...state.cache, [friendId]: { ...state.cache[friendId], messages: newMessages, key: chatKey } }
+                };
+            });
 
-                if (db) {
-                    try {
-                        await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
-                    } catch (e) {
-                        console.warn('[DB] Failed to delete temp message:', e);
-                    }
-                    saveLocalMessage(db, finalMsg);
-                    syncLedgerExpense(db, finalMsg, currentUser.id);
+            if (db) {
+                try {
+                    await db.runAsync('DELETE FROM messages WHERE id = ?', [tempId]);
+                } catch (e) {
+                    console.warn('[DB] Failed to delete temp message:', e);
                 }
-            } else {
-                // For scheduled messages, just clean up upload progress and notify success
-                set((state: any) => {
-                    const newProgress = { ...state.uploadProgress };
-                    delete newProgress[tempId];
-                    return { uploadProgress: newProgress };
-                });
+                saveLocalMessage(db, finalMsg);
+                if (!scheduledAt) syncLedgerExpense(db, finalMsg, currentUser.id);
+            }
+
+            if (scheduledAt) {
                 require('react-native').Alert.alert('Success', 'Message scheduled successfully!');
             }
 

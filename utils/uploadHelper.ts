@@ -6,8 +6,18 @@ import { Alert } from 'react-native';
 
 export const encryptFileBase64 = async (base64: string, cryptoKey: Uint8Array): Promise<string> => {
     const iv = Crypto.getRandomBytes(12);
+    
+    // Yield thread before heavy buffer allocation
+    await new Promise(resolve => setTimeout(resolve, 30));
+    const dataBuffer = new Uint8Array(Buffer.from(base64, 'utf8'));
+    
+    // Yield thread before heavy crypto operation
+    await new Promise(resolve => setTimeout(resolve, 30));
     const aes = gcm(new Uint8Array(cryptoKey), new Uint8Array(iv));
-    const encrypted = aes.encrypt(new Uint8Array(Buffer.from(base64, 'utf8')));
+    const encrypted = aes.encrypt(dataBuffer);
+    
+    // Yield thread before heavy base64 stringification
+    await new Promise(resolve => setTimeout(resolve, 30));
     
     return JSON.stringify({
         iv: Buffer.from(iv).toString('base64'),
@@ -18,10 +28,18 @@ export const encryptFileBase64 = async (base64: string, cryptoKey: Uint8Array): 
 export const decryptFileBase64 = async (encryptedData: string, cryptoKey: Uint8Array): Promise<string> => {
     const dataToDecrypt = JSON.parse(encryptedData);
     const iv = new Uint8Array(Buffer.from(dataToDecrypt.iv, 'base64'));
+    
+    // Yield thread before heavy buffer allocation
+    await new Promise(resolve => setTimeout(resolve, 30));
     const content = new Uint8Array(Buffer.from(dataToDecrypt.content, 'base64'));
     
+    // Yield thread before heavy crypto operation
+    await new Promise(resolve => setTimeout(resolve, 30));
     const aes = gcm(new Uint8Array(cryptoKey), iv);
     const decrypted = aes.decrypt(content);
+    
+    // Yield thread before heavy string conversion
+    await new Promise(resolve => setTimeout(resolve, 30));
     
     return Buffer.from(decrypted).toString('utf8');
 };
@@ -198,8 +216,11 @@ export const uploadChatMessageMediaWithProgress = async (
         await new Promise(resolve => setTimeout(resolve, 100));
 
         const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        
+        await new Promise(resolve => setTimeout(resolve, 30));
         const encryptedText = await encryptFileBase64(base64, mediaKey);
         
+        await new Promise(resolve => setTimeout(resolve, 30));
         const tempUri = `${FileSystem.cacheDirectory}enc_${Crypto.randomUUID()}.bin`;
         await FileSystem.writeAsStringAsync(tempUri, encryptedText, { encoding: FileSystem.EncodingType.UTF8 });
         

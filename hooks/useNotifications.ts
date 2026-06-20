@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import messaging from '@react-native-firebase/messaging';
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -26,8 +27,21 @@ export const useNotifications = (userId: string | null) => {
         registerForPushNotificationsAsync().then(token => {
             if (token) {
                 setExpoPushToken(token);
-                saveTokenToDb(userId, token);
+                saveTokenToDb(userId, token, 'push_token');
             }
+        });
+
+        // Fetch FCM Device Token for reliable Background Calls
+        messaging().getToken().then(fcmToken => {
+            if (fcmToken) {
+                console.log('[PUSH] FCM Token:', fcmToken);
+                saveTokenToDb(userId, fcmToken, 'fcm_token');
+            }
+        }).catch(err => console.error('[PUSH] Failed to get FCM token:', err));
+
+        // Listen for FCM token refreshes
+        const unsubscribeOnTokenRefresh = messaging().onTokenRefresh(fcmToken => {
+            saveTokenToDb(userId, fcmToken, 'fcm_token');
         });
 
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
@@ -65,33 +79,36 @@ export const useNotifications = (userId: string | null) => {
             if (responseListener.current) {
                 Notifications.removeNotificationSubscription(responseListener.current);
             }
+            if (unsubscribeOnTokenRefresh) {
+                unsubscribeOnTokenRefresh();
+            }
         };
     }, [userId]);
 
-    const saveTokenToDb = async (uid: string, token: string) => {
+    const saveTokenToDb = async (uid: string, token: string, columnName: 'push_token' | 'fcm_token' = 'push_token') => {
         try {
             // Check current token in DB to avoid unnecessary updates
             const { data } = await supabase
                 .from('profiles')
-                .select('push_token')
+                .select(columnName)
                 .eq('id', uid)
                 .single();
 
-            if (data?.push_token === token) return; // Already saved
+            if (data?.[columnName] === token) return; // Already saved
 
-            console.log('[PUSH] Saving new token to Supabase:', token);
+            console.log(`[PUSH] Saving new ${columnName} to Supabase:`, token);
             const { error } = await supabase
                 .from('profiles')
-                .update({ push_token: token })
+                .update({ [columnName]: token })
                 .eq('id', uid);
 
             if (error) {
-                console.error('[PUSH] Failed to save token:', error);
+                console.error(`[PUSH] Failed to save ${columnName}:`, error);
             } else {
-                console.log('[PUSH] Token saved successfully');
+                console.log(`[PUSH] ${columnName} saved successfully`);
             }
         } catch (error) {
-            console.error('[PUSH] Error saving token:', error);
+            console.error(`[PUSH] Error saving ${columnName}:`, error);
         }
     };
 

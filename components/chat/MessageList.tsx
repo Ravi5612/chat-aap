@@ -3,6 +3,7 @@ import { View, Platform, UIManager, ActivityIndicator, FlatList } from 'react-na
 import MessageItem from './MessageItem';
 import { useChatStore } from '@/store/useChatStore';
 import { SystemMessage, DateSeparator, ScrollToBottomButton } from './MessageListItems';
+import { TypingIndicator } from './TypingIndicator';
 import { useMessageList } from '@/hooks/chatRoom/useMessageList';
 import { ComponentErrorBoundary } from '@/components/ui/ComponentErrorBoundary';
 
@@ -23,11 +24,12 @@ interface MessageListProps {
     translatedMessages?: Record<string, { text: string; lang: string }>;
     autoListenMode?: boolean;
     onStartCall?: (type: 'audio' | 'video') => void;
+    isTyping?: boolean;
 }
 
 export default React.memo(function MessageList({
     messages, currentUser, onReply, onLongPress, onImagePress,
-    friendName, flyingEmoji, onLoadMore, loadingMore = false, translatedMessages = {}, autoListenMode = false, onStartCall
+    friendName, flyingEmoji, onLoadMore, loadingMore = false, translatedMessages = {}, autoListenMode = false, onStartCall, isTyping = false
 }: MessageListProps) {
     const scrollBtnRef = React.useRef<any>(null);
 
@@ -100,7 +102,12 @@ export default React.memo(function MessageList({
                     data={groupedMessages}
                     keyExtractor={keyExtractor}
                     renderItem={renderItem}
-                    ListHeaderComponent={<View style={{ height: 16 }} />}
+                    ListHeaderComponent={
+                        <View>
+                            {isTyping && <TypingIndicator friendName={friendName || 'Friend'} />}
+                            <View style={{ height: isTyping ? 8 : 16 }} />
+                        </View>
+                    }
                     ListFooterComponent={
                         <View>
                             {loadingMore && (

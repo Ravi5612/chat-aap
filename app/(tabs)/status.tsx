@@ -114,7 +114,9 @@ export default function StatusScreen() {
         setRefreshing(false);
     }, [currentUser, loadFriends]);
 
-    if (loading && friendsWithStatus.length === 0) {
+    const hasCachedStatusInfo = Object.keys(statusInfo || {}).length > 0 || (myStatuses?.active?.length || 0) > 0;
+
+    if (loading && friendsWithStatus.length === 0 && !hasCachedStatusInfo) {
         return <StatusListSkeleton topInset={insets.top} />;
     }
 

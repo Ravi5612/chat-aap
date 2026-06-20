@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import React, { useState, useEffect } from 'react';
-import { Stack, useSegments, useRootNavigationState, ErrorBoundaryProps } from 'expo-router';
+import { Stack, useSegments, useRootNavigationState, ErrorBoundaryProps, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import "../global.css";
@@ -55,9 +55,19 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   );
 }
 
+import { AppAnalytics } from '@/lib/analytics';
+
 export default function RootLayout() {
   const initializing = useAuthStore(state => state.initializing);
+  const pathname = usePathname();
   
+  // Track screen views automatically
+  useEffect(() => {
+    if (pathname) {
+      AppAnalytics.logScreenView(pathname);
+    }
+  }, [pathname]);
+
   // Activate Nearby Tracking & Notifications
   useNearbyNotifications();
 

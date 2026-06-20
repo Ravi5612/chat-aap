@@ -23,6 +23,8 @@ interface AuthState {
     syncDevice: () => Promise<void>;
 }
 
+import { AppAnalytics } from '@/lib/analytics';
+
 export const useAuthStore = create<AuthState>((set, get) => {
     const coreActions = createCoreActions(set, get);
     const profileActions = createProfileActions(set, get);
@@ -39,8 +41,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
             if (session) {
                 // ⚡ AsyncStorage is 100x faster than FileSystem for session caching
                 AsyncStorage.setItem('supabase_session', JSON.stringify(session)).catch(() => {});
+                AppAnalytics.setUserId(session.user.id);
             } else {
                 AsyncStorage.removeItem('supabase_session').catch(() => {});
+                AppAnalytics.setUserId(null);
             }
         },
         setUser: (user) => set({ user }),

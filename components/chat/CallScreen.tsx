@@ -236,6 +236,7 @@ export default function CallScreen({
                                     style={styles.pipVideo}
                                     zOrderMediaOverlay={true}
                                     zOrderOnTop={true}
+                                    useTextureView={true}
                                     channelId={channelId}
                                 />
                                 {isVideoOff && !isSwapped && (
@@ -253,12 +254,6 @@ export default function CallScreen({
                     <CallTimer duration={callDuration} />
                 )}
 
-                {/* Connection Status */}
-                {!isInPipMode && (
-                    <View style={styles.statusIndicator}>
-                        <Text style={styles.statusText}>{connectionStatus}</Text>
-                    </View>
-                )}
 
                 {/* Floating Flip Camera Button */}
                 {!isInPipMode && callType === 'video' && showControls && isEngineReady && (
@@ -298,7 +293,7 @@ export default function CallScreen({
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#111827' },
-    flex1: { flex: 1 },
+    flex1: { flex: 1, borderRadius: 14, overflow: 'hidden' },
     fullSize: { width: '100%', height: '100%' },
     darkFullSize: { width: '100%', height: '100%', backgroundColor: '#111827' },
     minimizeButton: {
@@ -339,7 +334,7 @@ const styles = StyleSheet.create({
         borderRadius: 16, overflow: 'hidden', borderWidth: 2,
         borderColor: 'rgba(255,255,255,0.2)', zIndex: 80, elevation: 15, backgroundColor: '#1F2937',
     },
-    pipVideo: { width: '100%', height: '100%' },
+    pipVideo: { width: '100%', height: '100%', borderRadius: 14, overflow: 'hidden' },
     statusIndicator: { position: 'absolute', top: 100, right: 20 },
     statusText: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
     flipCameraButton: {

@@ -6,13 +6,14 @@ import { useChatStore } from '@/store/useChatStore';
 import { decryptFileBase64 } from '@/utils/uploadHelper';
 import { Buffer } from 'buffer';
 
-export function useMessageMediaCache(message: any, imageUrl: string | null, voiceUri: string | null, documentUrl: string | null = null, customKey?: Uint8Array | null) {
+export function useMessageMediaCache(message: any, imageUrl: string | null, voiceUri: string | null, documentUrl: string | null = null, customKey?: Uint8Array | null, videoUrl: string | null = null) {
     const isLocalImageInitial = imageUrl?.startsWith('file://') || imageUrl?.startsWith('content://') || imageUrl?.startsWith('file:/') || imageUrl?.startsWith('data:image/');
     
     const [localImageUrl, setLocalImageUrl] = useState<string | null>(isLocalImageInitial ? imageUrl : null);
     const [localVoiceUrl, setLocalVoiceUrl] = useState<string | null>(null);
     const [localDocumentUrl, setLocalDocumentUrl] = useState<string | null>(null);
-    const [imageLoading, setImageLoading] = useState(!isLocalImageInitial && !!imageUrl);
+    const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
+    const [mediaLoading, setMediaLoading] = useState(!isLocalImageInitial && !!(imageUrl || videoUrl || voiceUri || documentUrl));
 
     useEffect(() => {
         let isMounted = true;
@@ -35,6 +36,7 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
             const { actualUrl: parsedImageUrl, mediaKey: imageMediaKey } = parseMediaUrl(imageUrl);
             const { actualUrl: parsedVoiceUrl, mediaKey: voiceMediaKey } = parseMediaUrl(voiceUri);
             const { actualUrl: parsedDocumentUrl, mediaKey: documentMediaKey } = parseMediaUrl(documentUrl);
+            const { actualUrl: parsedVideoUrl, mediaKey: videoMediaKey } = parseMediaUrl(videoUrl);
 
             const isLocalImage = parsedImageUrl?.startsWith('file://') || parsedImageUrl?.startsWith('content://') || parsedImageUrl?.startsWith('file:/') || parsedImageUrl?.startsWith('data:image/');
             if (parsedImageUrl && !isLocalImage) {
@@ -77,11 +79,11 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                     } catch (e) {
                         console.error('[CACHE] Image processing failed:', e);
                     } finally {
-                        if (isMounted) setImageLoading(false);
+                        if (isMounted) setMediaLoading(false);
                     }
                 }
             } else if (isLocalImage) {
-                if (isMounted) setImageLoading(false);
+                if (isMounted) setMediaLoading(false);
             }
 
             if (parsedVoiceUrl && !parsedVoiceUrl.startsWith('file://')) {
@@ -166,6 +168,45 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                     }
                 }
             }
+
+            if (parsedVideoUrl && !parsedVideoUrl.startsWith('file://')) {
+                const cached = await getMediaCache(db, parsedVideoUrl);
+                let cacheExists = false;
+                if (cached) {
+                    const info = await FileSystem.getInfoAsync(cached);
+                    cacheExists = info.exists;
+                }
+                if (cacheExists) {
+                    if (isMounted) setLocalVideoUrl(cached);
+                } else {
+                    try {
+                        const filename = (typeof parsedVideoUrl === 'string' ? parsedVideoUrl.split('/').pop() : null) || 'video.mp4';
+                        const isE2EE = !!videoMediaKey || parsedVideoUrl.includes('.txt');
+                        const localFileName = isE2EE ? filename.replace('.e2ee.txt', '.mp4').replace('.txt', '.mp4').replace('.bin', '.mp4') : filename;
+                        const localUri = `${FileSystem.cacheDirectory}${localFileName}`;
+
+                        if (isE2EE) {
+                            const decryptKey = videoMediaKey || customKey || useChatStore.getState().chatKey;
+                            if (decryptKey) {
+                                const response = await fetch(parsedVideoUrl);
+                                const encryptedText = await response.text();
+                                const base64 = await decryptFileBase64(encryptedText, decryptKey);
+                                await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+                                await saveMediaCache(db, parsedVideoUrl, localUri, 'video');
+                                if (isMounted) setLocalVideoUrl(localUri);
+                            }
+                        } else {
+                            const download = await FileSystem.downloadAsync(parsedVideoUrl, localUri);
+                            if (download.status === 200) {
+                                await saveMediaCache(db, parsedVideoUrl, download.uri, 'video');
+                                if (isMounted) setLocalVideoUrl(download.uri);
+                            }
+                        }
+                    } catch (e) {
+                        console.error('[CACHE] Video processing failed:', e);
+                    }
+                }
+            }
         };
 
         handleMediaCache();
@@ -173,7 +214,7 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
         return () => {
             isMounted = false;
         };
-    }, [imageUrl, voiceUri, documentUrl, message?.file_name, customKey]);
+    }, [imageUrl, voiceUri, documentUrl, videoUrl, message?.file_name, customKey]);
 
-    return { localImageUrl, localVoiceUrl, localDocumentUrl, imageLoading, setImageLoading };
+    return { localImageUrl, localVoiceUrl, localDocumentUrl, localVideoUrl, imageLoading: mediaLoading, setImageLoading: setMediaLoading };
 }

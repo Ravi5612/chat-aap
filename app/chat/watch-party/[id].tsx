@@ -9,6 +9,24 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useCallManager } from '@/hooks/useCallManager';
 import { useCallStore } from '@/store/useCallStore';
 
+const AnimatedReaction = ({ emoji, left }: { emoji: string, left: number }) => {
+    const translateY = useRef(new Animated.Value(0)).current;
+    const opacity = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        Animated.parallel([
+            Animated.timing(translateY, { toValue: -300, duration: 2500, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 0, duration: 2500, delay: 500, useNativeDriver: true })
+        ]).start();
+    }, []);
+
+    return (
+        <Animated.Text style={[styles.floatingReaction, { left: `${left}%`, transform: [{ translateY }], opacity }]}>
+            {emoji}
+        </Animated.Text>
+    );
+};
+
 export default function WatchPartyScreen() {
     const { width, height } = useWindowDimensions();
     const { id: roomId, videoId, messageId, hostId } = useLocalSearchParams();
@@ -26,7 +44,11 @@ export default function WatchPartyScreen() {
     const [friends, setFriends] = useState<any[]>([]);
     const [inviting, setInviting] = useState(false);
     
-    const isHost = currentUser?.id === hostId;
+    const [currentHostId, setCurrentHostId] = useState(hostId);
+    const [reactions, setReactions] = useState<{id: string, emoji: string, left: number}[]>([]);
+    const [inviteCooldown, setInviteCooldown] = useState(false);
+    
+    const isHost = currentUser?.id === currentHostId;
     
     const playerRef = useRef<any>(null);
     const channelRef = useRef<any>(null);
@@ -70,13 +92,50 @@ export default function WatchPartyScreen() {
                     id: key,
                     ...(state[key][0] as any)
                 }));
+                // Sort to ensure deterministic host migration
+                active.sort((a, b) => a.id.localeCompare(b.id));
                 setParticipants(active);
+                
+                // Host Migration Check
+                if (active.length > 0 && currentHostId) {
+                    const hostStillHere = active.some(p => p.id === currentHostId);
+                    if (!hostStillHere) {
+                        setCurrentHostId(active[0].id);
+                        if (currentUser.id === active[0].id) {
+                            Alert.alert("Host Migrated 👑", "You are the new Host!");
+                        }
+                    }
+                }
             })
             .on('broadcast', { event: 'kick' }, (payload) => {
                 if (payload.payload.targetUserId === currentUser.id) {
                     Alert.alert("Removed", "The host has removed you from the theater.");
                     router.back();
                 }
+            })
+            .on('broadcast', { event: 'reaction' }, (payload) => {
+                const { emoji } = payload.payload;
+                const id = Math.random().toString();
+                const left = Math.random() * 80 + 10; // 10% to 90%
+                setReactions(prev => [...prev, { id, emoji, left }]);
+                setTimeout(() => {
+                    setReactions(prev => prev.filter(r => r.id !== id));
+                }, 3000);
+            })
+            .on('broadcast', { event: 'heartbeat' }, (payload) => {
+                // Late joiner or drift fix
+                if (payload.payload.userId === currentUser.id) return;
+                const { time, isPlaying } = payload.payload;
+                
+                isSyncingRef.current = true;
+                if (isPlaying !== playing) setPlaying(isPlaying);
+                
+                playerRef.current?.getCurrentTime().then((myTime: number) => {
+                    if (Math.abs(myTime - time) > 2.0) {
+                        playerRef.current?.seekTo(time, true);
+                    }
+                    setTimeout(() => { isSyncingRef.current = false; }, 1000);
+                });
             })
             .on('broadcast', { event: 'player_state' }, (payload) => {
                 // Ignore our own events
@@ -163,7 +222,39 @@ export default function WatchPartyScreen() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [roomId, currentUser]);
+    }, [roomId, currentUser, currentHostId]);
+
+    // Heartbeat Sync
+    useEffect(() => {
+        if (!isHost || !playing || !channelRef.current) return;
+        const interval = setInterval(() => {
+            playerRef.current?.getCurrentTime().then((time: number) => {
+                channelRef.current?.send({
+                    type: 'broadcast',
+                    event: 'heartbeat',
+                    payload: { userId: currentUser?.id, time, isPlaying: true }
+                });
+            });
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [isHost, playing, currentUser]);
+
+    const sendReaction = (emoji: string) => {
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'reaction',
+                payload: { emoji }
+            });
+            // Show locally instantly
+            const id = Math.random().toString();
+            const left = Math.random() * 80 + 10;
+            setReactions(prev => [...prev, { id, emoji, left }]);
+            setTimeout(() => {
+                setReactions(prev => prev.filter(r => r.id !== id));
+            }, 3000);
+        }
+    };
 
     const broadcastState = useCallback((isPlaying: boolean, time: number) => {
         if (isSyncingRef.current) return; // Prevent echo loops
@@ -248,8 +339,16 @@ export default function WatchPartyScreen() {
     };
 
     const sendInvite = async (friendId: string, friendName: string) => {
-        if (!currentUser || inviting) return;
+        if (!currentUser || inviting || inviteCooldown) return;
+        
+        if (participants.length >= 15) {
+            Alert.alert("Theater Full", "Maximum 15 participants allowed in a watch party.");
+            return;
+        }
+
         setInviting(true);
+        setInviteCooldown(true);
+        setTimeout(() => setInviteCooldown(false), 5000);
 
         if (!isHost) {
             // Ask for permission
@@ -301,6 +400,10 @@ export default function WatchPartyScreen() {
 
     return (
         <View style={styles.container}>
+            {reactions.map(r => (
+                <AnimatedReaction key={r.id} emoji={r.emoji} left={r.left} />
+            ))}
+            
             {!isFullScreen && (
                 <View style={styles.header}>
                     <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
@@ -383,7 +486,21 @@ export default function WatchPartyScreen() {
                     />
                 </View>
 
-                <TouchableOpacity style={styles.inviteBtn} onPress={openInviteModal} activeOpacity={0.8}>
+                {/* Reaction Bar */}
+                <View style={styles.reactionBar}>
+                    {['👍', '😂', '😮', '😢', '❤️'].map(emoji => (
+                        <TouchableOpacity key={emoji} onPress={() => sendReaction(emoji)} style={styles.reactionBtn}>
+                            <Text style={styles.reactionEmoji}>{emoji}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <TouchableOpacity 
+                    style={[styles.inviteBtn, inviteCooldown && { opacity: 0.5 }]} 
+                    onPress={openInviteModal} 
+                    activeOpacity={0.8}
+                    disabled={inviteCooldown}
+                >
                     <Ionicons name="person-add" size={22} color="white" />
                     <Text style={styles.callBtnText}>Invite Friend</Text>
                 </TouchableOpacity>
@@ -429,6 +546,14 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#0F172A', // Deep dark theme
+        position: 'relative',
+    },
+    floatingReaction: {
+        position: 'absolute',
+        bottom: 100,
+        fontSize: 32,
+        zIndex: 999,
+        elevation: 999,
     },
     header: {
         flexDirection: 'row',
@@ -632,5 +757,23 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 16,
         letterSpacing: 0.5,
+    },
+    reactionBar: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 16,
+        marginBottom: 24,
+        backgroundColor: '#1E293B',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 30,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    reactionBtn: {
+        padding: 4,
+    },
+    reactionEmoji: {
+        fontSize: 28,
     }
 });

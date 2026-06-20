@@ -63,13 +63,15 @@ export const processRawStatuses = async (params: ProcessStatusParams) => {
         } catch (e) {}
     }
 
-    if (!profile) {
+    if (!profile || !profile.public_key) {
         const { data } = await supabase
             .from('profiles')
             .select('username, avatar_url, public_key')
             .eq('id', userId)
             .single();
-        profile = data;
+        if (data) {
+            profile = { ...profile, ...data };
+        }
     }
 
     let allMentionedIds: string[] = [];

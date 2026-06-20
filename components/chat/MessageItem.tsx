@@ -123,9 +123,14 @@ const MessageItemInner = memo(({ message, isCurrentUser, onLongPress, onReply, o
         return message.decryptionKeyBase64 ? new Uint8Array(Buffer.from(message.decryptionKeyBase64, 'base64')) : null;
     }, [message.decryptionKeyBase64]);
 
-    const { localImageUrl, localVoiceUrl, localDocumentUrl, imageLoading } = useMessageMediaCache(message, parsedData.imageUrl, parsedData.voiceUri, parsedData.documentUrl, customKey);
-    const finalVideoUrl = parsedData.videoUrl || message.file_url || null;
+    const { localImageUrl, localVoiceUrl, localDocumentUrl, localVideoUrl, imageLoading } = useMessageMediaCache(message, parsedData.imageUrl, parsedData.voiceUri, parsedData.documentUrl, customKey, parsedData.videoUrl);
+    const finalVideoUrl = localVideoUrl || parsedData.videoUrl || message.file_url || null;
     const { decryptedStatusContent, decryptedStatusMedia } = useStatusContext(message.status_context);
+
+    // If media is still decrypting (and not actively uploading by current user), hide the entire message from the UI
+    if (imageLoading && uploadProgress === undefined) {
+        return null;
+    }
 
     const formatTime = React.useCallback((ts: string) => {
         if (!ts) return '';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -14,6 +14,12 @@ interface TicTacToeState {
     status?: string;
     lastMoveAt?: number;
     timeoutWinner?: string;
+    historyX?: number[];
+    historyO?: number[];
+    config?: {
+        mode: 'classic' | 'infinite';
+        timer: 0 | 5 | 10;
+    };
 }
 
 interface TicTacToeWidgetProps {
@@ -24,7 +30,7 @@ interface TicTacToeWidgetProps {
 
 export default function TicTacToeWidget({ message, currentUserId, onStartCall }: TicTacToeWidgetProps) {
     const [updating, setUpdating] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(120);
+    const [timeLeft, setTimeLeft] = useState(0);
     const [optimisticState, setOptimisticState] = useState<TicTacToeState | null>(null);
 
     let serverState: TicTacToeState;
@@ -42,17 +48,20 @@ export default function TicTacToeWidget({ message, currentUserId, onStartCall }:
     }, [serverState.lastMoveAt, optimisticState]);
 
     const gameState = optimisticState || serverState;
-    const { board, turn, playerX, playerO, winner } = gameState;
+    const { board, turn, playerX, playerO, winner, config, historyX = [], historyO = [] } = gameState;
     const isMyTurn = (turn === 'X' && playerX === currentUserId) || (turn === 'O' && playerO === currentUserId);
     const iAmPlayerX = playerX === currentUserId;
     const mySymbol = iAmPlayerX ? 'X' : 'O';
+    
+    const isInfinite = config?.mode === 'infinite';
+    const timerLimit = config?.timer || 0;
 
     useEffect(() => {
-        if (winner || gameState.status !== 'active' || !gameState.lastMoveAt) return;
+        if (winner || gameState.status !== 'active' || !gameState.lastMoveAt || timerLimit === 0) return;
 
         const interval = setInterval(() => {
             const elapsed = Math.floor((Date.now() - gameState.lastMoveAt!) / 1000);
-            const remaining = Math.max(120 - elapsed, 0);
+            const remaining = Math.max(timerLimit - elapsed, 0);
             setTimeLeft(remaining);
 
             if (remaining === 0 && !isMyTurn && !winner && !updating) {
@@ -61,7 +70,7 @@ export default function TicTacToeWidget({ message, currentUserId, onStartCall }:
             }
         }, 1000);
         return () => clearInterval(interval);
-    }, [gameState.lastMoveAt, winner, isMyTurn, gameState.status, updating]);
+    }, [gameState.lastMoveAt, winner, isMyTurn, gameState.status, updating, timerLimit]);
 
     const claimTimeoutWin = async () => {
         setUpdating(true);
@@ -100,6 +109,25 @@ export default function TicTacToeWidget({ message, currentUserId, onStartCall }:
         const newBoard = [...board];
         newBoard[index] = turn;
         
+        let newHistoryX = [...historyX];
+        let newHistoryO = [...historyO];
+
+        if (isInfinite) {
+            if (turn === 'X') {
+                newHistoryX.push(index);
+                if (newHistoryX.length > 3) {
+                    const oldest = newHistoryX.shift();
+                    if (oldest !== undefined) newBoard[oldest] = null;
+                }
+            } else {
+                newHistoryO.push(index);
+                if (newHistoryO.length > 3) {
+                    const oldest = newHistoryO.shift();
+                    if (oldest !== undefined) newBoard[oldest] = null;
+                }
+            }
+        }
+        
         const newWinner = checkWinner(newBoard);
         const newTurn = turn === 'X' ? 'O' : 'X';
 
@@ -108,7 +136,9 @@ export default function TicTacToeWidget({ message, currentUserId, onStartCall }:
             board: newBoard,
             turn: newTurn,
             winner: newWinner,
-            lastMoveAt: Date.now()
+            lastMoveAt: Date.now(),
+            historyX: newHistoryX,
+            historyO: newHistoryO
         };
 
         setOptimisticState(newState);
@@ -124,6 +154,38 @@ export default function TicTacToeWidget({ message, currentUserId, onStartCall }:
         }
         setUpdating(false);
     };
+
+    const boardCells = useMemo(() => {
+        return board.map((cell, index) => {
+            let isFading = false;
+            if (isInfinite) {
+                if (cell === 'X' && historyX.length === 3 && historyX[0] === index) isFading = true;
+                if (cell === 'O' && historyO.length === 3 && historyO[0] === index) isFading = true;
+            }
+
+            return (
+                <TouchableOpacity
+                    key={index}
+                    style={[
+                        styles.cell,
+                        index % 3 !== 2 && styles.borderRight,
+                        index < 6 && styles.borderBottom
+                    ]}
+                    onPress={() => handleCellPress(index)}
+                    disabled={!!cell || !!winner || !isMyTurn || updating}
+                    activeOpacity={0.6}
+                >
+                    <Text style={[
+                        styles.cellText,
+                        { color: cell === 'X' ? '#F68537' : '#3B82F6' },
+                        isFading && { opacity: 0.3 }
+                    ]}>
+                        {cell}
+                    </Text>
+                </TouchableOpacity>
+            );
+        });
+    }, [board, isInfinite, historyX, historyO, winner, isMyTurn, updating]);
 
     return (
         <GameInviteOverlay gameName="Tic-Tac-Toe" gameState={gameState} currentUserId={currentUserId} messageId={message.id}>
@@ -146,7 +208,7 @@ export default function TicTacToeWidget({ message, currentUserId, onStartCall }:
                                 <Text style={[styles.turnText, { color: isMyTurn ? '#10B981' : '#F59E0B' }]}>
                                     {isMyTurn ? "Your Turn" : "Opponent's Turn"}
                                 </Text>
-                                {gameState.status === 'active' && gameState.lastMoveAt && (
+                                {gameState.status === 'active' && gameState.lastMoveAt && timerLimit > 0 && (
                                     <Text style={styles.timerText}>
                                         {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? '0' : ''}{timeLeft % 60}
                                     </Text>
@@ -165,26 +227,7 @@ export default function TicTacToeWidget({ message, currentUserId, onStartCall }:
                 </View>
 
                 <View style={styles.board}>
-                    {board.map((cell, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={[
-                                styles.cell,
-                                index % 3 !== 2 && styles.borderRight,
-                                index < 6 && styles.borderBottom
-                            ]}
-                            onPress={() => handleCellPress(index)}
-                            disabled={!!cell || !!winner || !isMyTurn || updating}
-                            activeOpacity={0.6}
-                        >
-                            <Text style={[
-                                styles.cellText,
-                                { color: cell === 'X' ? '#F68537' : '#3B82F6' }
-                            ]}>
-                                {cell}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                    {boardCells}
                 </View>
             </View>
         </GameInviteOverlay>

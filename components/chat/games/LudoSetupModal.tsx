@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, TouchableWithoutFeedback, ScrollView, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LUDO_COLORS } from '@/utils/ludoConstants';
 
 export interface LudoSetupConfig {
     hostColors: string[];
     opponentColors: string[];
+    rules: {
+        tokensCount: number;
+        blockRule: boolean;
+        tripleSixPenalty: boolean;
+        captureBonus: boolean;
+    };
 }
 
 interface Props {
@@ -17,6 +23,10 @@ interface Props {
 export default function LudoSetupModal({ visible, onClose, onStartGame }: Props) {
     const [mode, setMode] = useState<'1box' | '2box'>('1box');
     const [selectedHostColor, setSelectedHostColor] = useState<string>('R');
+    const [tokensCount, setTokensCount] = useState<number>(4);
+    const [blockRule, setBlockRule] = useState<boolean>(true);
+    const [tripleSixPenalty, setTripleSixPenalty] = useState<boolean>(true);
+    const [captureBonus, setCaptureBonus] = useState<boolean>(true);
 
     const handleStart = () => {
         let hostColors: string[] = [];
@@ -38,7 +48,11 @@ export default function LudoSetupModal({ visible, onClose, onStartGame }: Props)
             }
         }
 
-        onStartGame({ hostColors, opponentColors });
+        onStartGame({ 
+            hostColors, 
+            opponentColors,
+            rules: { tokensCount, blockRule, tripleSixPenalty, captureBonus }
+        });
         onClose();
     };
 
@@ -100,6 +114,50 @@ export default function LudoSetupModal({ visible, onClose, onStartGame }: Props)
                                     : "You will play with 2 opposite colors. Your opponent gets the other 2."}
                             </Text>
 
+                            <View style={styles.divider} />
+                            <Text style={styles.label}>Pro Settings ⚙️</Text>
+                            
+                            <ScrollView style={styles.settingsScroll} showsVerticalScrollIndicator={false}>
+                                <View style={styles.settingRow}>
+                                    <View>
+                                        <Text style={styles.settingTitle}>Quick Mode (Tokens)</Text>
+                                        <Text style={styles.settingDesc}>Play with 2 or 4 tokens per color</Text>
+                                    </View>
+                                    <View style={styles.tokenToggle}>
+                                        <TouchableOpacity onPress={() => setTokensCount(2)} style={[styles.tokenBtn, tokensCount === 2 && styles.tokenBtnActive]}>
+                                            <Text style={[styles.tokenBtnText, tokensCount === 2 && {color: 'white'}]}>2</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => setTokensCount(4)} style={[styles.tokenBtn, tokensCount === 4 && styles.tokenBtnActive]}>
+                                            <Text style={[styles.tokenBtnText, tokensCount === 4 && {color: 'white'}]}>4</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+
+                                <View style={styles.settingRow}>
+                                    <View style={{flex: 1}}>
+                                        <Text style={styles.settingTitle}>Strong Block Rule</Text>
+                                        <Text style={styles.settingDesc}>2 tokens on same cell cannot be cut</Text>
+                                    </View>
+                                    <Switch value={blockRule} onValueChange={setBlockRule} trackColor={{ true: '#10B981' }} />
+                                </View>
+
+                                <View style={styles.settingRow}>
+                                    <View style={{flex: 1}}>
+                                        <Text style={styles.settingTitle}>Triple Six Penalty</Text>
+                                        <Text style={styles.settingDesc}>Turn cancelled on 3 consecutive sixes</Text>
+                                    </View>
+                                    <Switch value={tripleSixPenalty} onValueChange={setTripleSixPenalty} trackColor={{ true: '#10B981' }} />
+                                </View>
+
+                                <View style={styles.settingRow}>
+                                    <View style={{flex: 1}}>
+                                        <Text style={styles.settingTitle}>Capture Bonus</Text>
+                                        <Text style={styles.settingDesc}>Extra turn on cutting opponent</Text>
+                                    </View>
+                                    <Switch value={captureBonus} onValueChange={setCaptureBonus} trackColor={{ true: '#10B981' }} />
+                                </View>
+                            </ScrollView>
+
                             <TouchableOpacity style={styles.startBtn} onPress={handleStart}>
                                 <Text style={styles.startBtnText}>Send Challenge</Text>
                                 <Ionicons name="send" size={18} color="white" />
@@ -160,5 +218,14 @@ const styles = StyleSheet.create({
     },
     startBtnText: {
         color: 'white', fontSize: 18, fontWeight: 'bold'
-    }
+    },
+    divider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 16 },
+    settingsScroll: { maxHeight: 200, marginBottom: 16 },
+    settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    settingTitle: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
+    settingDesc: { fontSize: 12, color: '#64748B', marginTop: 2 },
+    tokenToggle: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 8, padding: 2 },
+    tokenBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+    tokenBtnActive: { backgroundColor: '#3B82F6' },
+    tokenBtnText: { fontWeight: 'bold', color: '#64748B' }
 });

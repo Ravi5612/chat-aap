@@ -39,6 +39,8 @@ interface MessageContentProps {
     videoUrl?: string | null;
 }
 
+import * as VideoThumbnails from 'expo-video-thumbnails';
+
 const MessageContent = memo(({
     message, isCurrentUser, formatTime, handleLongPress, onImagePress,
     imageUrl, localImageUrl, imageLoading, uploadProgress, uploadTimeLeft,
@@ -50,10 +52,20 @@ const MessageContent = memo(({
 }: MessageContentProps) => {
     const router = useRouter();
     const [videoPlaying, setVideoPlaying] = useState(false);
+    const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
     const videoRef = useRef<Video>(null);
     const isCallLog = message.message_type === 'call' || !!message.call_details;
     const callDetails = message.call_details || {};
     
+    // Generate thumbnail when local videoUrl is ready
+    useEffect(() => {
+        if (isVideoMessage && videoUrl && videoUrl.startsWith('file://')) {
+            VideoThumbnails.getThumbnailAsync(videoUrl, { time: 1000 })
+                .then(({ uri }) => setVideoThumbnail(uri))
+                .catch(e => console.log('Thumbnail generation failed', e));
+        }
+    }, [isVideoMessage, videoUrl]);
+
     const ledgerData = useMemo(() => {
         if (message.message_type === 'ledger' && message?.message?.startsWith('SYSTEM_LEDGER:')) {
             try { return JSON.parse(message.message.replace('SYSTEM_LEDGER:', '')); } catch (e) { return null; }
@@ -139,7 +151,7 @@ const MessageContent = memo(({
             )}
 
             {/* Image Content */}
-            {imageUrl && (
+            {imageUrl && (!imageLoading || uploadProgress !== undefined) && (
                 <TouchableOpacity onPress={handleImageContentPress} onLongPress={handleLongPress} delayLongPress={200}>
                     <View style={styles.mediaContainer}>
                         <Image 
@@ -147,11 +159,6 @@ const MessageContent = memo(({
                             style={styles.mediaImage} 
                             contentFit="cover" 
                         />
-                        {imageLoading && uploadProgress === undefined && (
-                            <View style={styles.mediaLoadingOverlay}>
-                                <ActivityIndicator size="small" color="#F68537" />
-                            </View>
-                        )}
                         {uploadProgress !== undefined && uploadProgress < 100 && (
                             <View style={styles.uploadOverlay}>
                                 <View style={styles.uploadProgressOverlay}>
@@ -166,19 +173,24 @@ const MessageContent = memo(({
             )}
 
             {/* Voice Message Content */}
-            {isVoiceMessage && (localVoiceUrl || voiceUri) && (
+            {isVoiceMessage && (localVoiceUrl || voiceUri) && (!imageLoading || uploadProgress !== undefined) && (
                 <VoiceMessagePlayer uri={(localVoiceUrl || voiceUri) as string} isCurrentUser={isCurrentUser} />
             )}
 
             {/* Video Message Content */}
-            {isVideoMessage && videoUrl && (
+            {isVideoMessage && videoUrl && (!imageLoading || uploadProgress !== undefined) && (
                 <TouchableOpacity onPress={handleVideoContentPress} onLongPress={handleLongPress} delayLongPress={200}>
                     <View style={styles.videoContainer}>
                         {/* 
                           Avoid rendering <Video> here to prevent MediaCodec crashes during scrolling on Android.
-                          We just show a black thumbnail box. The actual video plays when the user taps it. 
+                          We just show a generated thumbnail or a black placeholder. The actual video plays when the user taps it. 
                         */}
-                        <View style={[styles.videoPlayer, { backgroundColor: '#111827' }]} />
+                        {videoThumbnail ? (
+                            <Image source={{ uri: videoThumbnail }} style={styles.videoPlayer} contentFit="cover" />
+                        ) : (
+                            <View style={[styles.videoPlayer, { backgroundColor: '#111827' }]} />
+                        )}
+                        
                         {/* Play Icon Overlay */}
                         {uploadProgress === undefined && (
                             <View style={styles.playIconOverlay}>
@@ -254,7 +266,7 @@ const MessageContent = memo(({
             )}
 
             {/* Document Card */}
-            {isDocumentMessage && (
+            {isDocumentMessage && (!imageLoading || uploadProgress !== undefined) && (
                 <View style={styles.docContainer}>
                     <View style={[styles.cardHeader, { borderBottomColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : '#E5E7EB' }]}>
                         <View style={[styles.docIcon, { backgroundColor: isCurrentUser ? 'rgba(255,255,255,0.2)' : 'rgba(124, 58, 237, 0.1)' }]}>
@@ -293,8 +305,14 @@ const MessageContent = memo(({
                 )}
 
                 <View style={styles.timeContainer}>
-                    <Text style={[styles.timeText, { color: isCurrentUser ? 'rgba(255, 255, 255, 0.7)' : '#9CA3AF' }]}>{formatTime(message.created_at)}</Text>
-                    {isCurrentUser && <MessageStatus status={message.status || 'sent'} />}
+                    <Text style={[styles.timeText, { color: isCurrentUser ? 'rgba(255, 255, 255, 0.7)' : '#9CA3AF' }]}>
+                        {formatTime(message.scheduled_at || message.created_at)}
+                    </Text>
+                    {message.scheduled_at ? (
+                        <Ionicons name="time" size={13} color={isCurrentUser ? 'rgba(255, 255, 255, 0.9)' : '#F68537'} style={{ marginLeft: 4 }} />
+                    ) : (
+                        isCurrentUser && <MessageStatus status={message.status || 'sent'} />
+                    )}
                 </View>
             </View>
         </>

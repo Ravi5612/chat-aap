@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLocalConversations, getLocalBlocks } from '@/lib/localDb';
 import { fetchAndFormatFriendsData } from '@/services/friendsService';
 import { useAuthStore } from '../useAuthStore';
@@ -39,8 +40,60 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
         
         isFetchingUserId = userId;
         
-        const { combinedItems: existingItems, onlineUsers } = get();
+        const { combinedItems: existingItems, onlineUsers, statusInfo: existingStatusInfo, myStatuses: existingMyStatuses } = get();
         const { db } = useDbStore.getState();
+
+        // INSTANT CACHE HYDRATION (Offline-First)
+        if (Object.keys(existingStatusInfo).length === 0) {
+            try {
+                const [cachedStatusStr, cachedMyStatusesStr] = await Promise.all([
+                    AsyncStorage.getItem(`statusInfo_cache_${userId}`),
+                    AsyncStorage.getItem(`myStatuses_cache_${userId}`)
+                ]);
+                
+                let restoredStatusInfo = {};
+                let restoredMyStatuses = { active: [] };
+                let hydrated = false;
+
+                if (cachedStatusStr) {
+                    restoredStatusInfo = JSON.parse(cachedStatusStr);
+                    // Convert status keys back to Uint8Array since JSON.stringify turns them into objects
+                    Object.keys(restoredStatusInfo).forEach(uid => {
+                        if (restoredStatusInfo[uid]?.statusKey) {
+                            try {
+                                restoredStatusInfo[uid].statusKey = new Uint8Array(Object.values(restoredStatusInfo[uid].statusKey));
+                            } catch (e) {
+                                console.error('Failed to restore Uint8Array for statusKey:', uid);
+                            }
+                        }
+                    });
+                    hydrated = true;
+                }
+                if (cachedMyStatusesStr) {
+                    restoredMyStatuses = JSON.parse(cachedMyStatusesStr);
+                    // Convert status keys back to Uint8Array for myStatuses
+                    Object.keys(restoredMyStatuses).forEach(category => {
+                        if (Array.isArray(restoredMyStatuses[category])) {
+                            restoredMyStatuses[category].forEach((status: any) => {
+                                if (status.statusKey) {
+                                    try {
+                                        status.statusKey = new Uint8Array(Object.values(status.statusKey));
+                                    } catch (e) { }
+                                }
+                            });
+                        }
+                    });
+                    hydrated = true;
+                }
+
+                if (hydrated) {
+                    get().addDebugLog('[LoadFriends] Instant Cache Hydrated');
+                    set({ statusInfo: restoredStatusInfo, myStatuses: restoredMyStatuses });
+                }
+            } catch (e) {
+                console.error('Failed to load status cache:', e);
+            }
+        }
 
         // SILENT LOCAL LOAD FIRST
         let dbInstance = db;
@@ -162,6 +215,17 @@ export const createFriendsLoadActions = (set: StoreSet, get: StoreGet) => ({
                 ...data.myStatuses,
                 active: [...uploadingStatuses, ...(data.myStatuses?.active || [])]
             };
+
+            // UPDATE INSTANT CACHE
+            try {
+                // Remove Uint8Array keys from being serialized if they cause issues, but JSON.stringify handles them as objects.
+                await Promise.all([
+                    AsyncStorage.setItem(`statusInfo_cache_${userId}`, JSON.stringify(data.statusInfo)),
+                    AsyncStorage.setItem(`myStatuses_cache_${userId}`, JSON.stringify(finalMyStatuses))
+                ]);
+            } catch (e) {
+                console.error('Failed to save status cache:', e);
+            }
 
             set({
                 friends: data.friends,

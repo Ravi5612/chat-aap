@@ -107,7 +107,15 @@ const ChatInput = memo(({
             });
         }
     }, [onSendMessage]);
-    const onScheduleSubmit   = useCallback((date: Date) => handleSubmit(date), [handleSubmit]);
+    const onScheduleSubmit   = useCallback((date: Date, scheduledText: string) => {
+        if (scheduledText) {
+            onSendMessage(scheduledText, date);
+            setMessage('');
+            if (onDraftChange) onDraftChange('');
+        } else {
+            handleSubmit(date);
+        }
+    }, [handleSubmit, onSendMessage, setMessage, onDraftChange]);
     const handleSendPress    = useCallback(() => handleSubmit(), [handleSubmit]);
     const handleLongPress    = useCallback(() => { if (!message.trim() && !selectedMedia) startVoiceTyping(); }, [message, selectedMedia, startVoiceTyping]);
     const handlePressOut     = useCallback(() => { if (isVoiceTyping) stopVoiceTyping(); }, [isVoiceTyping, stopVoiceTyping]);
@@ -227,6 +235,7 @@ const ChatInput = memo(({
                     visible={scheduleModalVisible}
                     onClose={closeSchedule}
                     onSchedule={onScheduleSubmit}
+                    initialMessage={message}
                 />
             </View>
         </View>

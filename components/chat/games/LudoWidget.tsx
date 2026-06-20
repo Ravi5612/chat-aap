@@ -127,12 +127,30 @@ export default function LudoWidget({ message, currentUserId, onStartCall }: { me
         setTimeout(async () => {
             const roll = Math.floor(Math.random() * 6) + 1;
             const tempState = { ...state, diceValue: roll };
-            const vMoves = getValidMoves(tempState, state.turn);
-
+            
             const colorNames: any = { R: 'Red', G: 'Green', Y: 'Yellow', B: 'Blue' };
             let newMsg = `${colorNames[state.turn]} rolled a ${roll}! 🎲`;
+
+            if (state.rules?.tripleSixPenalty && roll === 6) {
+                const currentSixes = (state.consecutiveSixes || 0) + 1;
+                if (currentSixes === 3) {
+                    newMsg = `3 Sixes Penalty! 🚫 Turn Cancelled.`;
+                    tempState.diceValue = null;
+                    tempState.consecutiveSixes = 0;
+                    tempState.turn = getNextTurn(tempState, false);
+                    await saveLudoState(message.id, { ...tempState, message: newMsg }, setUpdating);
+                    setIsRolling(false);
+                    return;
+                } else {
+                    tempState.consecutiveSixes = currentSixes;
+                }
+            } else if (roll !== 6) {
+                tempState.consecutiveSixes = 0;
+            }
+
+            const vMoves = getValidMoves(tempState, tempState.turn);
             if (vMoves.length === 0) {
-                newMsg = `${colorNames[state.turn]} rolled a ${roll}. No valid moves! 🚫`;
+                newMsg = `${colorNames[tempState.turn]} rolled a ${roll}. No valid moves! 🚫`;
             }
 
             await saveLudoState(message.id, { ...tempState, message: newMsg }, setUpdating);
@@ -170,6 +188,10 @@ export default function LudoWidget({ message, currentUserId, onStartCall }: { me
             message: killMessage || state.message
         };
 
+        if (nextTurn !== state.turn) {
+            newState.consecutiveSixes = 0;
+        }
+
         await saveLudoState(message.id, newState, setUpdating);
     };
 
@@ -180,7 +202,7 @@ export default function LudoWidget({ message, currentUserId, onStartCall }: { me
         return LUDO_MAIN_PATH[pos];
     };
 
-    const renderBoardGrid = () => {
+    const boardGrid = React.useMemo(() => {
         const squares = [];
         for (let r = 0; r < 15; r++) {
             for (let c = 0; c < 15; c++) {
@@ -222,7 +244,7 @@ export default function LudoWidget({ message, currentUserId, onStartCall }: { me
             }
         }
         return squares;
-    };
+    }, []);
 
     const diceSpin = diceRotation.interpolate({
         inputRange: [0, 1],
@@ -240,23 +262,61 @@ export default function LudoWidget({ message, currentUserId, onStartCall }: { me
                 <View style={styles.boardWrapper}>
                     <View style={styles.board}>
                         <View style={styles.gridContainer}>
-                            {renderBoardGrid()}
+                            {boardGrid}
                         </View>
 
-                    {['R', 'G', 'Y', 'B'].map((color) => 
-                        state.tokens[color]?.map((pos, i) => {
-                            if (pos === 57) return null; 
-                            const [col, row] = getPosCoords(color, pos, i);
-                            
-                            // A token is selectable if it's my turn, it belongs to the currently playing color, and I own that color.
+                    {(() => {
+                        const tokenPositions: { color: string, i: number, col: number, row: number, pos: number }[] = [];
+                        const tokensCount = state.rules?.tokensCount || 4;
+                        
+                        ['R', 'G', 'Y', 'B'].forEach((color) => {
+                            state.tokens[color]?.forEach((pos, i) => {
+                                if (i >= tokensCount) return;
+                                if (pos === 57) return;
+                                const [col, row] = getPosCoords(color, pos, i);
+                                tokenPositions.push({ color, i, col, row, pos });
+                            });
+                        });
+
+                        const cellGroups: Record<string, typeof tokenPositions> = {};
+                        tokenPositions.forEach(t => {
+                            const key = `${t.col}-${t.row}`;
+                            if (!cellGroups[key]) cellGroups[key] = [];
+                            cellGroups[key].push(t);
+                        });
+
+                        return tokenPositions.map((t) => {
+                            const { color, i, col, row, pos } = t;
                             const isSelectable = mustMove && color === state.turn && myColors.includes(color) && validMoves.includes(i);
                             
+                            const key = `${col}-${row}`;
+                            const group = cellGroups[key];
+                            const idx = group.findIndex(g => g.color === color && g.i === i);
+                            const total = group.length;
+                            
+                            let offsetX = 0;
+                            let offsetY = 0;
+                            if (total > 1 && pos !== -1) {
+                                const shift = CELL_SIZE * 0.15;
+                                if (total === 2) {
+                                    offsetX = idx === 0 ? -shift : shift;
+                                    offsetY = idx === 0 ? -shift : shift;
+                                } else if (total === 3) {
+                                    if (idx === 0) { offsetX = -shift; offsetY = -shift; }
+                                    else if (idx === 1) { offsetX = shift; offsetY = -shift; }
+                                    else { offsetX = 0; offsetY = shift; }
+                                } else {
+                                    offsetX = idx % 2 === 0 ? -shift : shift;
+                                    offsetY = idx < 2 ? -shift : shift;
+                                }
+                            }
+
                             return (
                                 <TouchableOpacity
                                     key={`${color}-${i}`}
                                     style={[
                                         styles.token,
-                                        { left: col * CELL_SIZE, top: row * CELL_SIZE },
+                                        { left: col * CELL_SIZE + offsetX, top: row * CELL_SIZE + offsetY },
                                         { backgroundColor: LUDO_COLORS[color as keyof typeof LUDO_COLORS] },
                                         isSelectable && styles.selectableToken
                                     ]}
@@ -269,8 +329,8 @@ export default function LudoWidget({ message, currentUserId, onStartCall }: { me
                                     </View>
                                 </TouchableOpacity>
                             );
-                        })
-                    )}
+                        });
+                    })()}
                     </View>
                 </View>
 

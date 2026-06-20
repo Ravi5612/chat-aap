@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, FlatList, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 interface ScheduleMessageModalProps {
     visible: boolean;
     onClose: () => void;
-    onSchedule: (date: Date) => void;
+    onSchedule: (date: Date, text: string) => void;
+    initialMessage?: string;
 }
 
 const HOURS_DATA = Array.from({length: 24}, (_, i) => i);
@@ -18,10 +19,15 @@ const formatHour = (h: number) => {
     return `${formatted} ${ampm}`;
 };
 
-export default React.memo(function ScheduleMessageModal({ visible, onClose, onSchedule }: ScheduleMessageModalProps) {
+export default React.memo(function ScheduleMessageModal({ visible, onClose, onSchedule, initialMessage = '' }: ScheduleMessageModalProps) {
     const [selectedDay, setSelectedDay] = React.useState(0); // 0 = Today, 1 = Tomorrow
     const [selectedHour, setSelectedHour] = React.useState(new Date().getHours() + 1);
     const [selectedMinute, setSelectedMinute] = React.useState(0);
+    const [messageText, setMessageText] = React.useState(initialMessage);
+
+    React.useEffect(() => {
+        if (visible) setMessageText(initialMessage);
+    }, [visible, initialMessage]);
 
     const handleSchedule = React.useCallback(() => {
         const d = new Date();
@@ -33,9 +39,15 @@ export default React.memo(function ScheduleMessageModal({ visible, onClose, onSc
             require('react-native').Alert.alert('Invalid Time', 'Please select a future time.');
             return;
         }
-        onSchedule(d);
+        
+        if (!messageText.trim()) {
+            require('react-native').Alert.alert('Empty Message', 'Please enter a message to schedule.');
+            return;
+        }
+
+        onSchedule(d, messageText.trim());
         onClose();
-    }, [selectedDay, selectedHour, selectedMinute, onSchedule, onClose]);
+    }, [selectedDay, selectedHour, selectedMinute, messageText, onSchedule, onClose]);
 
     const renderHourItem = React.useCallback(({item}: any) => (
         <TouchableOpacity
@@ -69,6 +81,16 @@ export default React.memo(function ScheduleMessageModal({ visible, onClose, onSc
                             <Ionicons name="close" size={24} color="#6B7280" />
                         </TouchableOpacity>
                     </View>
+
+                    <Text style={styles.subtitle}>Message</Text>
+                    <TextInput
+                        style={styles.textInput}
+                        placeholder="Type your message here..."
+                        placeholderTextColor="#9ca3af"
+                        value={messageText}
+                        onChangeText={setMessageText}
+                        multiline
+                    />
 
                     <Text style={styles.subtitle}>Select Day</Text>
                     <View style={styles.row}>
@@ -148,5 +170,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#F68537', paddingVertical: 16, borderRadius: 16,
         alignItems: 'center', marginTop: 24
     },
-    saveBtnText: { color: 'white', fontSize: 16, fontWeight: 'bold' }
+    saveBtnText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+    textInput: {
+        borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 12,
+        fontSize: 16, color: '#1F2937', backgroundColor: '#F9FAFB', minHeight: 80,
+        textAlignVertical: 'top', marginBottom: 8
+    }
 });

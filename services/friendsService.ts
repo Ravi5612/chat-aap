@@ -2,6 +2,7 @@ import { fetchBaseData, fetchParallelData } from './friends/fetchers';
 import { processStatuses, processMyStatuses } from './friends/statusProcessor';
 import { calculateUnreadCounts, calculateLastActivity, fetchMissingProfiles, formatFriendsList, formatGroupsList } from './friends/formatters';
 import { saveLocalConversation } from '@/lib/localDb';
+import { Image } from 'expo-image';
 
 export async function fetchAndFormatFriendsData(
     userId: string,
@@ -56,6 +57,28 @@ export async function fetchAndFormatFriendsData(
 
     // My Statuses
     const groupedMyStatus = await processMyStatuses(myAllStatuses || [], myProfile, userId);
+
+    // PREFETCH STATUS MEDIA (Zero Buffering)
+    try {
+        const urlsToPrefetch: string[] = [];
+        Object.values(statusInfoMap).forEach((info: any) => {
+            if (info.thumbnail && typeof info.thumbnail === 'string' && !info.thumbnail.startsWith('{')) {
+                urlsToPrefetch.push(info.thumbnail);
+            }
+        });
+        Object.values(groupedMyStatus).forEach((arr: any) => {
+            if (Array.isArray(arr)) {
+                arr.forEach((s: any) => {
+                    if (s.media_url && typeof s.media_url === 'string' && !s.media_url.startsWith('{')) urlsToPrefetch.push(s.media_url);
+                });
+            }
+        });
+        if (urlsToPrefetch.length > 0) {
+            Image.prefetch(urlsToPrefetch);
+        }
+    } catch (e) {
+        console.error('Failed to prefetch status images:', e);
+    }
 
     const isConnected = currentUserId ? !!onlineUsers[currentUserId] : false;
 
