@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Alert, DeviceEventEmitter } from 'react-native';
 import { getFromCache, saveToCache } from '@/lib/database';
@@ -43,7 +43,7 @@ export const useSentRequests = () => {
         };
     }, [user?.id]);
 
-    const loadSentRequests = async () => {
+    const loadSentRequests = useCallback(async () => {
         if (!user) return;
 
         // Load from cache instantly
@@ -85,9 +85,9 @@ export const useSentRequests = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
 
-    const cancelRequest = async (requestId: string) => {
+    const cancelRequest = useCallback(async (requestId: string) => {
         try {
             const { error } = await supabase
                 .from('friend_requests')
@@ -100,9 +100,9 @@ export const useSentRequests = () => {
         } catch (error: any) {
             Alert.alert('Error', error.message);
         }
-    };
+    }, [loadSentRequests]);
 
-    const deleteRequest = async (requestId: string) => {
+    const deleteRequest = useCallback(async (requestId: string) => {
         try {
             const { error } = await supabase
                 .from('friend_requests')
@@ -114,14 +114,14 @@ export const useSentRequests = () => {
         } catch (error: any) {
             Alert.alert('Error', error.message);
         }
-    };
+    }, [loadSentRequests]);
 
-    const getCounts = () => ({
+    const getCounts = useCallback(() => ({
         pending: sentRequests.filter(r => r.status === 'pending').length,
         accepted: sentRequests.filter(r => r.status === 'accepted').length,
         rejected: sentRequests.filter(r => r.status === 'rejected').length,
         total: sentRequests.length
-    });
+    }), [sentRequests]);
 
     return {
         sentRequests,

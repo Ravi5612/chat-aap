@@ -49,11 +49,13 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                 if (cacheExists) {
                     if (isMounted) {
                         setLocalImageUrl(cached);
-                        setImageLoading(false);
+                        setMediaLoading(false);
                     }
                 } else {
                     try {
-                        const filename = (typeof parsedImageUrl === 'string' ? parsedImageUrl.split('/').pop() : null) || 'media.jpg';
+                        let filename = (typeof parsedImageUrl === 'string' ? parsedImageUrl.split('/').pop() : null) || 'media.jpg';
+                        // Remove query parameters from filename
+                        filename = filename.split('?')[0];
                         const isE2EE = !!imageMediaKey || parsedImageUrl.includes('.txt');
                         let ext = message?.media_type === 'video' ? '.mp4' : '.jpg';
                         const localFileName = isE2EE ? filename.replace('.e2ee.txt', ext).replace('.txt', ext).replace('.bin', ext) : filename;
@@ -180,7 +182,9 @@ export function useMessageMediaCache(message: any, imageUrl: string | null, voic
                     if (isMounted) setLocalVideoUrl(cached);
                 } else {
                     try {
-                        const filename = (typeof parsedVideoUrl === 'string' ? parsedVideoUrl.split('/').pop() : null) || 'video.mp4';
+                        let filename = (typeof parsedVideoUrl === 'string' ? parsedVideoUrl.split('/').pop() : null) || 'video.mp4';
+                        // Remove query parameters from filename
+                        filename = filename.split('?')[0];
                         const isE2EE = !!videoMediaKey || parsedVideoUrl.includes('.txt');
                         const localFileName = isE2EE ? filename.replace('.e2ee.txt', '.mp4').replace('.txt', '.mp4').replace('.bin', '.mp4') : filename;
                         const localUri = `${FileSystem.cacheDirectory}${localFileName}`;

@@ -120,7 +120,17 @@ export default function SearchPeopleScreen() {
     };
 
     const sendFriendRequest = async (receiverId: string) => {
+        // Anti-spam check
+        if (results.find(p => p.id === receiverId)?.requestStatus === 'pending') {
+            return;
+        }
+
         try {
+            // Optimistic update to immediately show 'Pending' and disable button
+            setResults(prev => prev.map(p => 
+                p.id === receiverId ? { ...p, requestStatus: 'pending' } : p
+            ));
+
             const { error } = await supabase
                 .from('friend_requests')
                 .insert([{
@@ -156,7 +166,7 @@ export default function SearchPeopleScreen() {
 
             DeviceEventEmitter.emit('friend_requests_changed');
             Alert.alert('Success', 'Friend request sent! ✅');
-            handleSearch(query);
+            // Removed handleSearch(query) to avoid double network waterfall lag
         } catch (error: any) {
             Alert.alert('Error', error.message);
         }

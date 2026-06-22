@@ -49,17 +49,15 @@ export default function StatusViewer() {
     const currentStatusUI = statuses[currentIndex];
     const isOwner = !!(currentUser && userId === currentUser.id);
 
-    // Get friend's allow_status_download setting from store
-    const allowStatusDownload = (() => {
+    // Get friend's allow_status_download setting from store reactively
+    const allowStatusDownload = useFriendsStore((state: any) => {
         try {
-            const friends = useFriendsStore.getState().combinedItems;
-            const friendData = friends.find((f: any) => f.id === userId);
+            const friendData = state.combinedItems.find((f: any) => f.id === userId);
             return friendData?.friend?.allow_status_download ?? false;
         } catch (e) {
-            console.error('[STATUS VIEWER] Failed to get allow_status_download:', e);
             return false;
         }
-    })();
+    });
 
     const { localImageUrl, localVoiceUrl, imageLoading } = useMessageMediaCache(
         currentStatusUI || {},
@@ -140,20 +138,30 @@ export default function StatusViewer() {
         if (matchEnd) trimEnd = parseInt(matchEnd[1]);
     }
 
-    const onViewerPlaybackStatusUpdate = (status: any) => {
+    const onViewerPlaybackStatusUpdate = React.useCallback((status: any) => {
         if (!status.isLoaded) return;
+        
+        const isVideo = statuses[currentIndex]?.media_type === 'video';
+        
         if (status.isPlaying) {
-            if (status.positionMillis < trimStart * 1000 || status.positionMillis >= trimEnd * 1000) {
-                viewerVideoRef.current?.setStatusAsync({ positionMillis: trimStart * 1000 });
+            // Fix infinite loop on trimmed video: advance to next instead of seeking to start
+            if (status.positionMillis >= trimEnd * 1000) {
+                handleNext();
+                return;
             }
         }
-        if (statuses[currentIndex]?.media_type === 'video' && !paused) {
+        if (isVideo && !paused) {
             const totalDuration = status.durationMillis || 10000;
-            const position = status.positionMillis || 0;
-            setProgress(Math.min(1, position / totalDuration));
-            if (status.didJustFinish) handleNext();
+            const actualDuration = trimEnd < 999999 ? (trimEnd - trimStart) * 1000 : totalDuration;
+            const position = Math.max(0, status.positionMillis - (trimStart * 1000));
+            
+            setProgress(Math.min(1, position / actualDuration));
+            
+            if (status.didJustFinish) {
+                handleNext();
+            }
         }
-    };
+    }, [currentIndex, paused, handleNext, setProgress, statuses, trimStart, trimEnd]);
 
     const toastAnimatedStyle = useAnimatedStyle(() => ({
         opacity: toastAnim.value,

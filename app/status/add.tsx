@@ -10,6 +10,7 @@ import { TextInput } from 'react-native';
 import { useVideoTrimmer } from '@/hooks/useVideoTrimmer';
 import { useStatusPost } from '@/hooks/useStatusPost';
 import { useStatusMusic } from '@/hooks/status/useStatusMusic';
+import { useFriends } from '@/hooks/useFriends';
 
 // Components
 import StatusHeader from '@/components/status/StatusHeader';
@@ -47,7 +48,7 @@ export default function AddStatus() {
     const textInputRef = useRef<TextInput>(null);
 
     // Friend list loader
-    const { friends } = (require('@/hooks/useFriends').useFriends)();
+    const { friends } = useFriends();
 
     const { isMusicPlaying, musicProgress, musicPosition, musicDuration, toggleMusic } = useStatusMusic(selectedMusic);
 

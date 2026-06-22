@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Alert, DeviceEventEmitter } from 'react-native';
 import { getFromCache, saveToCache } from '@/lib/database';
@@ -43,7 +43,7 @@ export const useReceivedRequests = () => {
         };
     }, [user?.id]);
 
-    const loadReceivedRequests = async () => {
+    const loadReceivedRequests = useCallback(async () => {
         if (!user) return;
 
         // Load from cache instantly
@@ -85,9 +85,9 @@ export const useReceivedRequests = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
 
-    const acceptRequest = async (requestId: string, senderId: string) => {
+    const acceptRequest = useCallback(async (requestId: string, senderId: string) => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
@@ -105,7 +105,11 @@ export const useReceivedRequests = () => {
                 .update({ status: 'accepted' })
                 .eq('id', requestId);
 
-            if (updateError) throw updateError;
+            if (updateError) {
+                // Rollback friendship if request update fails
+                await supabase.from('friendships').delete().eq('user_id', user.id).eq('friend_id', senderId);
+                throw updateError;
+            }
 
             const { useAuthStore } = require('@/store/useAuthStore');
             const myProfile = useAuthStore.getState().profile;
@@ -123,17 +127,21 @@ export const useReceivedRequests = () => {
 
             await loadReceivedRequests();
             
-            // Instantly update the home page friends list
-            const { useFriendsStore } = require('@/store/useFriendsStore');
-            useFriendsStore.getState().loadFriends(user.id, true);
+            try {
+                // Instantly update the home page friends list
+                const { useFriendsStore } = require('@/store/useFriendsStore');
+                useFriendsStore.getState().loadFriends(user.id, true);
+            } catch (e) {
+                console.error("Failed to sync friend store:", e);
+            }
 
             Alert.alert('Success', 'Friend Request Accepted! 🤝');
         } catch (error: any) {
             Alert.alert('Error', error.message);
         }
-    };
+    }, [loadReceivedRequests]);
 
-    const rejectRequest = async (requestId: string) => {
+    const rejectRequest = useCallback(async (requestId: string) => {
         try {
             const { error } = await supabase
                 .from('friend_requests')
@@ -146,9 +154,9 @@ export const useReceivedRequests = () => {
         } catch (error: any) {
             Alert.alert('Error', error.message);
         }
-    };
+    }, [loadReceivedRequests]);
 
-    const deleteRequest = async (requestId: string) => {
+    const deleteRequest = useCallback(async (requestId: string) => {
         try {
             const { error } = await supabase
                 .from('friend_requests')
@@ -160,14 +168,14 @@ export const useReceivedRequests = () => {
         } catch (error: any) {
             Alert.alert('Error', error.message);
         }
-    };
+    }, [loadReceivedRequests]);
 
-    const getCounts = () => ({
+    const getCounts = useCallback(() => ({
         pending: receivedRequests.filter(r => r.status === 'pending').length,
         accepted: receivedRequests.filter(r => r.status === 'accepted').length,
         rejected: receivedRequests.filter(r => r.status === 'rejected').length,
         total: receivedRequests.length
-    });
+    }), [receivedRequests]);
 
     return {
         receivedRequests,

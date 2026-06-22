@@ -50,18 +50,29 @@ export default function StatusOverlay({
                 return;
             }
             const url = currentStatusUI.media_url;
-            const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg';
-            const filename = `chatwarriors_status_${Date.now()}.${ext}`;
-            const cacheUri = `${FileSystem.cacheDirectory}${filename}`;
-            const result = await FileSystem.downloadAsync(url, cacheUri);
-            if (result.status !== 200) throw new Error('Download failed');
-            const asset = await MediaLibrary.createAssetAsync(result.uri);
+            let assetUri = url;
+            
+            let cacheUriToClean = null;
+            if (!url.startsWith('file://')) {
+                const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg';
+                const filename = `chatwarriors_status_${Date.now()}.${ext}`;
+                const cacheUri = `${FileSystem.cacheDirectory}${filename}`;
+                const result = await FileSystem.downloadAsync(url, cacheUri);
+                if (result.status !== 200) throw new Error('Download failed');
+                assetUri = result.uri;
+                cacheUriToClean = cacheUri;
+            }
+            
+            const asset = await MediaLibrary.createAssetAsync(assetUri);
             try {
                 const album = await MediaLibrary.getAlbumAsync('ChatWarriors');
                 if (!album) await MediaLibrary.createAlbumAsync('ChatWarriors', asset, false);
                 else await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
             } catch (_) {}
-            try { await FileSystem.deleteAsync(cacheUri, { idempotent: true }); } catch (_) {}
+            
+            if (cacheUriToClean) {
+                try { await FileSystem.deleteAsync(cacheUriToClean, { idempotent: true }); } catch (_) {}
+            }
             Alert.alert('✅ Saved!', 'Status saved to your gallery!');
         } catch (err: any) {
             console.error('[STATUS DOWNLOAD] Error:', err);

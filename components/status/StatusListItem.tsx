@@ -17,8 +17,9 @@ const formatRelativeTime = (isoString?: string) => {
 
 export const StatusListItem = React.memo(({ item, onPress, onOptionsPress }: { item: any, onPress: (item: any) => void, onOptionsPress?: (item: any) => void }) => {
     // Decrypt thumbnail using the cache hook
+    const mockMessage = React.useMemo(() => ({ sender_id: item.id }), [item.id]);
     const { localImageUrl } = useMessageMediaCache(
-        { sender_id: item.id }, // mock message object just for fallback if needed
+        mockMessage, // mock message object just for fallback if needed
         item.mediaType !== 'text' ? item.thumbnail : null,
         null,
         null,

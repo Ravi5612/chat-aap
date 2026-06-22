@@ -94,6 +94,7 @@ const FriendRequestItem = memo(function FriendRequestItem({
 export default function FriendRequestsScreen() {
     const { receivedRequests, loading, acceptRequest, rejectRequest, deleteRequest, getCounts, refresh } = useReceivedRequests();
     const router = useRouter();
+    const counts = getCounts();
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }}>
@@ -107,10 +108,10 @@ export default function FriendRequestsScreen() {
             {/* Stats Cards */}
             <View style={{ padding: 16, backgroundColor: '#FFF5E6', flexDirection: 'row', gap: 8 }}>
                 {[
-                    { label: 'Pending', count: getCounts().pending, color: '#3B82F6', bg: '#EFF6FF' },
-                    { label: 'Accepted', count: getCounts().accepted, color: '#10B981', bg: '#ECFDF5' },
-                    { label: 'Rejected', count: getCounts().rejected, color: '#EF4444', bg: '#FEF2F2' },
-                    { label: 'Total', count: getCounts().total, color: '#6B7280', bg: '#F9FAFB' },
+                    { label: 'Pending', count: counts.pending, color: '#3B82F6', bg: '#EFF6FF' },
+                    { label: 'Accepted', count: counts.accepted, color: '#10B981', bg: '#ECFDF5' },
+                    { label: 'Rejected', count: counts.rejected, color: '#EF4444', bg: '#FEF2F2' },
+                    { label: 'Total', count: counts.total, color: '#6B7280', bg: '#F9FAFB' },
                 ].map(stat => (
                     <View key={stat.label} style={{ flex: 1, backgroundColor: stat.bg, padding: 10, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: stat.color + '20' }}>
                         <Text style={{ fontSize: 18, fontWeight: 'bold', color: stat.color }}>{stat.count}</Text>

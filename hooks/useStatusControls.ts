@@ -79,8 +79,16 @@ export function useStatusControls(
         }
     }, [currentIndex, getPrevFriendWithStatus, router]);
 
+    const pausedRef = useRef(paused);
+    const replyingRef = useRef(isReplying);
+
     useEffect(() => {
-        if (loading || statuses.length === 0 || paused || isReplying) return;
+        pausedRef.current = paused;
+        replyingRef.current = isReplying;
+    }, [paused, isReplying]);
+
+    useEffect(() => {
+        if (loading || statuses.length === 0) return;
 
         const currentStatus = statuses[currentIndex];
         if (currentStatus?.media_type === 'video') return;
@@ -91,7 +99,7 @@ export function useStatusControls(
         let elapsed = 0;
 
         const interval = setInterval(() => {
-            if (paused) {
+            if (pausedRef.current || replyingRef.current) {
                 startTime = Date.now() - elapsed;
                 return;
             }
@@ -107,7 +115,7 @@ export function useStatusControls(
         }, 30);
 
         return () => clearInterval(interval);
-    }, [currentIndex, statuses, loading, paused, isReplying, handleNext]);
+    }, [currentIndex, statuses, loading, handleNext]);
 
     const handleSkipToNextUser = useCallback(() => {
         const nextUserId = getNextFriendWithStatus();
